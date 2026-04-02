@@ -45,17 +45,15 @@ class CpuTypesContractTest(unittest.TestCase):
             "struct IrqPending",
             "struct IrqAck",
             "struct MicroInput",
-            "struct MicroOutput",
             "struct RegWriteSet",
             "struct MicroWriteSet",
             "struct CpuDelta",
             "pub fn initial_cpu_state() -> CpuState",
             "pub fn idle_cpu_delta() -> CpuDelta",
-            "pub fn idle_micro_output() -> MicroOutput",
         ]:
             self.assertIn(symbol, text)
 
-    def test_cpu_types_file_keeps_profile_contract_and_local_placeholders(self) -> None:
+    def test_cpu_types_file_keeps_profile_contract_and_bus_imports(self) -> None:
         text = CPU_TYPES_PATH.read_text(encoding="utf-8")
 
         for symbol in [
@@ -63,10 +61,8 @@ class CpuTypesContractTest(unittest.TestCase):
             "enum ResetProfile",
             "enum MemoryBehaviorProfile",
             "struct SimulationProfiles",
-            "use lib::bus::types::{BusReq, BusResp, idle_bus_req, idle_bus_resp};",
-            "enum CommitKind",
-            "struct CommitTrace",
-            "struct Sideband",
+            "use lib::bus::types::{BusReq, BusResp, idle_bus_resp};",
+            "pub fn idle_micro_input() -> MicroInput",
         ]:
             self.assertIn(symbol, text)
 

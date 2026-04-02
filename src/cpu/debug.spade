@@ -1,0 +1,75 @@
+use std::option::Option;
+use lib::bus::types::{BusObs, BusReq, BusResp, idle_bus_req};
+use lib::cpu::types::{CpuArchState, CpuDelta, Phase, idle_cpu_delta};
+
+pub enum CommitKind {
+    MCycle,
+    InstrCommit,
+    InterruptAck,
+    Checkpoint,
+}
+
+pub enum MemTouchKind {
+    Read,
+    Write,
+}
+
+pub struct MemTouch {
+    kind: MemTouchKind,
+    addr: uint<16>,
+    data: uint<8>,
+}
+
+pub struct IoTouch {
+    addr: uint<16>,
+    data: uint<8>,
+}
+
+pub struct CommitTrace {
+    schema_version: uint<16>,
+    kind: CommitKind,
+    seq: uint<64>,
+    pc_before: uint<16>,
+    opcode: Option<uint<8>>,
+    arch_after: CpuArchState,
+    phase_after: Phase,
+    bus_req: BusReq,
+    bus_resp: BusResp,
+    mem_touch: Option<MemTouch>,
+    io_touch: Option<IoTouch>,
+}
+
+pub struct DebugTrace {
+    phase_after: Phase,
+    bus_req: BusReq,
+    bus_resp: BusResp,
+}
+
+pub struct Sideband {
+    bus_obs: Option<BusObs>,
+    debug_trace: Option<DebugTrace>,
+}
+
+pub struct MicroOutput {
+    delta: CpuDelta,
+    bus_req: BusReq,
+    commit: Option<CommitTrace>,
+    sideband: Option<Sideband>,
+}
+
+pub fn idle_debug_trace(phase_after: Phase, bus_resp: BusResp) -> DebugTrace {
+    DebugTrace$(phase_after: phase_after, bus_req: idle_bus_req(), bus_resp: bus_resp)
+}
+
+pub fn idle_sideband() -> Sideband {
+    Sideband$(bus_obs: Option::None, debug_trace: Option::None)
+}
+
+pub fn idle_micro_output() -> MicroOutput {
+    MicroOutput$(
+        delta: idle_cpu_delta(),
+        bus_req: idle_bus_req(),
+        commit: Option::None,
+        sideband: Option::None,
+    )
+}

@@ -1,5 +1,5 @@
 use std::option::Option;
-use lib::bus::types::{BusReq, BusResp, idle_bus_req, idle_bus_resp};
+use lib::bus::types::{BusReq, BusResp, idle_bus_resp};
 
 pub enum ModelProfile {
     DMG,
@@ -187,24 +187,6 @@ pub struct IrqAck {
     ack_bit: Option<uint<3>>,
 }
 
-pub enum CommitKind {
-    MCycle,
-    InstrCommit,
-    InterruptAck,
-    Checkpoint,
-}
-
-pub struct CommitTrace {
-    schema_version: uint<16>,
-    kind: CommitKind,
-    seq: uint<64>,
-}
-
-pub struct Sideband {
-    irq_ack: Option<IrqAck>,
-    blocked_bus_access: bool,
-}
-
 pub struct MicroInput {
     bus_resp: BusResp,
     irq_pending: IrqPending,
@@ -237,13 +219,6 @@ pub struct CpuDelta {
     ime_write: Option<ImeState>,
     halt_write: Option<HaltState>,
     micro_write: MicroWriteSet,
-}
-
-pub struct MicroOutput {
-    delta: CpuDelta,
-    bus_req: BusReq,
-    commit: Option<CommitTrace>,
-    sideband: Option<Sideband>,
 }
 
 pub fn cpu_bring_up_profiles() -> SimulationProfiles {
@@ -335,19 +310,6 @@ pub fn idle_cpu_delta() -> CpuDelta {
     )
 }
 
-pub fn idle_sideband() -> Sideband {
-    Sideband$(irq_ack: Option::None, blocked_bus_access: false)
-}
-
 pub fn idle_micro_input() -> MicroInput {
     MicroInput$(bus_resp: idle_bus_resp(), irq_pending: no_irq_pending())
-}
-
-pub fn idle_micro_output() -> MicroOutput {
-    MicroOutput$(
-        delta: idle_cpu_delta(),
-        bus_req: idle_bus_req(),
-        commit: Option::None,
-        sideband: Option::None,
-    )
 }
