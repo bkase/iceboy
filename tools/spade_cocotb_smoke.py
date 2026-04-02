@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import argparse
 import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -11,11 +13,20 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+from test.harness.logging_std import (
+    FailureArtifacts,
+    TestLogger,
+    add_logging_args,
+    logger_from_args,
+)
+
+
 SWIM = Path.home() / ".cargo" / "bin" / "swim"
 FST2VCD = ROOT / "build" / "oss-cad-suite" / "bin" / "fst2vcd"
 TEST_FILTER = "spade_cocotb_integration"
 VERILOG_PATH = ROOT / "build" / "spade.sv"
 HARNESS_BUILD_DIR = ROOT / "build" / "harness"
+SWIM_INDEX_LOCK = ROOT / "build" / "spade" / ".git" / "index.lock"
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 
@@ -89,14 +100,14 @@ def summarize_tree(path: Path) -> str:
     return f"{path}: {entries}"
 
 
-def report_intermediate_state() -> None:
-    log(f"intermediate: {summarize_tree(VERILOG_PATH)}")
-    log(f"intermediate: {summarize_tree(HARNESS_BUILD_DIR)}")
-    log(f"intermediate: {summarize_tree(FST2VCD)}")
+def report_intermediate_state(logger: TestLogger) -> None:
+    logger.context("verilog", summarize_tree(VERILOG_PATH))
+    logger.context("harness", summarize_tree(HARNESS_BUILD_DIR))
+    logger.context("fst2vcd", summarize_tree(FST2VCD))
 
 
-def run_step(name: str, command: list[str]) -> StepResult:
-    log(f"{name}: running {' '.join(command)}")
+def run_step(logger: TestLogger, name: str, command: list[str]) -> StepResult:
+    logger.step(f"{utc_timestamp()} {name}: running {' '.join(command)}")
     started = time.monotonic()
     completed = subprocess.run(
         command,
@@ -107,11 +118,17 @@ def run_step(name: str, command: list[str]) -> StepResult:
     )
     duration_s = time.monotonic() - started
     output = combined_output(completed)
-    log(f"{name}: exit={completed.returncode} duration={duration_s:.2f}s")
+    logger.check(f"{name} exit code", expected=0, actual=completed.returncode)
     if output:
         print(output)
     if completed.returncode != 0:
-        report_intermediate_state()
+        logger.fail_case(
+            f"{name} failed",
+            duration_s=duration_s,
+            contexts={"command": " ".join(command), "stderr_or_stdout": output},
+            artifacts=FailureArtifacts(divergent_field=name),
+        )
+        report_intermediate_state(logger)
         raise RuntimeError(
             f"{name} failed with exit code {completed.returncode}: {' '.join(command)}"
         )
@@ -121,6 +138,10 @@ def run_step(name: str, command: list[str]) -> StepResult:
 def clear_old_artifacts() -> None:
     for path in HARNESS_BUILD_DIR.glob("test_spade_cocotb_integration_*"):
         shutil.rmtree(path)
+
+
+def clear_stale_swim_lock() -> None:
+    SWIM_INDEX_LOCK.unlink(missing_ok=True)
 
 
 def locate_fst_waveform(*, started_at: float) -> Path:
@@ -155,43 +176,64 @@ def extract_case_count(output: str) -> str:
     return "unknown"
 
 
-def run_smoke() -> Path:
+def run_smoke(*, logger: TestLogger | None = None) -> Path:
     if not SWIM.is_file():
         raise FileNotFoundError(f"Missing swim binary at {SWIM}")
     if not FST2VCD.is_file():
         raise FileNotFoundError(f"Missing fst2vcd binary at {FST2VCD}")
 
+    clear_stale_swim_lock()
+    suite_logger = logger or TestLogger(
+        suite_name="test_spade_cocotb_integration.py",
+        stream=sys.stdout,
+    )
+    suite_logger.suite()
+    logger = suite_logger.bind_case("test_spade_cocotb_smoke_pipeline")
     clear_old_artifacts()
     started_at = time.time()
-    build = run_step("spade_compile", [str(SWIM), "build"])
+    build = run_step(logger, "spade_compile", [str(SWIM), "build"])
 
     if not VERILOG_PATH.is_file():
         raise FileNotFoundError(f"Expected generated Verilog at {VERILOG_PATH}")
     verilog_lines = len(VERILOG_PATH.read_text(encoding="utf-8").splitlines())
-    log(f"verilog: path={VERILOG_PATH} lines={verilog_lines}")
+    logger.check("Generated Verilog", expected=True, actual=VERILOG_PATH.is_file())
+    logger.context("verilog_lines", verilog_lines)
 
     patch_cocotb_config_wrapper()
-    test = run_step("simulator_cocotb", [str(SWIM), "test", TEST_FILTER])
+    test = run_step(logger, "simulator_cocotb", [str(SWIM), "test", TEST_FILTER])
 
     fst_waveform = locate_fst_waveform(started_at=started_at)
     run_step(
+        logger,
         "waveform_translate",
         [str(FST2VCD), "-f", str(fst_waveform), "-o", str(fst_waveform.with_name("dump.vcd"))],
     )
     waveform = locate_dump_vcd(fst_waveform=fst_waveform)
     cases = extract_case_count(test.output)
-    log(
-        "summary: "
-        f"Spade compile OK ({build.duration_s:.2f}s) -> "
-        f"Verilog OK ({verilog_lines} lines) -> "
-        f"Simulator OK -> Cocotb {cases} pass -> "
-        f"Waveform OK (VCD {waveform.stat().st_size} bytes, FST {fst_waveform.stat().st_size} bytes)"
+    logger.context("case_count", cases)
+    logger.context("waveform_vcd", waveform)
+    logger.context("waveform_fst", fst_waveform)
+    logger.pass_case(build.duration_s + test.duration_s)
+    suite_logger.summary(
+        passed=1,
+        failed=0,
+        duration_s=build.duration_s + test.duration_s,
     )
     return waveform
 
 
 def main() -> int:
-    run_smoke()
+    parser = add_logging_args(
+        argparse.ArgumentParser(description="Run the Spade-to-Cocotb toolchain smoke test.")
+    )
+    args = parser.parse_args()
+    run_smoke(
+        logger=logger_from_args(
+            args,
+            suite_name="test_spade_cocotb_integration.py",
+            stream=sys.stdout,
+        )
+    )
     return 0
 
 
