@@ -21,7 +21,7 @@ ROOT = find_repo_root()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from spec.flag_policies import adc8, add8, and8, cp8, or8, sbc8, sub8, xor8
+from spec.flag_policies import adc8, add8, and8, cp8, dec8, inc8, or8, sbc8, sub8, xor8
 
 
 OP_ADD = 0
@@ -32,6 +32,8 @@ OP_CP = 4
 OP_AND = 5
 OP_OR = 6
 OP_XOR = 7
+OP_INC = 8
+OP_DEC = 9
 VALUES = (0x00, 0x01, 0x0F, 0x10, 0x7F, 0x80, 0xFE, 0xFF)
 
 
@@ -46,7 +48,7 @@ def decode_output(output_value: int) -> dict[str, int | bool]:
 
 
 async def sample(dut, *, op: int, a: int, b: int, carry_in: bool) -> dict[str, int | bool]:
-    dut.op_i.value = op & 0x7
+    dut.op_i.value = op & 0xF
     dut.a_i.value = a & 0xFF
     dut.b_i.value = b & 0xFF
     dut.carry_in_i.value = int(carry_in)
@@ -83,6 +85,10 @@ async def test_curated_arithmetic_flag_edges(dut):
         (OP_OR, 0x00, 0x00, False, or8(0x00, 0x00)),
         (OP_XOR, 0xFF, 0x0F, False, xor8(0xFF, 0x0F)),
         (OP_XOR, 0xAA, 0xAA, False, xor8(0xAA, 0xAA)),
+        (OP_INC, 0x0F, 0x00, False, inc8(0x0F, carry_in=False)),
+        (OP_INC, 0xFF, 0x00, True, inc8(0xFF, carry_in=True)),
+        (OP_DEC, 0x10, 0x00, False, dec8(0x10, carry_in=False)),
+        (OP_DEC, 0x00, 0x00, True, dec8(0x00, carry_in=True)),
     ]
 
     for op, a, b, carry_in, expected in cases:
@@ -103,3 +109,5 @@ async def test_generated_arithmetic_vectors_match_spec_flag_policies(dut):
             for carry_in in (False, True):
                 assert_matches(await sample(dut, op=OP_ADC, a=a, b=b, carry_in=carry_in), adc8(a, b, carry_in))
                 assert_matches(await sample(dut, op=OP_SBC, a=a, b=b, carry_in=carry_in), sbc8(a, b, carry_in))
+                assert_matches(await sample(dut, op=OP_INC, a=a, b=0x00, carry_in=carry_in), inc8(a, carry_in))
+                assert_matches(await sample(dut, op=OP_DEC, a=a, b=0x00, carry_in=carry_in), dec8(a, carry_in))
