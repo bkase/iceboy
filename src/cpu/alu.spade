@@ -72,6 +72,10 @@ fn alu_result8(val8: uint<8>, flags: Flags) -> AluResult {
     AluResult$(val8: val8, val16: zext(val8), flags: flags)
 }
 
+fn alu_result16(val16: uint<16>, flags: Flags) -> AluResult {
+    AluResult$(val8: trunc(val16), val16: val16, flags: flags)
+}
+
 fn add8_result(a: uint<8>, b: uint<8>) -> AluResult {
     let raw = zext(a) + zext(b);
     let result = trunc(raw);
@@ -208,6 +212,43 @@ fn dec8_result(x: uint<8>, f_prev: Flags) -> AluResult {
     )
 }
 
+fn add16_result(a: uint<16>, b: uint<16>, z_preserve: bool) -> AluResult {
+    let raw = zext(a) + zext(b);
+    let result = trunc(raw);
+
+    alu_result16(
+        result,
+        Flags$(
+            z: z_preserve,
+            n: false,
+            h: ((a & 0x0fffu16) + (b & 0x0fffu16)) > 0x0fffu17,
+            c: raw > 0xffffu17,
+        ),
+    )
+}
+
+fn sign_extend_e8_u16(off: uint<8>) -> uint<16> {
+    if (off & 0x80u8) == 0x80u8 {
+        0xff00u16 | zext(off)
+    } else {
+        zext(off)
+    }
+}
+
+fn add_sp_e8_result(sp: uint<16>, off: uint<8>) -> AluResult {
+    let result = trunc(sp + sign_extend_e8_u16(off));
+
+    alu_result16(
+        result,
+        Flags$(
+            z: false,
+            n: false,
+            h: ((sp & 0x0fu16) + zext(off & 0x0fu8)) > 0x0fu17,
+            c: ((sp & 0xffu16) + zext(off)) > 0xffu17,
+        ),
+    )
+}
+
 pub fn idle_alu_result() -> AluResult {
     AluResult$(val8: 0, val16: 0, flags: zero_flags())
 }
@@ -222,6 +263,8 @@ pub fn alu(req: AluReq) -> AluResult {
         AluReq::Cp8$(a, b) => cp8_result(a, b),
         AluReq::Inc8$(x, f_prev) => inc8_result(x, f_prev),
         AluReq::Dec8$(x, f_prev) => dec8_result(x, f_prev),
+        AluReq::Add16$(a, b, z_preserve) => add16_result(a, b, z_preserve),
+        AluReq::AddSpE8$(sp, off) => add_sp_e8_result(sp, off),
         _ => idle_alu_result(),
     }
 }

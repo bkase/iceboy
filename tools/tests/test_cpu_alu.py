@@ -55,6 +55,8 @@ class CpuAluContractTest(unittest.TestCase):
             "fn xor8_result(a: uint<8>, b: uint<8>) -> AluResult",
             "fn inc8_result(x: uint<8>, f_prev: Flags) -> AluResult",
             "fn dec8_result(x: uint<8>, f_prev: Flags) -> AluResult",
+            "fn add16_result(a: uint<16>, b: uint<16>, z_preserve: bool) -> AluResult",
+            "fn add_sp_e8_result(sp: uint<16>, off: uint<8>) -> AluResult",
             "AluReq::Add8$(a, b, carry_in) => if carry_in { adc8_result(a, b, true) } else { add8_result(a, b) }",
             "AluReq::Sub8$(a, b, carry_in) => if carry_in { sbc8_result(a, b, true) } else { sub8_result(a, b) }",
             "AluReq::And8$(a, b) => and8_result(a, b)",
@@ -63,6 +65,8 @@ class CpuAluContractTest(unittest.TestCase):
             "AluReq::Cp8$(a, b) => cp8_result(a, b)",
             "AluReq::Inc8$(x, f_prev) => inc8_result(x, f_prev)",
             "AluReq::Dec8$(x, f_prev) => dec8_result(x, f_prev)",
+            "AluReq::Add16$(a, b, z_preserve) => add16_result(a, b, z_preserve)",
+            "AluReq::AddSpE8$(sp, off) => add_sp_e8_result(sp, off)",
             "_ => idle_alu_result()",
         ]:
             self.assertIn(symbol, text)
