@@ -16,3 +16,7 @@ tool = "icepack"
 
 [upload]
 tool="iceprog"
+
+[simulation]
+testbench_dir = "test"
+simulator = "verilator"
