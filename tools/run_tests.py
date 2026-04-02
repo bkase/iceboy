@@ -102,6 +102,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
         "python",
         "tools.tests.test_spade_cocotb_pipeline",
     ),
+    SuiteDefinition("meta", "test_local_entrypoints.py", "python", "tools.tests.test_local_entrypoints"),
     SuiteDefinition("unit", "test_sm83_opcodes.py", "python", "tools.tests.test_sm83_opcodes"),
     SuiteDefinition(
         "unit",
