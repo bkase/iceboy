@@ -18,15 +18,3 @@ xfail:
     bead: bd-3gv
     strict: true
     reason: HDL stub does not yet expose architectural commit state on the DUT surface.
-
-coverage_report:
-  - label: Opcode families
-    value: pending (metadata scaffolded; semantic greens not promoted yet)
-  - label: Phase constructors
-    value: pending (CPU phase machine not implemented yet)
-  - label: Bus regions
-    value: pending (bus fabric differential suites not implemented yet)
-  - label: Interrupt sources
-    value: pending (targeted interrupt suites not implemented yet)
-  - label: ROM suites
-    value: pending (Wave A-D greens not implemented yet)

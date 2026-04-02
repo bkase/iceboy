@@ -18,6 +18,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from spade_cocotb_smoke import patch_cocotb_config_wrapper
+from test.harness.coverage_tracker import report_lines as dynamic_coverage_lines
+from test.harness.coverage_tracker import write_coverage_snapshot
 from test.harness.logging_std import TestLogger, add_logging_args, logger_from_args
 
 
@@ -105,6 +107,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("meta", "test_verilator_backend.py", "python", "tools.tests.test_verilator_backend"),
     SuiteDefinition("meta", "test_local_entrypoints.py", "python", "tools.tests.test_local_entrypoints"),
     SuiteDefinition("meta", "test_gate_milestone_a.py", "python", "tools.tests.test_gate_milestone_a"),
+    SuiteDefinition("meta", "test_coverage_tracker.py", "python", "tools.tests.test_coverage_tracker"),
     SuiteDefinition("unit", "test_sm83_opcodes.py", "python", "tools.tests.test_sm83_opcodes"),
     SuiteDefinition(
         "unit",
@@ -402,6 +405,9 @@ def main(argv: list[str] | None = None) -> int:
     total_passed = sum(result.passed for result in results)
     total_failed = sum(result.failed for result in results)
     logger.summary(passed=total_passed, failed=total_failed, duration_s=total_duration)
+    coverage_snapshot = write_coverage_snapshot(
+        [result.definition.label for result in results if result.failed == 0]
+    )
 
     if args.coverage:
         coverage_logger = TestLogger(
@@ -412,6 +418,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         coverage_logger.suite()
         for line in coverage_lines(tiers, nightly=nightly_enabled):
+            coverage_logger.context("coverage", line)
+        for line in dynamic_coverage_lines(coverage_snapshot):
             coverage_logger.context("coverage", line)
         for line in configured_coverage_report_lines(tier_config):
             coverage_logger.context("coverage", line)
@@ -424,6 +432,8 @@ def main(argv: list[str] | None = None) -> int:
             json_mode=logger.json_mode,
         )
         coverage_logger.suite()
+        for line in dynamic_coverage_lines(coverage_snapshot):
+            coverage_logger.context("coverage", line)
         for line in configured_coverage_report_lines(tier_config):
             coverage_logger.context("coverage", line)
 
