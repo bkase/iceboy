@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import shutil
 import sys
 from dataclasses import asdict, dataclass
@@ -12,6 +13,20 @@ from typing import Sequence, TextIO
 from bench.pyboy.hook_driver import LockstepMismatch, LockstepResult
 from bench.pyboy.oracle import OracleCommit
 from bench.pyboy.replay import ReplayCapsule
+
+
+ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "swim.toml").exists())
+
+
+def _load_harness_symbol(filename: str, symbol: str):
+    module_path = ROOT / "test" / "harness" / filename
+    spec = importlib.util.spec_from_file_location(f"_iceboy_{module_path.stem}", module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load harness module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return getattr(module, symbol)
 
 
 @dataclass(frozen=True)
@@ -60,6 +75,7 @@ class ArtifactFiles:
     json_path: Path
     waveform_path: Path | None
     oracle_snapshot_path: Path | None
+    divergence_window_path: Path | None
 
 
 def build_divergence_artifacts(
@@ -113,10 +129,21 @@ def emit_divergence_artifacts(
     json_path.write_text(json.dumps(artifacts.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     copied_waveform: Path | None = None
+    divergence_window_path: Path | None = None
     if waveform_path is not None:
+        write_divergence_window_metadata = _load_harness_symbol(
+            "waveform_config.py",
+            "write_divergence_window_metadata",
+        )
         source = Path(waveform_path)
         copied_waveform = destination / source.name
         shutil.copy2(source, copied_waveform)
+        divergence_window_path = write_divergence_window_metadata(
+            "lockstep_divergence",
+            artifacts.mismatch.commit_index,
+            artifact_root=destination,
+            waveform_path=copied_waveform,
+        )
 
     snapshot_path: Path | None = None
     if oracle_snapshot is not None:
@@ -131,4 +158,5 @@ def emit_divergence_artifacts(
         json_path=json_path,
         waveform_path=copied_waveform,
         oracle_snapshot_path=snapshot_path,
+        divergence_window_path=divergence_window_path,
     )

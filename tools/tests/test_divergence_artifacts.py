@@ -111,6 +111,7 @@ class DivergenceArtifactsTest(unittest.TestCase):
             self.assertTrue(files.json_path.exists())
             self.assertTrue(files.waveform_path is not None and files.waveform_path.exists())
             self.assertTrue(files.oracle_snapshot_path is not None and files.oracle_snapshot_path.exists())
+            self.assertTrue(files.divergence_window_path is not None and files.divergence_window_path.exists())
             self.assertIn("Lockstep divergence at commit 1", stderr.getvalue())
 
 

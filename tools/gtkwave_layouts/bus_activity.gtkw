@@ -1,0 +1,4 @@
+[*] GTKWave Analyzer save file
+[treeopen] TOP.
+[sst_expanded] 1
+[comment] bus_activity: add bus request, response, address, data, and owner signals here.

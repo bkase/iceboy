@@ -1,0 +1,4 @@
+[*] GTKWave Analyzer save file
+[treeopen] TOP.
+[sst_expanded] 1
+[comment] power_signals: add write-enables, alu idle/activity, and bus idle/activity signals here.

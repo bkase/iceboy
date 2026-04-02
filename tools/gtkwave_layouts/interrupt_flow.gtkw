@@ -1,0 +1,4 @@
+[*] GTKWave Analyzer save file
+[treeopen] TOP.
+[sst_expanded] 1
+[comment] interrupt_flow: add IE, IF, IME, irq_pending, irq_ack, and halt-state signals here.

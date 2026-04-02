@@ -84,6 +84,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
         "python",
         "tools.tests.test_reset_profile_support",
     ),
+    SuiteDefinition("meta", "test_waveform_config.py", "python", "tools.tests.test_waveform_config"),
     SuiteDefinition(
         "meta",
         "test_spade_cocotb_pipeline.py",

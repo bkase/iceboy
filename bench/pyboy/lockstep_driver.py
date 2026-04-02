@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,12 +16,17 @@ from spec.compare_scopes import CompareField, OracleMode, comparison_fields_for_
 
 
 ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "swim.toml").exists())
-HARNESS = ROOT / "test" / "harness"
-for entry in [ROOT, HARNESS]:
-    if str(entry) not in sys.path:
-        sys.path.insert(0, str(entry))
 
-from event_script_support import stimulus_from_events
+
+def _load_harness_symbol(filename: str, symbol: str):
+    module_path = ROOT / "test" / "harness" / filename
+    spec = importlib.util.spec_from_file_location(f"_iceboy_{module_path.stem}", module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load harness module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return getattr(module, symbol)
 
 
 @dataclass(frozen=True)
@@ -64,6 +70,7 @@ async def run_lockstep(
 ) -> TestResult:
     fields = tuple(compare_fields) if compare_fields is not None else tuple(comparison_fields_for_mode(oracle_mode))
     steps = []
+    stimulus_from_events = _load_harness_symbol("event_script_support.py", "stimulus_from_events")
 
     for commit_index in range(commit_limit):
         events = event_script.events_for_commit(commit_index) if event_script is not None else ()

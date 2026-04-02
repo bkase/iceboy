@@ -21,6 +21,7 @@ from test.harness.logging_std import (
     add_logging_args,
     logger_from_args,
 )
+from test.harness.waveform_config import export_waveforms
 
 
 SWIM = Path.home() / ".cargo" / "bin" / "swim"
@@ -193,35 +194,44 @@ def run_smoke(*, logger: TestLogger | None = None) -> Path:
     logger = suite_logger.bind_case("test_spade_cocotb_smoke_pipeline")
     clear_old_artifacts()
     started_at = time.time()
-    build = run_step(logger, "spade_compile", [str(SWIM), "build"])
+    try:
+        build = run_step(logger, "spade_compile", [str(SWIM), "build"])
 
-    if not VERILOG_PATH.is_file():
-        raise FileNotFoundError(f"Expected generated Verilog at {VERILOG_PATH}")
-    verilog_lines = len(VERILOG_PATH.read_text(encoding="utf-8").splitlines())
-    logger.check("Generated Verilog", expected=True, actual=VERILOG_PATH.is_file())
-    logger.context("verilog_lines", verilog_lines)
+        if not VERILOG_PATH.is_file():
+            raise FileNotFoundError(f"Expected generated Verilog at {VERILOG_PATH}")
+        verilog_lines = len(VERILOG_PATH.read_text(encoding="utf-8").splitlines())
+        logger.check("Generated Verilog", expected=True, actual=VERILOG_PATH.is_file())
+        logger.context("verilog_lines", verilog_lines)
 
-    patch_cocotb_config_wrapper()
-    test = run_step(logger, "simulator_cocotb", [str(SWIM), "test", TEST_FILTER])
+        patch_cocotb_config_wrapper()
+        test = run_step(logger, "simulator_cocotb", [str(SWIM), "test", TEST_FILTER])
 
-    fst_waveform = locate_fst_waveform(started_at=started_at)
-    run_step(
-        logger,
-        "waveform_translate",
-        [str(FST2VCD), "-f", str(fst_waveform), "-o", str(fst_waveform.with_name("dump.vcd"))],
-    )
-    waveform = locate_dump_vcd(fst_waveform=fst_waveform)
-    cases = extract_case_count(test.output)
-    logger.context("case_count", cases)
-    logger.context("waveform_vcd", waveform)
-    logger.context("waveform_fst", fst_waveform)
-    logger.pass_case(build.duration_s + test.duration_s)
-    suite_logger.summary(
-        passed=1,
-        failed=0,
-        duration_s=build.duration_s + test.duration_s,
-    )
-    return waveform
+        fst_waveform = locate_fst_waveform(started_at=started_at)
+        run_step(
+            logger,
+            "waveform_translate",
+            [str(FST2VCD), "-f", str(fst_waveform), "-o", str(fst_waveform.with_name("dump.vcd"))],
+        )
+        waveform = locate_dump_vcd(fst_waveform=fst_waveform)
+        exported = export_waveforms(f"test_{TEST_FILTER}", failed=False)
+        cases = extract_case_count(test.output)
+        logger.context("case_count", cases)
+        logger.context("waveform_vcd", waveform)
+        logger.context("waveform_fst", fst_waveform)
+        if exported is not None:
+            logger.context("waveform_export_dir", exported.artifact_dir)
+        logger.pass_case(build.duration_s + test.duration_s)
+        suite_logger.summary(
+            passed=1,
+            failed=0,
+            duration_s=build.duration_s + test.duration_s,
+        )
+        return waveform
+    except Exception:
+        exported = export_waveforms(f"test_{TEST_FILTER}", failed=True)
+        if exported is not None:
+            logger.context("waveform_export_dir", exported.artifact_dir)
+        raise
 
 
 def main() -> int:
