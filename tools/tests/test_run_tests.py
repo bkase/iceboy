@@ -47,7 +47,7 @@ class RunTestsTest(unittest.TestCase):
         lines = coverage_lines(selected_tiers(["meta", "unit", "formal"]), nightly=False)
         self.assertEqual(lines[0], "Implemented tiers: 2/3")
         self.assertIn("Meta/Infrastructure: 7 suite(s)", lines)
-        self.assertIn("Unit Tests: 7 suite(s)", lines)
+        self.assertIn("Unit Tests: 8 suite(s)", lines)
         self.assertIn("Formal Verification: 0 suite(s)", lines)
 
     def test_write_junit_xml_emits_parseable_report(self) -> None:

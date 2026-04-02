@@ -76,6 +76,12 @@ SUITES: tuple[SuiteDefinition, ...] = (
         "tools.tests.test_spade_cocotb_pipeline",
     ),
     SuiteDefinition("unit", "test_sm83_opcodes.py", "python", "tools.tests.test_sm83_opcodes"),
+    SuiteDefinition(
+        "unit",
+        "test_decode_completeness.py",
+        "python",
+        "tools.tests.test_decode_completeness",
+    ),
     SuiteDefinition("unit", "test_reference_specs.py", "python", "tools.tests.test_reference_specs"),
     SuiteDefinition("unit", "test_rom_abi.py", "python", "tools.tests.test_rom_abi"),
     SuiteDefinition("unit", "test_pyboy_hooks.py", "python", "tools.tests.test_pyboy_hooks"),
