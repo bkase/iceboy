@@ -1,3 +1,5 @@
 build/
 .surfer/
 repomix-output.xml
+.venv/
+roms/out/
