@@ -1,0 +1,285 @@
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import subprocess
+import sys
+import time
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from spade_cocotb_smoke import patch_cocotb_config_wrapper
+from test.harness.logging_std import TestLogger, add_logging_args, logger_from_args
+
+
+UV = "uv"
+SWIM = str(Path.home() / ".cargo" / "bin" / "swim")
+PYTHON_LOCK = "toolchain/python.lock"
+FAILED_COUNT_RE = re.compile(r"(\d+)/(\d+)\s+failed")
+UNITTEST_RAN_RE = re.compile(r"Ran (\d+) tests? in")
+UNITTEST_FAILED_RE = re.compile(r"FAILED \((.*?)\)")
+
+
+@dataclass(frozen=True)
+class SuiteDefinition:
+    tier: str
+    label: str
+    runner: str
+    target: str
+    nightly_only: bool = False
+
+
+@dataclass(frozen=True)
+class TierDefinition:
+    key: str
+    label: str
+
+
+@dataclass(frozen=True)
+class SuiteResult:
+    definition: SuiteDefinition
+    passed: int
+    failed: int
+    duration_s: float
+    exit_code: int
+    output: str
+
+
+TIERS: tuple[TierDefinition, ...] = (
+    TierDefinition("meta", "Meta/Infrastructure"),
+    TierDefinition("unit", "Unit Tests"),
+    TierDefinition("formal", "Formal Verification"),
+    TierDefinition("rom", "ROM Differential"),
+    TierDefinition("lockstep", "Lockstep"),
+    TierDefinition("invariant", "Invariant"),
+    TierDefinition("power", "Power"),
+)
+
+SUITES: tuple[SuiteDefinition, ...] = (
+    SuiteDefinition("meta", "test_logging_std.py", "python", "tools.tests.test_logging_std"),
+    SuiteDefinition("meta", "test_profiles.py", "python", "tools.tests.test_profiles"),
+    SuiteDefinition("meta", "test_sim_scaffolds.py", "python", "tools.tests.test_sim_scaffolds"),
+    SuiteDefinition("meta", "test_event_generators.py", "python", "tools.tests.test_event_generators"),
+    SuiteDefinition("meta", "test_pyboy_oracle.py", "python", "tools.tests.test_pyboy_oracle"),
+    SuiteDefinition(
+        "meta",
+        "test_spade_cocotb_integration.py",
+        "python",
+        "tools.tests.test_spade_cocotb_integration",
+    ),
+    SuiteDefinition("unit", "test_sm83_opcodes.py", "python", "tools.tests.test_sm83_opcodes"),
+    SuiteDefinition("unit", "test_reference_specs.py", "python", "tools.tests.test_reference_specs"),
+    SuiteDefinition("unit", "test_rom_abi.py", "python", "tools.tests.test_rom_abi"),
+    SuiteDefinition("unit", "test_pyboy_hooks.py", "python", "tools.tests.test_pyboy_hooks"),
+    SuiteDefinition("unit", "test_pyboy_replay.py", "python", "tools.tests.test_pyboy_replay"),
+    SuiteDefinition(
+        "unit",
+        "test_divergence_artifacts.py",
+        "python",
+        "tools.tests.test_divergence_artifacts",
+    ),
+    SuiteDefinition("unit", "test_main.py", "swim", "test_main"),
+)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = add_logging_args(
+        argparse.ArgumentParser(description="Run Iceboy verification tiers from a single entry point.")
+    )
+    parser.add_argument("--tier", help="Comma-separated tier keys to run.")
+    parser.add_argument("--quick", action="store_true", help="Run the fast subset (meta + unit).")
+    parser.add_argument("--nightly", action="store_true", help="Include nightly-only suites.")
+    parser.add_argument("--sim", choices=("icarus", "verilator"), default="icarus")
+    parser.add_argument("--coverage", action="store_true", help="Print tier and suite coverage.")
+    parser.add_argument("--junit-xml", type=Path, help="Write a JUnit XML report.")
+    return parser
+
+
+def parse_requested_tiers(args: argparse.Namespace) -> list[str]:
+    if args.quick:
+        return ["meta", "unit"]
+    if args.tier:
+        return [item.strip() for item in args.tier.split(",") if item.strip()]
+    return [tier.key for tier in TIERS]
+
+
+def selected_tiers(requested: Iterable[str]) -> list[TierDefinition]:
+    requested_set = set(requested)
+    return [tier for tier in TIERS if tier.key in requested_set]
+
+
+def suites_for_tier(tier: str, *, nightly: bool) -> list[SuiteDefinition]:
+    suites = [suite for suite in SUITES if suite.tier == tier]
+    if not nightly:
+        suites = [suite for suite in suites if not suite.nightly_only]
+    return suites
+
+
+def command_env(*, sim: str) -> dict[str, str]:
+    env = os.environ.copy()
+    env["PATH"] = f"/opt/homebrew/bin:{env.get('PATH', '')}"
+    env["SIM"] = sim
+    return env
+
+
+def suite_command(definition: SuiteDefinition) -> list[str]:
+    if definition.runner == "python":
+        return [UV, "run", "--with-requirements", PYTHON_LOCK, "python", "-m", "unittest", definition.target]
+    if definition.runner == "swim":
+        return [SWIM, "test", definition.target]
+    raise ValueError(f"Unsupported runner: {definition.runner}")
+
+
+def parse_suite_counts(definition: SuiteDefinition, output: str, exit_code: int) -> tuple[int, int]:
+    if definition.runner == "swim":
+        match = FAILED_COUNT_RE.search(output)
+        if match:
+            failed = int(match.group(1))
+            total = int(match.group(2))
+            return total - failed, failed
+        return (1, 0) if exit_code == 0 else (0, 1)
+
+    ran_match = UNITTEST_RAN_RE.search(output)
+    total = int(ran_match.group(1)) if ran_match else 1
+    if exit_code == 0:
+        return total, 0
+
+    failed = 0
+    failed_match = UNITTEST_FAILED_RE.search(output)
+    if failed_match:
+        for part in failed_match.group(1).split(","):
+            _, value = part.strip().split("=")
+            failed += int(value)
+    else:
+        failed = 1
+    return max(total - failed, 0), failed
+
+
+def run_suite(definition: SuiteDefinition, *, sim: str, logger: TestLogger) -> SuiteResult:
+    if definition.runner == "swim":
+        patch_cocotb_config_wrapper()
+
+    command = suite_command(definition)
+    logger.step(f"Running {definition.label}: {' '.join(command)}")
+    started = time.monotonic()
+    completed = subprocess.run(
+        command,
+        cwd=ROOT,
+        env=command_env(sim=sim),
+        capture_output=True,
+        text=True,
+    )
+    duration_s = time.monotonic() - started
+    output = "\n".join(part for part in [completed.stdout, completed.stderr] if part).strip()
+    passed, failed = parse_suite_counts(definition, output, completed.returncode)
+    suite_logger = TestLogger(suite_name=definition.label, stream=logger.stream, level=logger.level, json_mode=logger.json_mode)
+    suite_logger.summary(passed=passed, failed=failed, duration_s=duration_s)
+    if completed.returncode != 0:
+        logger.fail_case(
+            f"{definition.label} failed",
+            duration_s=duration_s,
+            contexts={"command": " ".join(command), "output": output},
+        )
+        raise RuntimeError(f"{definition.label} failed")
+    return SuiteResult(
+        definition=definition,
+        passed=passed,
+        failed=failed,
+        duration_s=duration_s,
+        exit_code=completed.returncode,
+        output=output,
+    )
+
+
+def coverage_lines(tiers: list[TierDefinition], *, nightly: bool) -> list[str]:
+    implemented = 0
+    lines = []
+    for tier in tiers:
+        suites = suites_for_tier(tier.key, nightly=nightly)
+        if suites:
+            implemented += 1
+        lines.append(f"{tier.label}: {len(suites)} suite(s)")
+    lines.insert(0, f"Implemented tiers: {implemented}/{len(tiers)}")
+    return lines
+
+
+def write_junit_xml(results: list[SuiteResult], target: Path) -> None:
+    testsuites = ET.Element("testsuites")
+    for tier in TIERS:
+        tier_results = [result for result in results if result.definition.tier == tier.key]
+        if not tier_results:
+            continue
+        suite_elem = ET.SubElement(
+            testsuites,
+            "testsuite",
+            name=tier.label,
+            tests=str(len(tier_results)),
+            failures=str(sum(1 for result in tier_results if result.failed)),
+        )
+        for result in tier_results:
+            case_elem = ET.SubElement(
+                suite_elem,
+                "testcase",
+                classname=tier.key,
+                name=result.definition.label,
+                time=f"{result.duration_s:.3f}",
+            )
+            if result.failed:
+                failure = ET.SubElement(case_elem, "failure", message="suite failed")
+                failure.text = result.output
+            system_out = ET.SubElement(case_elem, "system-out")
+            system_out.text = result.output
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    ET.ElementTree(testsuites).write(target, encoding="utf-8", xml_declaration=True)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    tiers = selected_tiers(parse_requested_tiers(args))
+    logger = logger_from_args(args, suite_name="ICEBOY VERIFICATION SUITE", stream=sys.stdout)
+    logger.suite()
+
+    results: list[SuiteResult] = []
+    total_started = time.monotonic()
+    for index, tier in enumerate(tiers, start=1):
+        logger.step(f"[TIER {index}/{len(tiers)}] {tier.label}")
+        tier_suites = suites_for_tier(tier.key, nightly=args.nightly)
+        if not tier_suites:
+            logger.context(tier.label, "no suites implemented")
+            continue
+        for definition in tier_suites:
+            results.append(run_suite(definition, sim=args.sim, logger=logger))
+
+    total_duration = time.monotonic() - total_started
+    total_passed = sum(result.passed for result in results)
+    total_failed = sum(result.failed for result in results)
+    logger.summary(passed=total_passed, failed=total_failed, duration_s=total_duration)
+
+    if args.coverage:
+        coverage_logger = TestLogger(
+            suite_name="ICEBOY COVERAGE",
+            stream=sys.stdout,
+            level=logger.level,
+            json_mode=logger.json_mode,
+        )
+        coverage_logger.suite()
+        for line in coverage_lines(tiers, nightly=args.nightly):
+            coverage_logger.context("coverage", line)
+
+    if args.junit_xml:
+        write_junit_xml(results, args.junit_xml)
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
