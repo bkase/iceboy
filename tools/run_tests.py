@@ -82,6 +82,12 @@ SUITES: tuple[SuiteDefinition, ...] = (
         "python",
         "tools.tests.test_decode_completeness",
     ),
+    SuiteDefinition(
+        "unit",
+        "test_alu_generated_vectors.py",
+        "python",
+        "tools.tests.test_alu_generated_vectors",
+    ),
     SuiteDefinition("unit", "test_reference_specs.py", "python", "tools.tests.test_reference_specs"),
     SuiteDefinition("unit", "test_rom_abi.py", "python", "tools.tests.test_rom_abi"),
     SuiteDefinition("unit", "test_pyboy_hooks.py", "python", "tools.tests.test_pyboy_hooks"),
