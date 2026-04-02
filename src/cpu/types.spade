@@ -1,3 +1,5 @@
+use std::option::Option;
+
 pub enum ModelProfile {
     DMG,
     CGB,
@@ -19,10 +21,362 @@ pub struct SimulationProfiles {
     memory_behavior_profile: MemoryBehaviorProfile,
 }
 
+pub enum ImeState {
+    Disabled,
+    PendingEnable,
+    Enabled,
+}
+
+pub enum HaltState {
+    Running,
+    Halted,
+    HaltBugPending,
+}
+
+pub enum PrefixKind {
+    Cb,
+}
+
+pub enum R8 {
+    A,
+    F,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+}
+
+pub enum RegPair {
+    AF,
+    BC,
+    DE,
+    HL,
+    SP,
+    PC,
+}
+
+pub enum AluKind {
+    Add,
+    Adc,
+    Sub,
+    Sbc,
+    And,
+    Or,
+    Xor,
+    Cp,
+    Inc,
+    Dec,
+}
+
+pub enum DecodedOp {
+    Invalid,
+    Unprefixed { opcode: uint<8> },
+    Prefixed { prefix: PrefixKind, opcode: uint<8> },
+}
+
+pub struct Registers {
+    a: uint<8>,
+    f: uint<8>,
+    b: uint<8>,
+    c: uint<8>,
+    d: uint<8>,
+    e: uint<8>,
+    h: uint<8>,
+    l: uint<8>,
+    sp: uint<16>,
+    pc: uint<16>,
+}
+
+pub struct CpuArchState {
+    regs: Registers,
+    ime_state: ImeState,
+    halt_state: HaltState,
+}
+
+pub enum ReadCont {
+    LoadReg8 { dst: R8 },
+    LoadAFromAddr,
+    AluFromMem { kind: AluKind },
+    PopLo { pair: RegPair },
+    PopHi { pair: RegPair, lo: uint<8> },
+}
+
+pub enum WriteCont {
+    StoreDone,
+    PushHi { next_pc: uint<16> },
+    PushLo { low: uint<8>, target: uint<16> },
+}
+
+pub enum Imm8Cont {
+    LoadReg8 { dst: R8 },
+    AluImm8 { kind: AluKind },
+    RelativeJump,
+    IoOffsetReadA,
+    IoOffsetWriteA,
+    AddSpDisp,
+    LoadHlSpDisp,
+}
+
+pub enum Imm16Cont {
+    LoadRegPair { pair: RegPair },
+    JumpAbs,
+    CallTarget,
+    ReadAddrToA,
+    WriteAToAddr,
+}
+
+pub enum Imm16HiCont {
+    LoadRegPair { pair: RegPair, lo: uint<8> },
+    JumpAbs { lo: uint<8> },
+    CallTarget { lo: uint<8> },
+    ReadAddrToA { lo: uint<8> },
+    WriteAToAddr { lo: uint<8> },
+}
+
+pub enum IrqSel {
+    VBlank,
+    LcdStat,
+    Timer,
+    Serial,
+    Joypad,
+}
+
+pub enum IrqPhase {
+    Delay1,
+    Delay2,
+    PushPcHi,
+    PushPcLo,
+    Jump,
+}
+
+pub enum Phase {
+    Fetch,
+    FetchPrefix { prefix: PrefixKind },
+    ReadImm8 { k: Imm8Cont },
+    ReadImm16Lo { k: Imm16Cont },
+    ReadImm16Hi { lo: uint<8>, k: Imm16HiCont },
+    ReadMem { addr: uint<16>, k: ReadCont },
+    WriteMem { addr: uint<16>, data: uint<8>, k: WriteCont },
+    Execute { op: DecodedOp },
+    ServiceInterrupt { irq: IrqSel, subphase: IrqPhase },
+    Halted,
+}
+
+pub struct CpuMicroState {
+    phase: Phase,
+    opcode_latch: uint<8>,
+    imm_lo: uint<8>,
+    imm_hi: uint<8>,
+    decoded: DecodedOp,
+    temp: uint<16>,
+}
+
+pub struct CpuState {
+    arch: CpuArchState,
+    micro: CpuMicroState,
+}
+
+pub struct IrqPending {
+    pending: uint<5>,
+}
+
+pub struct IrqAck {
+    ack_bit: Option<uint<3>>,
+}
+
+pub enum BusReqKind {
+    Idle,
+    Read,
+    Write,
+}
+
+pub struct BusReq {
+    kind: BusReqKind,
+    addr: uint<16>,
+    data: uint<8>,
+}
+
+pub enum BusRespKind {
+    Idle,
+    Data,
+}
+
+pub struct BusResp {
+    kind: BusRespKind,
+    data: uint<8>,
+}
+
+pub enum CommitKind {
+    MCycle,
+    InstrCommit,
+    InterruptAck,
+    Checkpoint,
+}
+
+pub struct CommitTrace {
+    schema_version: uint<16>,
+    kind: CommitKind,
+    seq: uint<64>,
+}
+
+pub struct Sideband {
+    irq_ack: Option<IrqAck>,
+    blocked_bus_access: bool,
+}
+
+pub struct MicroInput {
+    bus_resp: BusResp,
+    irq_pending: IrqPending,
+}
+
+pub struct RegWriteSet {
+    a: Option<uint<8>>,
+    f: Option<uint<8>>,
+    b: Option<uint<8>>,
+    c: Option<uint<8>>,
+    d: Option<uint<8>>,
+    e: Option<uint<8>>,
+    h: Option<uint<8>>,
+    l: Option<uint<8>>,
+}
+
+pub struct MicroWriteSet {
+    phase: Option<Phase>,
+    opcode_latch: Option<uint<8>>,
+    imm_lo: Option<uint<8>>,
+    imm_hi: Option<uint<8>>,
+    decoded: Option<DecodedOp>,
+    temp: Option<uint<16>>,
+}
+
+pub struct CpuDelta {
+    regs_write: RegWriteSet,
+    pc_write: Option<uint<16>>,
+    sp_write: Option<uint<16>>,
+    ime_write: Option<ImeState>,
+    halt_write: Option<HaltState>,
+    micro_write: MicroWriteSet,
+}
+
+pub struct MicroOutput {
+    delta: CpuDelta,
+    bus_req: BusReq,
+    commit: Option<CommitTrace>,
+    sideband: Option<Sideband>,
+}
+
 pub fn cpu_bring_up_profiles() -> SimulationProfiles {
     SimulationProfiles$(
         model_profile: ModelProfile::DMG,
         reset_profile: ResetProfile::SkipBoot,
         memory_behavior_profile: MemoryBehaviorProfile::DmgConservative,
+    )
+}
+
+pub fn zero_registers() -> Registers {
+    Registers$(
+        a: 0,
+        f: 0,
+        b: 0,
+        c: 0,
+        d: 0,
+        e: 0,
+        h: 0,
+        l: 0,
+        sp: 0,
+        pc: 0,
+    )
+}
+
+pub fn initial_cpu_arch_state() -> CpuArchState {
+    CpuArchState$(
+        regs: zero_registers(),
+        ime_state: ImeState::Disabled,
+        halt_state: HaltState::Running,
+    )
+}
+
+pub fn initial_cpu_micro_state() -> CpuMicroState {
+    CpuMicroState$(
+        phase: Phase::Fetch,
+        opcode_latch: 0,
+        imm_lo: 0,
+        imm_hi: 0,
+        decoded: DecodedOp::Invalid,
+        temp: 0,
+    )
+}
+
+pub fn initial_cpu_state() -> CpuState {
+    CpuState$(arch: initial_cpu_arch_state(), micro: initial_cpu_micro_state())
+}
+
+pub fn no_irq_pending() -> IrqPending {
+    IrqPending$(pending: 0)
+}
+
+pub fn no_irq_ack() -> IrqAck {
+    IrqAck$(ack_bit: Option::None)
+}
+
+pub fn idle_bus_req() -> BusReq {
+    BusReq$(kind: BusReqKind::Idle, addr: 0, data: 0)
+}
+
+pub fn idle_bus_resp() -> BusResp {
+    BusResp$(kind: BusRespKind::Idle, data: 0)
+}
+
+pub fn idle_reg_write_set() -> RegWriteSet {
+    RegWriteSet$(
+        a: Option::None,
+        f: Option::None,
+        b: Option::None,
+        c: Option::None,
+        d: Option::None,
+        e: Option::None,
+        h: Option::None,
+        l: Option::None,
+    )
+}
+
+pub fn idle_micro_write_set() -> MicroWriteSet {
+    MicroWriteSet$(
+        phase: Option::None,
+        opcode_latch: Option::None,
+        imm_lo: Option::None,
+        imm_hi: Option::None,
+        decoded: Option::None,
+        temp: Option::None,
+    )
+}
+
+pub fn idle_cpu_delta() -> CpuDelta {
+    CpuDelta$(
+        regs_write: idle_reg_write_set(),
+        pc_write: Option::None,
+        sp_write: Option::None,
+        ime_write: Option::None,
+        halt_write: Option::None,
+        micro_write: idle_micro_write_set(),
+    )
+}
+
+pub fn idle_sideband() -> Sideband {
+    Sideband$(irq_ack: Option::None, blocked_bus_access: false)
+}
+
+pub fn idle_micro_input() -> MicroInput {
+    MicroInput$(bus_resp: idle_bus_resp(), irq_pending: no_irq_pending())
+}
+
+pub fn idle_micro_output() -> MicroOutput {
+    MicroOutput$(
+        delta: idle_cpu_delta(),
+        bus_req: idle_bus_req(),
+        commit: Option::None,
+        sideband: Option::None,
     )
 }
