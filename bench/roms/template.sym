@@ -3,6 +3,6 @@
 00:0154 __commit_setup
 00:0158 __inject_begin_buttons
 00:0159 __inject_end_buttons
-00:0160 __fail
-00:0165 __pass
-00:0167 InitAbiSignature
+00:0167 __fail
+00:0171 __pass
+00:0173 InitAbiSignature

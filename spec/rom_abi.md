@@ -85,10 +85,18 @@ The validator in `bench/tools/validate_rom_abi.py` currently enforces:
 - required `__pass` / `__fail` symbols exist in `.sym`
 - reserved labels use only the approved prefixes
 - reserved labels resolve to executable ROM addresses
+- built ROM images expose the expected `nop ; jp $0150` entry sequence and a non-empty header title
 - template/source assembly declares:
   - ROM0 entry section at `0x0150`
   - WRAM0 signature section at `0xC000`
   - ABI version byte
   - pass/fail labels
+
+The build pipeline lives at `bench/roms/build_roms.sh` and performs:
+
+1. `rgbasm` object generation
+2. `rgblink` ROM + `.sym` + `.map` generation
+3. `rgbfix` header finalization
+4. ABI validation of the built ROM and emitted symbol file
 
 Future ROM pipeline beads can extend validation to assembled ROM binaries and header checks once the assembler toolchain lands.

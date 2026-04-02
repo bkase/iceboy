@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_ASM_PATH = ROOT / "bench" / "roms" / "template.asm"
 TEMPLATE_SYM_PATH = ROOT / "bench" / "roms" / "template.sym"
+TEMPLATE_ROM_PATH = ROOT / "bench" / "roms" / "out" / "template.gb"
 
 REQUIRED_EXECUTABLE_LABELS = ("__pass", "__fail")
 OPTIONAL_LABEL_PREFIXES = (
@@ -75,27 +76,42 @@ def validate_sym_text(text: str) -> list[str]:
 
 def validate_asm_text(text: str) -> None:
     required_snippets = [
+        'INCLUDE "template.inc"',
+        "ICEBOY_ROM_HEADER",
         'SECTION "Entry", ROM0[$0150]',
         "di",
         "__pass:",
         "__fail:",
-        'SECTION "ABI Signature", WRAM0[$C000]',
-        "db $01",
-        'ds 16',
+        "InitAbiSignature:",
+        "ICEBOY_INIT_SIGNATURE",
+        "ICEBOY_LOG_CASE",
+        "ICEBOY_ABI_WRAM",
     ]
     for snippet in required_snippets:
         if snippet not in text:
             fail(f"assembly source is missing required ABI snippet: {snippet}")
 
 
-def validate_files(sym_path: Path, asm_path: Path | None = None) -> None:
+def validate_rom_bytes(data: bytes) -> None:
+    if len(data) < 0x150:
+        fail("ROM image is too small to contain a valid Game Boy header and entry point")
+    if data[0x100] != 0x00 or data[0x101] != 0xC3 or data[0x102] != 0x50 or data[0x103] != 0x01:
+        fail("ROM entry point must be `nop ; jp $0150` for the template pipeline")
+    if all(byte == 0x00 for byte in data[0x134:0x144]):
+        fail("ROM title field must not be all zeroes after rgbfix")
+
+
+def validate_files(sym_path: Path, asm_path: Path | None = None, rom_path: Path | None = None) -> None:
     reserved_labels = validate_sym_text(sym_path.read_text(encoding="utf-8"))
     if asm_path is not None:
         validate_asm_text(asm_path.read_text(encoding="utf-8"))
+    if rom_path is not None:
+        validate_rom_bytes(rom_path.read_bytes())
 
     print(
         f"Validated ROM ABI for {sym_path.relative_to(ROOT)}"
         + (f" and {asm_path.relative_to(ROOT)}" if asm_path is not None else "")
+        + (f" and {rom_path.relative_to(ROOT)}" if rom_path is not None else "")
         + f" ({len(reserved_labels)} reserved labels)."
     )
 
@@ -104,13 +120,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Validate the custom ROM checkpoint ABI.")
     parser.add_argument("--sym", type=Path, default=TEMPLATE_SYM_PATH, help="RGBDS-compatible .sym file")
     parser.add_argument("--asm", type=Path, default=TEMPLATE_ASM_PATH, help="Assembly source to validate alongside the .sym")
+    parser.add_argument("--rom", type=Path, default=None, help="Built ROM image to validate alongside the .sym")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    validate_files(sym_path=args.sym, asm_path=args.asm)
+    validate_files(sym_path=args.sym, asm_path=args.asm, rom_path=args.rom)
     return 0
 
 

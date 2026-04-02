@@ -3,3 +3,4 @@ build/
 repomix-output.xml
 .venv/
 roms/out/
+bench/roms/out/

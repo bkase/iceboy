@@ -68,6 +68,15 @@ else
     exit 1
 fi
 
+echo -n "Building ROM templates... "
+if rom_build_output=$(bench/roms/build_roms.sh 2>&1); then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAILED${NC}"
+    echo "$rom_build_output"
+    exit 1
+fi
+
 if find tools/tests -type f -name 'test_*.py' -print -quit | grep -q .; then
     echo -n "Running Python spec tests... "
     if spec_output=$("$UV_BIN" run --with-requirements toolchain/python.lock python -m unittest discover -s tools/tests -p 'test_*.py' 2>&1); then

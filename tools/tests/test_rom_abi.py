@@ -5,8 +5,10 @@ from pathlib import Path
 
 from bench.tools.validate_rom_abi import (
     TEMPLATE_ASM_PATH,
+    TEMPLATE_ROM_PATH,
     TEMPLATE_SYM_PATH,
     parse_sym,
+    validate_rom_bytes,
     validate_asm_text,
     validate_sym_text,
 )
@@ -14,6 +16,7 @@ from bench.tools.validate_rom_abi import (
 
 ROOT = Path(__file__).resolve().parents[2]
 ROM_ABI_DOC_PATH = ROOT / "spec" / "rom_abi.md"
+ROM_TEMPLATE_INC_PATH = ROOT / "bench" / "roms" / "template.inc"
 
 
 class RomAbiValidationTest(unittest.TestCase):
@@ -36,6 +39,16 @@ class RomAbiValidationTest(unittest.TestCase):
         self.assertIn("`__pass`", doc)
         self.assertIn("`__fail`", doc)
         self.assertIn("RGBDS-compatible `.sym`", doc)
+
+    def test_template_include_contains_shared_macros(self) -> None:
+        include_text = ROM_TEMPLATE_INC_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "MACRO ICEBOY_ROM_HEADER",
+            "MACRO ICEBOY_INIT_SIGNATURE",
+            "MACRO ICEBOY_LOG_CASE",
+            "MACRO ICEBOY_ABI_WRAM",
+        ]:
+            self.assertIn(symbol, include_text)
 
 
 if __name__ == "__main__":

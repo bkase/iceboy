@@ -41,6 +41,17 @@ The oracle layer and future hook-driven adapter rely on these public APIs from `
 - Pin source: `swim.lock`
 - Project config: `swim.toml` pins `testbench_dir = "test"`, `simulator = "icarus"`, `synthesis.top = "icebreaker_top"`, and the `iCE40UP5K` / `sg48` target tuple
 
+## SM83 ROM Toolchain
+
+- `rgbds`: `1.0.1`
+- Installed tools: `rgbasm`, `rgblink`, `rgbfix`
+- Install path used on this machine: `nix profile install nixpkgs#rgbds`
+- Verification commands:
+  - `rgbasm --version`
+  - `rgblink --version`
+  - `rgbfix --version`
+- Project pipeline: `bench/roms/build_roms.sh` builds `bench/roms/*.asm` into `bench/roms/out/` and validates each ROM + `.sym` pair against the checkpoint ABI
+
 ## Simulator Backend Policy
 
 - Default simulator for authored development loops: `icarus`

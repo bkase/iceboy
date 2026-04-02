@@ -1,16 +1,10 @@
 ; iceboy custom ROM ABI template
-; Assemble with RGBDS, emit symbols with: rgblink -n bench/roms/template.sym
-; Finalize header with rgbfix.
+; Assemble with RGBDS, emit symbols with the build pipeline in bench/roms/build_roms.sh
+; Finalize header with rgbfix after linking.
 
-DEF ABI_SIGNATURE_BASE EQU $C000
-DEF ABI_VERSION EQU $01
-DEF ABI_RESULT_RUNNING EQU $00
-DEF ABI_RESULT_PASS EQU $01
-DEF ABI_RESULT_FAIL EQU $FF
+INCLUDE "template.inc"
 
-SECTION "Header Entry", ROM0[$0100]
-    nop
-    jp Entry
+ICEBOY_ROM_HEADER
 
 SECTION "Entry", ROM0[$0150]
 Entry:
@@ -26,51 +20,32 @@ __inject_begin_buttons:
     nop
 __inject_end_buttons:
 
-    ; Template success path
-    ld a, ABI_RESULT_PASS
-    ld [wAbiResult], a
+    ; Template success path writes a known diagnostic record to WRAM.
+    ICEBOY_LOG_CASE $01, $00, ABI_LOG_STATUS_PASS, $42, $42, $00
+    ICEBOY_SET_RESULT ABI_RESULT_PASS
     jp __pass
 
 __fail:
-    ld a, ABI_RESULT_FAIL
-    ld [wAbiResult], a
+    ICEBOY_LOG_CASE $01, $00, ABI_LOG_STATUS_FAIL, $42, $00, $FF
+    ICEBOY_SET_RESULT ABI_RESULT_FAIL
     jr __fail
 
 __pass:
     jr __pass
 
 InitAbiSignature:
-    ld a, ABI_VERSION
-    ld [wAbiVersion], a
-    ld a, ABI_RESULT_RUNNING
-    ld [wAbiResult], a
-    xor a
+    ICEBOY_INIT_SIGNATURE
+    ld a, 1
     ld [wTestCountLo], a
-    ld [wTestCountHi], a
     ld [wPassCountLo], a
-    ld [wPassCountHi], a
-    ld [wFailCountLo], a
-    ld [wFailCountHi], a
+    ld a, 'T'
+    ld [wTestName + 0], a
+    ld a, 'M'
+    ld [wTestName + 1], a
+    ld a, 'P'
+    ld [wTestName + 2], a
+    ld a, 'L'
+    ld [wTestName + 3], a
     ret
 
-SECTION "ABI Signature", WRAM0[$C000]
-wAbiVersion:
-    db $01
-wAbiResult:
-    db $00
-wTestCountLo:
-    db $00
-wTestCountHi:
-    db $00
-wPassCountLo:
-    db $00
-wPassCountHi:
-    db $00
-wFailCountLo:
-    db $00
-wFailCountHi:
-    db $00
-wDebugCounters:
-    ds 8
-wTestName:
-    ds 16
+ICEBOY_ABI_WRAM
