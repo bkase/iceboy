@@ -1,5 +1,6 @@
 use std::option::Option;
 use lib::bus::types::{BusReq, BusResp, idle_bus_resp};
+use lib::cpu::alu::AluKind;
 use lib::cpu::regs::{R8, RegPair, Registers, zero_registers};
 
 pub enum ModelProfile {
@@ -37,19 +38,6 @@ pub enum HaltState {
 
 pub enum PrefixKind {
     Cb,
-}
-
-pub enum AluKind {
-    Add,
-    Adc,
-    Sub,
-    Sbc,
-    And,
-    Or,
-    Xor,
-    Cp,
-    Inc,
-    Dec,
 }
 
 pub enum DecodedOp {

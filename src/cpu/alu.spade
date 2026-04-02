@@ -1,0 +1,75 @@
+use lib::cpu::regs::Flags;
+
+pub enum AluKind {
+    Add,
+    Adc,
+    Sub,
+    Sbc,
+    And,
+    Or,
+    Xor,
+    Cp,
+    Inc,
+    Dec,
+}
+
+pub enum RotShiftKind {
+    Rlca,
+    Rrca,
+    Rla,
+    Rra,
+    Rlc,
+    Rrc,
+    Rl,
+    Rr,
+    Sla,
+    Sra,
+    Srl,
+    Swap,
+}
+
+pub enum BitResSetKind {
+    Bit,
+    Res,
+    Set,
+}
+
+pub struct AluResult {
+    val8: uint<8>,
+    val16: uint<16>,
+    flags: Flags,
+}
+
+pub enum AluReq {
+    Idle,
+    Add8 { a: uint<8>, b: uint<8>, carry_in: bool },
+    Sub8 { a: uint<8>, b: uint<8>, carry_in: bool },
+    And8 { a: uint<8>, b: uint<8> },
+    Or8 { a: uint<8>, b: uint<8> },
+    Xor8 { a: uint<8>, b: uint<8> },
+    Cp8 { a: uint<8>, b: uint<8> },
+    Inc8 { x: uint<8>, f_prev: Flags },
+    Dec8 { x: uint<8>, f_prev: Flags },
+    Add16 { a: uint<16>, b: uint<16>, z_preserve: bool },
+    AddSpE8 { sp: uint<16>, off: uint<8> },
+    Daa { a: uint<8>, f_prev: Flags },
+    Cpl { a: uint<8>, f_prev: Flags },
+    Scf { f_prev: Flags },
+    Ccf { f_prev: Flags },
+    RotShift { kind: RotShiftKind, x: uint<8>, f_prev: Flags, zero_on_result: bool },
+    BitResSet { kind: BitResSetKind, bit_index: uint<3>, x: uint<8>, f_prev: Flags },
+}
+
+pub fn zero_flags() -> Flags {
+    Flags$(z: false, n: false, h: false, c: false)
+}
+
+pub fn idle_alu_result() -> AluResult {
+    AluResult$(val8: 0, val16: 0, flags: zero_flags())
+}
+
+pub fn alu(req: AluReq) -> AluResult {
+    match req {
+        _ => idle_alu_result(),
+    }
+}
