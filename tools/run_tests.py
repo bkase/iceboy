@@ -140,6 +140,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
         "tools.tests.test_divergence_artifacts",
     ),
     SuiteDefinition("unit", "test_main.py", "swim", "test_main"),
+    SuiteDefinition("unit", "test_alu.py", "swim", "test_alu"),
     SuiteDefinition("unit", "test_regs.py", "swim", "test_regs"),
     SuiteDefinition("unit", "test_timebase.py", "swim", "test_timebase"),
     SuiteDefinition("lockstep", "test_cpu_lockstep.py", "swim", "test_cpu_lockstep"),

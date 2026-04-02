@@ -1,0 +1,93 @@
+# top = cpu::alu_test_top::arithmetic_alu_test_top
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import cocotb
+from cocotb.triggers import Timer
+
+
+def find_repo_root() -> Path:
+    candidates = [Path(__file__).resolve(), Path.cwd().resolve()]
+    for candidate in candidates:
+        for path in (candidate, *candidate.parents):
+            if (path / "swim.toml").exists() and (path / "spec" / "flag_policies.py").exists():
+                return path
+    raise RuntimeError("Unable to locate iceboy repo root for spec imports")
+
+
+ROOT = find_repo_root()
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from spec.flag_policies import adc8, add8, cp8, sbc8, sub8
+
+
+OP_ADD = 0
+OP_ADC = 1
+OP_SUB = 2
+OP_SBC = 3
+OP_CP = 4
+VALUES = (0x00, 0x01, 0x0F, 0x10, 0x7F, 0x80, 0xFE, 0xFF)
+
+
+def decode_output(output_value: int) -> dict[str, int | bool]:
+    return {
+        "val8": (output_value >> 4) & 0xFF,
+        "z": bool((output_value >> 3) & 0x1),
+        "n": bool((output_value >> 2) & 0x1),
+        "h": bool((output_value >> 1) & 0x1),
+        "c": bool(output_value & 0x1),
+    }
+
+
+async def sample(dut, *, op: int, a: int, b: int, carry_in: bool) -> dict[str, int | bool]:
+    dut.op_i.value = op & 0x7
+    dut.a_i.value = a & 0xFF
+    dut.b_i.value = b & 0xFF
+    dut.carry_in_i.value = int(carry_in)
+    await Timer(1, units="ns")
+    return decode_output(int(dut.output__.value))
+
+
+def assert_matches(snapshot: dict[str, int | bool], expected) -> None:
+    assert snapshot == {
+        "val8": expected.value,
+        "z": expected.flags.z,
+        "n": expected.flags.n,
+        "h": expected.flags.h,
+        "c": expected.flags.c,
+    }, (snapshot, expected)
+
+
+@cocotb.test()
+async def test_curated_arithmetic_flag_edges(dut):
+    cases = [
+        (OP_ADD, 0x0F, 0x01, False, add8(0x0F, 0x01)),
+        (OP_ADD, 0xFF, 0x01, False, add8(0xFF, 0x01)),
+        (OP_ADC, 0x0F, 0x00, True, adc8(0x0F, 0x00, True)),
+        (OP_ADC, 0xFF, 0x00, True, adc8(0xFF, 0x00, True)),
+        (OP_SUB, 0x10, 0x01, False, sub8(0x10, 0x01)),
+        (OP_SUB, 0x00, 0x01, False, sub8(0x00, 0x01)),
+        (OP_SBC, 0x10, 0x00, True, sbc8(0x10, 0x00, True)),
+        (OP_SBC, 0x00, 0x00, True, sbc8(0x00, 0x00, True)),
+        (OP_CP, 0x00, 0x01, False, cp8(0x00, 0x01)),
+        (OP_CP, 0x40, 0x40, False, cp8(0x40, 0x40)),
+    ]
+
+    for op, a, b, carry_in, expected in cases:
+        snapshot = await sample(dut, op=op, a=a, b=b, carry_in=carry_in)
+        assert_matches(snapshot, expected)
+
+
+@cocotb.test()
+async def test_generated_arithmetic_vectors_match_spec_flag_policies(dut):
+    for a in VALUES:
+        for b in VALUES:
+            assert_matches(await sample(dut, op=OP_ADD, a=a, b=b, carry_in=False), add8(a, b))
+            assert_matches(await sample(dut, op=OP_SUB, a=a, b=b, carry_in=False), sub8(a, b))
+            assert_matches(await sample(dut, op=OP_CP, a=a, b=b, carry_in=False), cp8(a, b))
+            for carry_in in (False, True):
+                assert_matches(await sample(dut, op=OP_ADC, a=a, b=b, carry_in=carry_in), adc8(a, b, carry_in))
+                assert_matches(await sample(dut, op=OP_SBC, a=a, b=b, carry_in=carry_in), sbc8(a, b, carry_in))

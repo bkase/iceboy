@@ -45,6 +45,14 @@ class CpuAluContractTest(unittest.TestCase):
             "BitResSet { kind: BitResSetKind, bit_index: uint<3>, x: uint<8>, f_prev: Flags }",
             "pub fn idle_alu_result() -> AluResult",
             "pub fn alu(req: AluReq) -> AluResult",
+            "fn add8_result(a: uint<8>, b: uint<8>) -> AluResult",
+            "fn adc8_result(a: uint<8>, b: uint<8>, carry_in: bool) -> AluResult",
+            "fn sub8_result(a: uint<8>, b: uint<8>) -> AluResult",
+            "fn sbc8_result(a: uint<8>, b: uint<8>, carry_in: bool) -> AluResult",
+            "fn cp8_result(a: uint<8>, b: uint<8>) -> AluResult",
+            "AluReq::Add8$(a, b, carry_in) => if carry_in { adc8_result(a, b, true) } else { add8_result(a, b) }",
+            "AluReq::Sub8$(a, b, carry_in) => if carry_in { sbc8_result(a, b, true) } else { sub8_result(a, b) }",
+            "AluReq::Cp8$(a, b) => cp8_result(a, b)",
             "_ => idle_alu_result()",
         ]:
             self.assertIn(symbol, text)
