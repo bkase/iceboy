@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import random
 import unittest
 from dataclasses import dataclass
 
@@ -28,7 +30,7 @@ def curated_vectors() -> tuple[AluVector, ...]:
     )
 
 
-def generated_vectors() -> tuple[AluVector, ...]:
+def generated_vectors(*, seed: int | None = None) -> tuple[AluVector, ...]:
     values = (0x00, 0x01, 0x0F, 0x10, 0x7F, 0x80, 0xFE, 0xFF)
     vectors: list[AluVector] = list(curated_vectors())
     for lhs in values:
@@ -45,12 +47,39 @@ def generated_vectors() -> tuple[AluVector, ...]:
             )
         vectors.append(AluVector("INC", lhs, 0x00, True, inc8(lhs, carry_in=True)))
         vectors.append(AluVector("DEC", lhs, 0x00, True, dec8(lhs, carry_in=True)))
+    if seed is not None:
+        rng = random.Random(seed)
+        rng.shuffle(vectors)
     return tuple(vectors)
 
 
 def _run_spade_alu_vector(vector: AluVector) -> AluResult:
     raise NotImplementedError(
         "Spade ALU execution surface is not implemented yet; see bd-138 for the green vector bead."
+    )
+
+
+def generated_vector_snapshot(*, seed: int | None = None) -> str:
+    return "\n".join(
+        json.dumps(
+            {
+                "operation": vector.operation,
+                "lhs": vector.lhs,
+                "rhs": vector.rhs,
+                "carry_in": vector.carry_in,
+                "expected": {
+                    "value": vector.expected.value,
+                    "flags": {
+                        "z": vector.expected.flags.z,
+                        "n": vector.expected.flags.n,
+                        "h": vector.expected.flags.h,
+                        "c": vector.expected.flags.c,
+                    },
+                },
+            },
+            sort_keys=True,
+        )
+        for vector in generated_vectors(seed=seed)
     )
 
 
@@ -64,6 +93,10 @@ class AluGeneratedVectorsScaffoldTest(unittest.TestCase):
         lookup = {(vector.operation, vector.lhs, vector.rhs): vector for vector in vectors}
         self.assertEqual(lookup[("ADD", 0x0F, 0x01)].expected, add8(0x0F, 0x01))
         self.assertEqual(lookup[("CP", 0x00, 0x01)].expected, AluResult(0x00, Flags(False, True, True, True)))
+
+    def test_generated_vector_snapshot_is_reproducible_for_same_seed(self) -> None:
+        self.assertEqual(generated_vector_snapshot(seed=42), generated_vector_snapshot(seed=42))
+        self.assertNotEqual(generated_vector_snapshot(seed=42), generated_vector_snapshot(seed=43))
 
     @unittest.expectedFailure
     def test_spade_alu_matches_generated_reference_vectors(self) -> None:

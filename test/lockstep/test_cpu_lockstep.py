@@ -50,4 +50,4 @@ async def test_cpu_lockstep_placeholder_xfail(dut):
                 OracleMode.InstrCommit,
                 commit_limit=1,
             )
-            assert result.matched, result.mismatch_report
+            assert result.matched, f"semantic value mismatch: {result.mismatch_report}"
