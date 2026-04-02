@@ -1,1 +1,3 @@
-// Simulation top scaffold.
+pub mod cpu_test_top;
+pub mod soc_lockstep_top;
+pub mod types;

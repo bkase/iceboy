@@ -1,25 +1,25 @@
-enum ModelProfile {
+pub enum ModelProfile {
     DMG,
     CGB,
 }
 
-enum ResetProfile {
+pub enum ResetProfile {
     SkipBoot,
     RawPowerOn,
 }
 
-enum MemoryBehaviorProfile {
+pub enum MemoryBehaviorProfile {
     DmgConservative,
     DmgRevisionSpecific,
 }
 
-struct SimulationProfiles {
+pub struct SimulationProfiles {
     model_profile: ModelProfile,
     reset_profile: ResetProfile,
     memory_behavior_profile: MemoryBehaviorProfile,
 }
 
-fn cpu_bring_up_profiles() -> SimulationProfiles {
+pub fn cpu_bring_up_profiles() -> SimulationProfiles {
     SimulationProfiles$(
         model_profile: ModelProfile::DMG,
         reset_profile: ResetProfile::SkipBoot,

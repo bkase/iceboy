@@ -1,0 +1,57 @@
+use std::option::Option;
+
+pub struct JoypButtons {
+    up: bool,
+    down: bool,
+    left: bool,
+    right: bool,
+    a: bool,
+    b: bool,
+    start: bool,
+    select: bool,
+}
+
+pub struct SimStimulus {
+    joyp_buttons: Option<JoypButtons>,
+    if_set_bits: uint<5>,
+    if_clear_bits: uint<5>,
+    ie_override: Option<uint<5>>,
+    dma_start: Option<uint<8>>,
+    serial_inject: Option<uint<8>>,
+    freeze_arch_time: bool,
+    cpu_hold_only: bool,
+}
+
+pub fn idle_joyp_buttons() -> JoypButtons {
+    JoypButtons$(
+        up: false,
+        down: false,
+        left: false,
+        right: false,
+        a: false,
+        b: false,
+        start: false,
+        select: false,
+    )
+}
+
+pub fn idle_sim_stimulus() -> SimStimulus {
+    SimStimulus$(
+        joyp_buttons: Option::None,
+        if_set_bits: 0,
+        if_clear_bits: 0,
+        ie_override: Option::None,
+        dma_start: Option::None,
+        serial_inject: Option::None,
+        freeze_arch_time: false,
+        cpu_hold_only: false,
+    )
+}
+
+pub fn cpu_arch_time_enable(stimulus: SimStimulus) -> bool {
+    !stimulus.freeze_arch_time && !stimulus.cpu_hold_only
+}
+
+pub fn peripheral_arch_time_enable(stimulus: SimStimulus) -> bool {
+    !stimulus.freeze_arch_time
+}
