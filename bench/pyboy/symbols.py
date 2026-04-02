@@ -1,0 +1,1 @@
+"""PyBoy symbol resolution scaffold."""

@@ -1,0 +1,1 @@
+"""PyBoy oracle adapter scaffold."""

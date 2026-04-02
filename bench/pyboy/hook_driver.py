@@ -1,0 +1,1 @@
+"""PyBoy hook execution scaffold."""

@@ -1,26 +1,6 @@
-entity main(clk: clock, rst: bool, LED_fast : inv bool, LED_slow : inv bool) {
-	reg(clk) pwm_fast : uint<24> reset(rst: 0) = if(pwm_fast > 2000000) {
-		0
-	} else {
-		trunc(pwm_fast + 1)
-	};
-	reg(clk) pwm_slow : uint<24> reset(rst: 0) = if(pwm_slow > 12000000) {
-		0
-	} else {
-		trunc(pwm_slow + 1)
-	};
-
-	set LED_fast = pwm_fast < 1000000;
-	set LED_slow = pwm_slow < 6000000;
-}
-
-#[no_mangle(all)]
-entity icebreaker_top(
-	CLK: clock,
-	BTN_N: bool,
-	LEDR_N : inv bool,
-	LEDG_N : inv bool,
-) {
-	let rst = !BTN_N;
-	inst main(CLK, rst, LEDR_N, LEDG_N);
-}
+mod board;
+mod bus;
+mod cpu;
+mod mem;
+mod periph;
+mod sim;

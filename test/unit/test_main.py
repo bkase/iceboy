@@ -1,4 +1,4 @@
-# top = icebreaker_top
+# top = board::icebreaker_top::icebreaker_top
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles
