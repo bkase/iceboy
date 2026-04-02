@@ -19,4 +19,4 @@ tool="iceprog"
 
 [simulation]
 testbench_dir = "test"
-simulator = "verilator"
+simulator = "icarus"

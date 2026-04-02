@@ -14,6 +14,43 @@ if [[ ! -x "$SWIM" ]]; then
     exit 1
 fi
 
+patch_cocotb_config_wrapper() {
+    local bindir
+    local config
+    local config_py
+
+    bindir="$(pwd)/build/oss-cad-suite/bin"
+    config="${bindir}/cocotb-config"
+    config_py="${bindir}/cocotb-config.py"
+
+    if [[ ! -f "$config" ]]; then
+        return
+    fi
+
+    cat >"$config_py" <<'EOF'
+import re
+import sys
+from cocotb.config import main
+
+if __name__ == "__main__":
+    sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+    raise SystemExit(main())
+EOF
+
+    cat >"$config" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+bindir="\$(cd "\$(dirname "\$0")" && pwd)"
+repo_root="\$(cd "\$bindir/../.." && pwd)"
+case "\$PWD" in
+  "\$repo_root"/build/*) ln -sfn "\$bindir/../lib" "\$PWD/lib" ;;
+esac
+exec "\$bindir/tabbypy3" "\$bindir/cocotb-config.py" "\$@"
+EOF
+    chmod +x "$config_py"
+    chmod +x "$config"
+}
+
 echo "=== Pre-commit checks ==="
 
 echo -n "Compiling... "
@@ -24,6 +61,8 @@ else
     echo "$build_output"
     exit 1
 fi
+
+patch_cocotb_config_wrapper
 
 if find test -type f -name 'test_*.py' -print -quit | grep -q .; then
     if command -v iverilog >/dev/null 2>&1 || command -v verilator >/dev/null 2>&1 || [[ -x /opt/homebrew/bin/verilator ]]; then
