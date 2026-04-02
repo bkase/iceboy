@@ -17,7 +17,6 @@ class CpuTypesContractTest(unittest.TestCase):
             "PendingEnable",
             "enum HaltState",
             "HaltBugPending",
-            "struct Registers",
             "struct CpuArchState",
             "struct CpuMicroState",
             "struct CpuState",
@@ -62,6 +61,7 @@ class CpuTypesContractTest(unittest.TestCase):
             "enum MemoryBehaviorProfile",
             "struct SimulationProfiles",
             "use lib::bus::types::{BusReq, BusResp, idle_bus_resp};",
+            "use lib::cpu::regs::{R8, RegPair, Registers, zero_registers};",
             "pub fn idle_micro_input() -> MicroInput",
         ]:
             self.assertIn(symbol, text)

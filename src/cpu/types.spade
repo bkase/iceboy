@@ -1,5 +1,6 @@
 use std::option::Option;
 use lib::bus::types::{BusReq, BusResp, idle_bus_resp};
+use lib::cpu::regs::{R8, RegPair, Registers, zero_registers};
 
 pub enum ModelProfile {
     DMG,
@@ -38,26 +39,6 @@ pub enum PrefixKind {
     Cb,
 }
 
-pub enum R8 {
-    A,
-    F,
-    B,
-    C,
-    D,
-    E,
-    H,
-    L,
-}
-
-pub enum RegPair {
-    AF,
-    BC,
-    DE,
-    HL,
-    SP,
-    PC,
-}
-
 pub enum AluKind {
     Add,
     Adc,
@@ -75,19 +56,6 @@ pub enum DecodedOp {
     Invalid,
     Unprefixed { opcode: uint<8> },
     Prefixed { prefix: PrefixKind, opcode: uint<8> },
-}
-
-pub struct Registers {
-    a: uint<8>,
-    f: uint<8>,
-    b: uint<8>,
-    c: uint<8>,
-    d: uint<8>,
-    e: uint<8>,
-    h: uint<8>,
-    l: uint<8>,
-    sp: uint<16>,
-    pc: uint<16>,
 }
 
 pub struct CpuArchState {
@@ -226,21 +194,6 @@ pub fn cpu_bring_up_profiles() -> SimulationProfiles {
         model_profile: ModelProfile::DMG,
         reset_profile: ResetProfile::SkipBoot,
         memory_behavior_profile: MemoryBehaviorProfile::DmgConservative,
-    )
-}
-
-pub fn zero_registers() -> Registers {
-    Registers$(
-        a: 0,
-        f: 0,
-        b: 0,
-        c: 0,
-        d: 0,
-        e: 0,
-        h: 0,
-        l: 0,
-        sp: 0,
-        pc: 0,
     )
 }
 

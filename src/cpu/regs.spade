@@ -1,0 +1,127 @@
+pub enum R8 {
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+}
+
+pub enum RegPair {
+    BC,
+    DE,
+    HL,
+    SP,
+    AF,
+}
+
+pub struct Registers {
+    a: uint<8>,
+    f: uint<8>,
+    b: uint<8>,
+    c: uint<8>,
+    d: uint<8>,
+    e: uint<8>,
+    h: uint<8>,
+    l: uint<8>,
+    sp: uint<16>,
+    pc: uint<16>,
+}
+
+pub struct Flags {
+    z: bool,
+    n: bool,
+    h: bool,
+    c: bool,
+}
+
+pub fn zero_registers() -> Registers {
+    Registers$(
+        a: 0,
+        f: 0,
+        b: 0,
+        c: 0,
+        d: 0,
+        e: 0,
+        h: 0,
+        l: 0,
+        sp: 0,
+        pc: 0,
+    )
+}
+
+pub fn mask_f(f: uint<8>) -> uint<8> {
+    f & 0xf0
+}
+
+pub fn flags_from_f(f: uint<8>) -> Flags {
+    let masked = mask_f(f);
+    Flags$(
+        z: ((masked >> 7) & 1u8) == 1u8,
+        n: ((masked >> 6) & 1u8) == 1u8,
+        h: ((masked >> 5) & 1u8) == 1u8,
+        c: ((masked >> 4) & 1u8) == 1u8,
+    )
+}
+
+pub fn pack_flags(flags: Flags) -> uint<8> {
+    mask_f(
+        ((if flags.z { 1u8 } else { 0u8 }) << 7)
+        | ((if flags.n { 1u8 } else { 0u8 }) << 6)
+        | ((if flags.h { 1u8 } else { 0u8 }) << 5)
+        | ((if flags.c { 1u8 } else { 0u8 }) << 4)
+    )
+}
+
+pub fn get_r8(regs: Registers, sel: R8) -> uint<8> {
+    match sel {
+        R8::A => regs.a,
+        R8::B => regs.b,
+        R8::C => regs.c,
+        R8::D => regs.d,
+        R8::E => regs.e,
+        R8::H => regs.h,
+        R8::L => regs.l,
+    }
+}
+
+pub fn set_r8(regs: Registers, sel: R8, val: uint<8>) -> Registers {
+    match sel {
+        R8::A => Registers$(a: val, f: regs.f, b: regs.b, c: regs.c, d: regs.d, e: regs.e, h: regs.h, l: regs.l, sp: regs.sp, pc: regs.pc),
+        R8::B => Registers$(a: regs.a, f: regs.f, b: val, c: regs.c, d: regs.d, e: regs.e, h: regs.h, l: regs.l, sp: regs.sp, pc: regs.pc),
+        R8::C => Registers$(a: regs.a, f: regs.f, b: regs.b, c: val, d: regs.d, e: regs.e, h: regs.h, l: regs.l, sp: regs.sp, pc: regs.pc),
+        R8::D => Registers$(a: regs.a, f: regs.f, b: regs.b, c: regs.c, d: val, e: regs.e, h: regs.h, l: regs.l, sp: regs.sp, pc: regs.pc),
+        R8::E => Registers$(a: regs.a, f: regs.f, b: regs.b, c: regs.c, d: regs.d, e: val, h: regs.h, l: regs.l, sp: regs.sp, pc: regs.pc),
+        R8::H => Registers$(a: regs.a, f: regs.f, b: regs.b, c: regs.c, d: regs.d, e: regs.e, h: val, l: regs.l, sp: regs.sp, pc: regs.pc),
+        R8::L => Registers$(a: regs.a, f: regs.f, b: regs.b, c: regs.c, d: regs.d, e: regs.e, h: regs.h, l: val, sp: regs.sp, pc: regs.pc),
+    }
+}
+
+fn hi_byte(word: uint<16>) -> uint<8> {
+    trunc(word >> 8)
+}
+
+fn lo_byte(word: uint<16>) -> uint<8> {
+    trunc(word)
+}
+
+pub fn get_r16(regs: Registers, pair: RegPair) -> uint<16> {
+    match pair {
+        RegPair::BC => (zext(regs.b) << 8) | zext(regs.c),
+        RegPair::DE => (zext(regs.d) << 8) | zext(regs.e),
+        RegPair::HL => (zext(regs.h) << 8) | zext(regs.l),
+        RegPair::SP => regs.sp,
+        RegPair::AF => (zext(regs.a) << 8) | zext(mask_f(regs.f)),
+    }
+}
+
+pub fn set_r16(regs: Registers, pair: RegPair, val: uint<16>) -> Registers {
+    match pair {
+        RegPair::BC => Registers$(a: regs.a, f: regs.f, b: hi_byte(val), c: lo_byte(val), d: regs.d, e: regs.e, h: regs.h, l: regs.l, sp: regs.sp, pc: regs.pc),
+        RegPair::DE => Registers$(a: regs.a, f: regs.f, b: regs.b, c: regs.c, d: hi_byte(val), e: lo_byte(val), h: regs.h, l: regs.l, sp: regs.sp, pc: regs.pc),
+        RegPair::HL => Registers$(a: regs.a, f: regs.f, b: regs.b, c: regs.c, d: regs.d, e: regs.e, h: hi_byte(val), l: lo_byte(val), sp: regs.sp, pc: regs.pc),
+        RegPair::SP => Registers$(a: regs.a, f: regs.f, b: regs.b, c: regs.c, d: regs.d, e: regs.e, h: regs.h, l: regs.l, sp: val, pc: regs.pc),
+        RegPair::AF => Registers$(a: hi_byte(val), f: mask_f(lo_byte(val)), b: regs.b, c: regs.c, d: regs.d, e: regs.e, h: regs.h, l: regs.l, sp: regs.sp, pc: regs.pc),
+    }
+}
