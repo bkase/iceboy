@@ -8,6 +8,8 @@
 - Cocotb: `1.9.2`
 - Source: `https://pypi.org/project/cocotb/`
 - Compatibility note: `spade 0.17.0` currently expects `cocotb~=1.9.2`
+- PyYAML: `6.0.3`
+- Usage note: used for tracked manifest schema and inventory validation via `uv run --with-requirements toolchain/python.lock python tools/validate_rom_manifests.py`
 
 ## PyBoy Headless Configuration
 

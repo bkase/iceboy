@@ -1,0 +1,379 @@
+schema_version: 1
+abi_contract:
+  sym_file_required: true
+  executable_labels:
+    required:
+      - __pass
+      - __fail
+    optional_prefixes:
+      - __checkpoint_
+      - __commit_
+      - __inject_begin_
+      - __inject_end_
+  wram_signature_block:
+    id: wram.v1
+    versioned: true
+
+roms:
+  # Wave A: pure CPU core bring-up
+  - id: LOADS_BASIC
+    path: bench/roms/out/LOADS_BASIC.gb
+    requires: [cpu]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 250000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, wram_signature]
+    action_script: null
+    action_gen: null
+
+  - id: ALU_FLAGS
+    path: bench/roms/out/ALU_FLAGS.gb
+    requires: [cpu]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 250000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, wram_signature]
+    action_script: null
+    action_gen: null
+
+  - id: ALU16_SP
+    path: bench/roms/out/ALU16_SP.gb
+    requires: [cpu]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 250000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, wram_signature]
+    action_script: null
+    action_gen: null
+
+  - id: FLOW_STACK
+    path: bench/roms/out/FLOW_STACK.gb
+    requires: [cpu]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 250000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, wram_signature]
+    action_script: null
+    action_gen: null
+
+  - id: CB_BITOPS
+    path: bench/roms/out/CB_BITOPS.gb
+    requires: [cpu]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 250000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, wram_signature]
+    action_script: null
+    action_gen: null
+
+  - id: MEM_RWB
+    path: bench/roms/out/MEM_RWB.gb
+    requires: [cpu]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 300000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, wram_signature]
+    action_script: null
+    action_gen: null
+
+  - id: ALU_LOOP
+    path: bench/roms/out/ALU_LOOP.gb
+    requires: [cpu]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 300000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, wram_signature]
+    action_script: null
+    action_gen: null
+
+  # Wave B: interrupt and timer correctness
+  - id: TIMER_DIV_BASIC
+    path: bench/roms/out/TIMER_DIV_BASIC.gb
+    requires: [cpu, timer]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 400000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, timer_registers, wram_signature]
+    action_script: null
+    action_gen: null
+
+  - id: EI_DELAY
+    path: bench/roms/out/EI_DELAY.gb
+    requires: [cpu]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 400000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, interrupt_state, wram_signature]
+    action_script: null
+    action_gen: null
+
+  - id: TIMER_IRQ_HALT
+    path: bench/roms/out/TIMER_IRQ_HALT.gb
+    requires: [cpu, timer]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 400000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, interrupt_state, timer_registers, wram_signature]
+    action_script: null
+    action_gen: null
+
+  # Wave C: memory-mapped bus realism
+  - id: JOY_DIVERGE_PERSIST
+    path: bench/roms/out/JOY_DIVERGE_PERSIST.gb
+    requires: [cpu]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 400000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, wram_signature]
+    action_script: null
+    action_gen:
+      name: striped
+      seed: 0
+
+  - id: DMA_OAM_COPY
+    path: bench/roms/out/DMA_OAM_COPY.gb
+    requires: [cpu, dma]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 400000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, dma_registers, oam, wram_signature]
+    action_script: null
+    action_gen: null
+
+  - id: MBC1_SWITCH
+    path: bench/roms/out/MBC1_SWITCH.gb
+    requires: [cpu, mbc1]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 400000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, mbc_rom_bank, wram_signature]
+    action_script: null
+    action_gen: null
+
+  - id: MBC1_RAM
+    path: bench/roms/out/MBC1_RAM.gb
+    requires: [cpu, mbc1]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 400000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, mbc_rom_bank, mbc_ram, wram_signature]
+    action_script: null
+    action_gen: null
+
+  - id: MBC3_SWITCH
+    path: bench/roms/out/MBC3_SWITCH.gb
+    requires: [cpu, mbc3]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 400000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, mbc_rom_bank, wram_signature]
+    action_script: null
+    action_gen: null
+
+  - id: MBC3_RAM
+    path: bench/roms/out/MBC3_RAM.gb
+    requires: [cpu, mbc3]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 400000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, mbc_rom_bank, mbc_ram, wram_signature]
+    action_script: null
+    action_gen: null
+
+  # Wave D: graphics and peripheral milestones
+  - id: PPU_STAT_IRQ
+    path: bench/roms/out/PPU_STAT_IRQ.gb
+    requires: [cpu, ppu]
+    oracle_mode: checkpoint
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 600000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [cpu_core, ppu_irq_counters, wram_signature]
+    action_script: null
+    action_gen: null
+
+  - id: BG_STATIC
+    path: bench/roms/out/BG_STATIC.gb
+    requires: [cpu, ppu]
+    oracle_mode: frame_hash
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 600000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [frame_hash]
+    action_script: null
+    action_gen: null
+
+  - id: BG_SCROLL_SIGNED
+    path: bench/roms/out/BG_SCROLL_SIGNED.gb
+    requires: [cpu, ppu]
+    oracle_mode: frame_hash
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 600000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [frame_hash]
+    action_script: null
+    action_gen: null
+
+  - id: PPU_WINDOW
+    path: bench/roms/out/PPU_WINDOW.gb
+    requires: [cpu, ppu]
+    oracle_mode: frame_hash
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 600000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [frame_hash]
+    action_script: null
+    action_gen: null
+
+  - id: PPU_SPRITES
+    path: bench/roms/out/PPU_SPRITES.gb
+    requires: [cpu, ppu]
+    oracle_mode: frame_hash
+    memory_behavior_profile: DmgConservative
+    timeout_commits: 600000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    compare_scope:
+      domains: [frame_hash]
+    action_script: null
+    action_gen: null

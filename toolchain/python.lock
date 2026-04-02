@@ -12,3 +12,5 @@ pysdl2==0.9.17
     # via pyboy
 pysdl2-dll==2.32.0
     # via pyboy
+pyyaml==6.0.3
+    # via -r toolchain/python.in

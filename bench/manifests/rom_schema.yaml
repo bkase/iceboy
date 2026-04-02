@@ -1,0 +1,89 @@
+schema_version: 1
+manifest_type: rom_inventory_schema
+inventory_file: bench/manifests/rom_inventory.yaml
+
+allowed_values:
+  requires:
+    - cpu
+    - timer
+    - dma
+    - mbc1
+    - mbc3
+    - ppu
+  oracle_mode:
+    - unit
+    - instr_commit
+    - mcycle_commit
+    - checkpoint
+    - frame_semantic
+    - frame_hash
+  memory_behavior_profile:
+    - DmgConservative
+    - DmgRevisionSpecific
+  compare_domains:
+    - cpu_core
+    - dma_registers
+    - frame_hash
+    - interrupt_state
+    - mbc_ram
+    - mbc_rom_bank
+    - oam
+    - ppu_irq_counters
+    - timer_registers
+    - wram_signature
+  pass_condition_kinds:
+    - label_hit
+    - wram_signature
+    - label_or_wram_signature
+  action_generators:
+    - striped
+
+inventory_contract:
+  top_level_required:
+    - schema_version
+    - abi_contract
+    - roms
+  rom_entry_required:
+    - id
+    - path
+    - requires
+    - oracle_mode
+    - memory_behavior_profile
+    - timeout_commits
+    - checkpoint_symbols
+    - pass_condition
+    - compare_scope
+    - action_script
+    - action_gen
+  field_notes:
+    id: Unique ROM identifier used by the harness and result logs.
+    path: Relative repository path to the ROM binary.
+    requires: Hardware capabilities that must exist before the ROM can run.
+    oracle_mode: Comparison cadence for the ROM.
+    memory_behavior_profile: DMG memory behavior policy used by the harness.
+    timeout_commits: Maximum commit boundaries before timeout.
+    checkpoint_symbols: Optional __checkpoint_* symbols expected from the ROM.
+    pass_condition: Success and failure contract for the ROM.
+    compare_scope: Domains to compare at each commit or frame boundary.
+    action_script: Optional path to a deterministic input script.
+    action_gen: Optional seeded action generator when a script is not used.
+
+abi_contract:
+  sym_file_required: true
+  executable_labels:
+    required:
+      - __pass
+      - __fail
+    optional_prefixes:
+      - __checkpoint_
+      - __commit_
+      - __inject_begin_
+      - __inject_end_
+  wram_signature_block:
+    id: wram.v1
+    versioned: true
+    required_fields:
+      - version
+      - status
+      - debug_counter
+      - detail_code

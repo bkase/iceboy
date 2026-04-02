@@ -7,10 +7,16 @@ YELLOW='\033[0;33m'
 NC='\033[0m'
 
 SWIM="${HOME}/.cargo/bin/swim"
+UV_BIN="$(command -v uv || true)"
 export PATH="/opt/homebrew/bin:$PATH"
 
 if [[ ! -x "$SWIM" ]]; then
     echo -e "${RED}Missing swim at ${SWIM}${NC}"
+    exit 1
+fi
+
+if [[ -z "$UV_BIN" ]]; then
+    echo -e "${RED}Missing uv in PATH${NC}"
     exit 1
 fi
 
@@ -52,6 +58,15 @@ EOF
 }
 
 echo "=== Pre-commit checks ==="
+
+echo -n "Validating ROM manifests... "
+if manifest_output=$("$UV_BIN" run --with-requirements toolchain/python.lock python tools/validate_rom_manifests.py 2>&1); then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAILED${NC}"
+    echo "$manifest_output"
+    exit 1
+fi
 
 echo -n "Compiling... "
 if build_output=$("$SWIM" build 2>&1); then
