@@ -5,7 +5,8 @@ import unittest
 import warnings
 from pathlib import Path
 
-from bench.pyboy.oracle import CommitPoint, MemoryWriteEvent, PyBoyOracle
+from bench.actions.generators import MemoryWriteEvent
+from bench.pyboy.oracle import CommitPoint, PyBoyOracle
 from roms.build_micro_rom import build_alu_loop
 from spec.profiles import ModelProfile, ResetProfile
 

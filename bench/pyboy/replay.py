@@ -9,8 +9,8 @@ from typing import Any
 
 import yaml
 
+from bench.actions.generators import SimEvent, decode_sim_event, encode_sim_event
 from bench.pyboy.hooks import HookManifest
-from bench.pyboy.oracle import ButtonEvent, MemoryWriteEvent, RawInputEvent, SimEvent
 from spec.profiles import MemoryBehaviorProfile, ModelProfile, ResetProfile
 
 
@@ -113,54 +113,6 @@ class ReplayCapsule:
     def from_yaml(cls, text: str) -> "ReplayCapsule":
         data = yaml.safe_load(text)
         return cls.from_dict(data)
-
-
-def encode_sim_event(event: SimEvent) -> dict[str, Any]:
-    if isinstance(event, ButtonEvent):
-        return {
-            "kind": "button",
-            "button": event.button,
-            "action": event.action,
-            "delay": event.delay,
-        }
-    if isinstance(event, MemoryWriteEvent):
-        return {
-            "kind": "memory_write",
-            "addr": event.addr,
-            "value": event.value,
-            "bank": event.bank,
-        }
-    if isinstance(event, RawInputEvent):
-        return {
-            "kind": "raw_input",
-            "event": event.event,
-            "delay": event.delay,
-        }
-    raise TypeError(f"Unsupported simulation event: {type(event)!r}")
-
-
-def decode_sim_event(data: dict[str, Any]) -> SimEvent:
-    kind = str(data["kind"])
-    if kind == "button":
-        return ButtonEvent(
-            button=str(data["button"]),
-            action=str(data["action"]),
-            delay=int(data["delay"]),
-        )
-    if kind == "memory_write":
-        bank = data.get("bank")
-        return MemoryWriteEvent(
-            addr=int(data["addr"]),
-            value=int(data["value"]),
-            bank=int(bank) if bank is not None else None,
-        )
-    if kind == "raw_input":
-        return RawInputEvent(
-            event=int(data["event"]),
-            delay=int(data["delay"]),
-        )
-    raise ValueError(f"Unsupported simulation event kind: {kind}")
-
 
 def build_hook_manifest_id(manifest: HookManifest) -> str:
     serialized_targets = [

@@ -4,8 +4,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from bench.actions.generators import (
+    IfSetBitsEvent,
+    JoypadButtons,
+    JoypadButtonsEvent,
+    MemoryWriteEvent,
+    RawInputEvent,
+)
 from bench.pyboy.hooks import build_hook_manifest
-from bench.pyboy.oracle import ButtonEvent, MemoryWriteEvent, RawInputEvent
 from bench.pyboy.replay import (
     FirstDivergence,
     ReplayCapsule,
@@ -43,9 +49,10 @@ class ReplayCapsuleTest(unittest.TestCase):
             memory_behavior_profile=MemoryBehaviorProfile.DmgConservative,
             random_seed=7,
             event_log=(
-                ReplayEvent(commit_index=3, event=ButtonEvent(button="a", action="tap", delay=2)),
+                ReplayEvent(commit_index=3, event=JoypadButtonsEvent(JoypadButtons.from_pressed(["a"]))),
                 ReplayEvent(commit_index=9, event=MemoryWriteEvent(addr=0xC100, value=0x34)),
                 ReplayEvent(commit_index=12, event=RawInputEvent(event=5, delay=1)),
+                ReplayEvent(commit_index=16, event=IfSetBitsEvent(bits=0b00101)),
             ),
             sym_sha256=self.manifest.sym_sha256,
             hook_manifest_id=build_hook_manifest_id(self.manifest),

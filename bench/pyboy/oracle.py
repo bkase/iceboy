@@ -9,13 +9,14 @@ import warnings
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol, Sequence, Union
+from typing import Protocol, Sequence
 
 warnings.filterwarnings("ignore", message="Using SDL2 binaries from pysdl2-dll.*")
 
 from pyboy import PyBoy
 from pyboy.utils import WindowEvent
 
+from bench.actions.generators import JoypadButtonsEvent, MemoryWriteEvent, RawInputEvent, SimEvent
 from spec.profiles import ModelProfile, ResetProfile
 
 
@@ -88,29 +89,6 @@ class CommitPoint:
     bank: int | None
     addr: int | str
     label: str | None = None
-
-
-@dataclass(frozen=True)
-class ButtonEvent:
-    button: str
-    action: Literal["tap", "press", "release"] = "tap"
-    delay: int = 1
-
-
-@dataclass(frozen=True)
-class MemoryWriteEvent:
-    addr: int
-    value: int
-    bank: int | None = None
-
-
-@dataclass(frozen=True)
-class RawInputEvent:
-    event: int
-    delay: int = 0
-
-
-SimEvent = Union[ButtonEvent, MemoryWriteEvent, RawInputEvent]
 
 
 @dataclass(frozen=True)
@@ -206,6 +184,7 @@ class PyBoyOracle:
         self._pyboy: PyBoy | None = None
         self._commit_queue: deque[OracleCommit] = deque()
         self._seq = 0
+        self._pressed_buttons: set[str] = set()
 
     def __enter__(self) -> "PyBoyOracle":
         return self
@@ -217,6 +196,7 @@ class PyBoyOracle:
         if self._pyboy is not None:
             self._pyboy.stop(save=False)
             self._pyboy = None
+        self._pressed_buttons.clear()
 
     def reset(self, model_profile: ModelProfile | str, reset_profile: ResetProfile | str) -> None:
         model = _coerce_model_profile(model_profile)
@@ -225,6 +205,7 @@ class PyBoyOracle:
         self.close()
         self._commit_queue.clear()
         self._seq = 0
+        self._pressed_buttons.clear()
 
         kwargs: dict[str, object] = {
             "window": "null",
@@ -262,15 +243,13 @@ class PyBoyOracle:
 
     def write_event(self, ev: SimEvent) -> None:
         pyboy = self._require_pyboy()
-        if isinstance(ev, ButtonEvent):
-            if ev.action == "tap":
-                pyboy.button(ev.button, ev.delay)
-            elif ev.action == "press":
-                pyboy.button_press(ev.button)
-            elif ev.action == "release":
-                pyboy.button_release(ev.button)
-            else:
-                raise ValueError(f"Unsupported button action: {ev.action}")
+        if isinstance(ev, JoypadButtonsEvent):
+            target = set(ev.joyp_buttons.pressed_buttons())
+            for button in sorted(self._pressed_buttons - target):
+                pyboy.button_release(button)
+            for button in sorted(target - self._pressed_buttons):
+                pyboy.button_press(button)
+            self._pressed_buttons = target
             return
         if isinstance(ev, MemoryWriteEvent):
             if ev.bank is None:
@@ -281,7 +260,7 @@ class PyBoyOracle:
         if isinstance(ev, RawInputEvent):
             pyboy.send_input(WindowEvent(ev.event), ev.delay)
             return
-        raise TypeError(f"Unsupported simulation event: {type(ev)!r}")
+        raise NotImplementedError(f"PyBoy oracle does not support sideband event {type(ev).__name__}")
 
     def snapshot(self) -> bytes:
         pyboy = self._require_pyboy()
@@ -293,6 +272,7 @@ class PyBoyOracle:
             "commit_queue": list(self._commit_queue),
             "events": [int(event) for event in getattr(pyboy, "events", [])],
             "queued_input": [(frame, int(event)) for frame, event in queued_input] if queued_input is not None else [],
+            "pressed_buttons": sorted(self._pressed_buttons),
             "seq": self._seq,
         }
         return pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
@@ -310,6 +290,7 @@ class PyBoyOracle:
             queued_input.clear()
             queued_input.extend((frame, event) for frame, event in payload.get("queued_input", []))
         self._commit_queue = deque(payload.get("commit_queue", []))
+        self._pressed_buttons = set(payload.get("pressed_buttons", []))
         self._seq = int(payload.get("seq", 0))
 
     def _capture_commit(self, point: _ResolvedCommitPoint) -> None:

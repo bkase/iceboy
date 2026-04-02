@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+from bench.actions.generators import SimEvent
 from bench.pyboy.hooks import HookManifest
-from bench.pyboy.oracle import OracleCommit, PyBoyOracle, SimEvent
+from bench.pyboy.oracle import OracleCommit, PyBoyOracle
 from spec.profiles import ModelProfile, ResetProfile
 
 
