@@ -1,1 +1,2 @@
+pub mod clockgen;
 mod icebreaker_top;

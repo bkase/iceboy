@@ -1,0 +1,35 @@
+pub struct TimebaseOut {
+    t_ce: bool,
+    m_ce: bool,
+    sys_counter: uint<32>,
+    t_index: uint<2>,
+    m_index: uint<30>,
+}
+
+fn next_sys_counter(sys_counter: uint<32>) -> uint<32> {
+    trunc(sys_counter + 1)
+}
+
+fn t_cycle_index(sys_counter: uint<32>) -> uint<2> {
+    trunc(sys_counter)
+}
+
+fn m_cycle_index(sys_counter: uint<32>) -> uint<30> {
+    trunc(sys_counter >> 2)
+}
+
+fn m_cycle_enable(sys_counter: uint<32>) -> bool {
+    t_cycle_index(sys_counter) == 3u2
+}
+
+entity timebase(clk: clock, rst: bool) -> TimebaseOut {
+    reg(clk) sys_counter: uint<32> reset(rst: 0) = next_sys_counter(sys_counter);
+
+    TimebaseOut$(
+        t_ce: true,
+        m_ce: m_cycle_enable(sys_counter),
+        sys_counter: sys_counter,
+        t_index: t_cycle_index(sys_counter),
+        m_index: m_cycle_index(sys_counter),
+    )
+}
