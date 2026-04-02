@@ -69,6 +69,8 @@ def main() -> int:
     require_keys(inventory, schema["inventory_contract"]["top_level_required"], "rom_inventory.yaml")
 
     allowed_requires = set(schema["allowed_values"]["requires"])
+    allowed_model_profiles = set(schema["allowed_values"]["model_profile"])
+    allowed_reset_profiles = set(schema["allowed_values"]["reset_profile"])
     allowed_oracle_modes = set(schema["allowed_values"]["oracle_mode"])
     allowed_memory_profiles = set(schema["allowed_values"]["memory_behavior_profile"])
     allowed_compare_domains = set(schema["allowed_values"]["compare_domains"])
@@ -109,6 +111,14 @@ def main() -> int:
         if path in seen_paths:
             fail(f"duplicate ROM path detected: {path}")
         seen_paths.add(path)
+
+        model_profile = rom["model_profile"]
+        if model_profile not in allowed_model_profiles:
+            fail(f"{rom_id}.model_profile is not allowed")
+
+        reset_profile = rom["reset_profile"]
+        if reset_profile not in allowed_reset_profiles:
+            fail(f"{rom_id}.reset_profile is not allowed")
 
         requires = rom["requires"]
         expect_type(requires, list, f"{rom_id}.requires")
@@ -172,6 +182,11 @@ def main() -> int:
             expect_type(seed, int, f"{rom_id}.action_gen.seed")
             if seed < 0:
                 fail(f"{rom_id}.action_gen.seed must be non-negative")
+
+        if model_profile != "DMG":
+            fail(f"{rom_id} must pin model_profile to DMG for CPU bring-up")
+        if reset_profile != "SkipBoot":
+            fail(f"{rom_id} must pin reset_profile to SkipBoot for CPU bring-up")
 
     if ids != EXPECTED_ROM_IDS:
         fail("rom_inventory.yaml must contain the exact Wave A-D ROM inventory in plan order")

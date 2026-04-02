@@ -1,1 +1,1 @@
-// CPU module scaffold.
+mod types;

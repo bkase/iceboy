@@ -3,6 +3,12 @@ manifest_type: rom_inventory_schema
 inventory_file: bench/manifests/rom_inventory.yaml
 
 allowed_values:
+  model_profile:
+    - DMG
+    - CGB
+  reset_profile:
+    - SkipBoot
+    - RawPowerOn
   requires:
     - cpu
     - timer
@@ -46,6 +52,8 @@ inventory_contract:
   rom_entry_required:
     - id
     - path
+    - model_profile
+    - reset_profile
     - requires
     - oracle_mode
     - memory_behavior_profile
@@ -58,6 +66,8 @@ inventory_contract:
   field_notes:
     id: Unique ROM identifier used by the harness and result logs.
     path: Relative repository path to the ROM binary.
+    model_profile: Console model profile recorded in manifests and replay capsules.
+    reset_profile: Reset-state profile recorded in manifests and replay capsules.
     requires: Hardware capabilities that must exist before the ROM can run.
     oracle_mode: Comparison cadence for the ROM.
     memory_behavior_profile: DMG memory behavior policy used by the harness.

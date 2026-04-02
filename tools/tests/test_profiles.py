@@ -1,0 +1,62 @@
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+
+import yaml
+
+from spec.profiles import (
+    CPU_BRING_UP_PROFILES,
+    MemoryBehaviorProfile,
+    ModelProfile,
+    ResetProfile,
+    SimulationProfiles,
+)
+
+
+ROOT = Path(__file__).resolve().parents[2]
+ROM_INVENTORY_PATH = ROOT / "bench" / "manifests" / "rom_inventory.yaml"
+SPADE_TYPES_PATH = ROOT / "src" / "cpu" / "types.spade"
+
+
+class SimulationProfilesTest(unittest.TestCase):
+    def test_cpu_bring_up_profiles_are_pinned(self) -> None:
+        self.assertEqual(CPU_BRING_UP_PROFILES.model, ModelProfile.DMG)
+        self.assertEqual(CPU_BRING_UP_PROFILES.reset, ResetProfile.SkipBoot)
+        self.assertEqual(
+            CPU_BRING_UP_PROFILES.memory_behavior,
+            MemoryBehaviorProfile.DmgConservative,
+        )
+
+    def test_manifest_round_trip_mapping(self) -> None:
+        round_trip = SimulationProfiles.from_mapping(CPU_BRING_UP_PROFILES.as_manifest_fields())
+        self.assertEqual(round_trip, CPU_BRING_UP_PROFILES)
+
+    def test_rom_inventory_records_bring_up_profiles(self) -> None:
+        inventory = yaml.safe_load(ROM_INVENTORY_PATH.read_text(encoding="utf-8"))
+        roms = inventory["roms"]
+        self.assertGreater(len(roms), 0)
+
+        for rom in roms:
+            self.assertEqual(rom["model_profile"], CPU_BRING_UP_PROFILES.model.value)
+            self.assertEqual(rom["reset_profile"], CPU_BRING_UP_PROFILES.reset.value)
+
+    def test_spade_types_define_same_profile_names(self) -> None:
+        spade_types = SPADE_TYPES_PATH.read_text(encoding="utf-8")
+
+        for symbol in [
+            "enum ModelProfile",
+            "DMG",
+            "CGB",
+            "enum ResetProfile",
+            "SkipBoot",
+            "RawPowerOn",
+            "enum MemoryBehaviorProfile",
+            "DmgConservative",
+            "DmgRevisionSpecific",
+        ]:
+            self.assertIn(symbol, spade_types)
+
+
+if __name__ == "__main__":
+    unittest.main()

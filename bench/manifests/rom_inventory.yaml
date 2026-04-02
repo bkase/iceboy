@@ -18,6 +18,8 @@ roms:
   # Wave A: pure CPU core bring-up
   - id: LOADS_BASIC
     path: bench/roms/out/LOADS_BASIC.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -35,6 +37,8 @@ roms:
 
   - id: ALU_FLAGS
     path: bench/roms/out/ALU_FLAGS.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -52,6 +56,8 @@ roms:
 
   - id: ALU16_SP
     path: bench/roms/out/ALU16_SP.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -69,6 +75,8 @@ roms:
 
   - id: FLOW_STACK
     path: bench/roms/out/FLOW_STACK.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -86,6 +94,8 @@ roms:
 
   - id: CB_BITOPS
     path: bench/roms/out/CB_BITOPS.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -103,6 +113,8 @@ roms:
 
   - id: MEM_RWB
     path: bench/roms/out/MEM_RWB.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -120,6 +132,8 @@ roms:
 
   - id: ALU_LOOP
     path: bench/roms/out/ALU_LOOP.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -138,6 +152,8 @@ roms:
   # Wave B: interrupt and timer correctness
   - id: TIMER_DIV_BASIC
     path: bench/roms/out/TIMER_DIV_BASIC.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu, timer]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -155,6 +171,8 @@ roms:
 
   - id: EI_DELAY
     path: bench/roms/out/EI_DELAY.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -172,6 +190,8 @@ roms:
 
   - id: TIMER_IRQ_HALT
     path: bench/roms/out/TIMER_IRQ_HALT.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu, timer]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -190,6 +210,8 @@ roms:
   # Wave C: memory-mapped bus realism
   - id: JOY_DIVERGE_PERSIST
     path: bench/roms/out/JOY_DIVERGE_PERSIST.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -209,6 +231,8 @@ roms:
 
   - id: DMA_OAM_COPY
     path: bench/roms/out/DMA_OAM_COPY.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu, dma]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -226,6 +250,8 @@ roms:
 
   - id: MBC1_SWITCH
     path: bench/roms/out/MBC1_SWITCH.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu, mbc1]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -243,6 +269,8 @@ roms:
 
   - id: MBC1_RAM
     path: bench/roms/out/MBC1_RAM.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu, mbc1]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -260,6 +288,8 @@ roms:
 
   - id: MBC3_SWITCH
     path: bench/roms/out/MBC3_SWITCH.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu, mbc3]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -277,6 +307,8 @@ roms:
 
   - id: MBC3_RAM
     path: bench/roms/out/MBC3_RAM.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu, mbc3]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -295,6 +327,8 @@ roms:
   # Wave D: graphics and peripheral milestones
   - id: PPU_STAT_IRQ
     path: bench/roms/out/PPU_STAT_IRQ.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu, ppu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
@@ -312,6 +346,8 @@ roms:
 
   - id: BG_STATIC
     path: bench/roms/out/BG_STATIC.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu, ppu]
     oracle_mode: frame_hash
     memory_behavior_profile: DmgConservative
@@ -329,6 +365,8 @@ roms:
 
   - id: BG_SCROLL_SIGNED
     path: bench/roms/out/BG_SCROLL_SIGNED.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu, ppu]
     oracle_mode: frame_hash
     memory_behavior_profile: DmgConservative
@@ -346,6 +384,8 @@ roms:
 
   - id: PPU_WINDOW
     path: bench/roms/out/PPU_WINDOW.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu, ppu]
     oracle_mode: frame_hash
     memory_behavior_profile: DmgConservative
@@ -363,6 +403,8 @@ roms:
 
   - id: PPU_SPRITES
     path: bench/roms/out/PPU_SPRITES.gb
+    model_profile: DMG
+    reset_profile: SkipBoot
     requires: [cpu, ppu]
     oracle_mode: frame_hash
     memory_behavior_profile: DmgConservative
