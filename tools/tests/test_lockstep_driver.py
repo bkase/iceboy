@@ -20,8 +20,11 @@ class FakeDutDriver:
     def __init__(self, bus_read_data: int) -> None:
         self._seq = 0
         self.bus_read_data = bus_read_data
+        self.step_instruction_calls = 0
+        self.step_mcycle_calls = 0
 
     async def step_mcycle(self, *, stimulus, bus_read_data: int, irq_pending: int) -> CpuCommitTrace:
+        self.step_mcycle_calls += 1
         self._seq += 1
         return CpuCommitTrace(
             seq=self._seq,
@@ -31,6 +34,10 @@ class FakeDutDriver:
             freeze_arch_time=stimulus.freeze_arch_time,
             cpu_hold_only=stimulus.cpu_hold_only,
         )
+
+    async def step_instruction(self) -> CpuCommitTrace:
+        self.step_instruction_calls += 1
+        return await self.step_mcycle(stimulus=type("Idle", (), {"freeze_arch_time": False, "cpu_hold_only": False})(), bus_read_data=self.bus_read_data, irq_pending=0)
 
 
 class FakeOracle:
@@ -77,6 +84,7 @@ class LockstepDriverTest(unittest.TestCase):
         )
         self.assertTrue(result.matched)
         self.assertEqual(len(result.steps), 2)
+        self.assertEqual(dut.step_mcycle_calls, 2)
 
     def test_run_lockstep_stops_on_first_mismatch_and_formats_report(self) -> None:
         oracle = FakeOracle([make_oracle_commit(seq=1, bus_data=0xA5)])
@@ -95,6 +103,23 @@ class LockstepDriverTest(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIsNotNone(result.mismatch)
         self.assertIn("bus_resp", result.mismatch_report or "")
+
+    def test_instr_commit_mode_uses_instruction_step_when_available(self) -> None:
+        oracle = FakeOracle([make_oracle_commit(seq=1, bus_data=0xA5)])
+        dut = FakeDutDriver(bus_read_data=0xA5)
+        result = asyncio.run(
+            run_lockstep(
+                oracle,
+                dut,
+                EmptyScript(),
+                OracleMode.InstrCommit,
+                commit_limit=1,
+                compare_fields=(CompareField.BusResponse,),
+                bus_read_data=0xA5,
+            )
+        )
+        self.assertTrue(result.matched)
+        self.assertEqual(dut.step_instruction_calls, 1)
 
 
 if __name__ == "__main__":

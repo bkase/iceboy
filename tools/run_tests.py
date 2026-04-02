@@ -22,6 +22,7 @@ from test.harness.logging_std import TestLogger, add_logging_args, logger_from_a
 UV = "uv"
 SWIM = str(Path.home() / ".cargo" / "bin" / "swim")
 PYTHON_LOCK = "toolchain/python.lock"
+ENSURE_SWIM_PYTHON_DEPS = ROOT / "tools" / "ensure_swim_python_deps.sh"
 FAILED_COUNT_RE = re.compile(r"(\d+)/(\d+)\s+failed")
 UNITTEST_RAN_RE = re.compile(r"Ran (\d+) tests? in")
 UNITTEST_FAILED_RE = re.compile(r"FAILED \((.*?)\)")
@@ -113,6 +114,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
         "tools.tests.test_divergence_artifacts",
     ),
     SuiteDefinition("unit", "test_main.py", "swim", "test_main"),
+    SuiteDefinition("lockstep", "test_cpu_lockstep.py", "swim", "test_cpu_lockstep"),
 )
 
 
@@ -192,6 +194,19 @@ def parse_suite_counts(definition: SuiteDefinition, output: str, exit_code: int)
 def run_suite(definition: SuiteDefinition, *, sim: str, logger: TestLogger) -> SuiteResult:
     if definition.runner == "swim":
         patch_cocotb_config_wrapper()
+        provisioned = subprocess.run(
+            [str(ENSURE_SWIM_PYTHON_DEPS)],
+            cwd=ROOT,
+            env=command_env(sim=sim),
+            capture_output=True,
+            text=True,
+        )
+        if provisioned.returncode != 0:
+            logger.fail_case(
+                "failed to provision swim python dependencies",
+                contexts={"output": "\n".join(part for part in [provisioned.stdout, provisioned.stderr] if part).strip()},
+            )
+            raise RuntimeError("failed to provision swim python dependencies")
 
     command = suite_command(definition)
     logger.step(f"Running {definition.label}: {' '.join(command)}")

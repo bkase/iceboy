@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -11,7 +12,15 @@ from bench.pyboy.hooks import HookManifest, build_hook_manifest
 from bench.pyboy.hook_driver import HookDriver
 from bench.pyboy.trace_formatter import format_compare_result
 from spec.compare_scopes import CompareField, OracleMode, comparison_fields_for_mode
-from test.harness.event_script_support import stimulus_from_events
+
+
+ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "swim.toml").exists())
+HARNESS = ROOT / "test" / "harness"
+for entry in [ROOT, HARNESS]:
+    if str(entry) not in sys.path:
+        sys.path.insert(0, str(entry))
+
+from event_script_support import stimulus_from_events
 
 
 @dataclass(frozen=True)
@@ -61,11 +70,15 @@ async def run_lockstep(
         for event in events:
             oracle.write_event(event)
 
-        dut_trace = await dut_driver.step_mcycle(
-            stimulus=stimulus_from_events(events),
-            bus_read_data=bus_read_data,
-            irq_pending=irq_pending,
-        )
+        stimulus = stimulus_from_events(events)
+        if oracle_mode is OracleMode.InstrCommit and hasattr(dut_driver, "step_instruction"):
+            dut_trace = await dut_driver.step_instruction()
+        else:
+            dut_trace = await dut_driver.step_mcycle(
+                stimulus=stimulus,
+                bus_read_data=bus_read_data,
+                irq_pending=irq_pending,
+            )
         oracle_state = oracle.step_commit()
         comparison = compare_commit(dut_trace, oracle_state, fields)
         step = LockstepStep(

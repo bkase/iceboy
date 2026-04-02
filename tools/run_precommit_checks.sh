@@ -110,6 +110,14 @@ patch_cocotb_config_wrapper
 
 if find test -type f -name 'test_*.py' -print -quit | grep -q .; then
     if command -v iverilog >/dev/null 2>&1 || command -v verilator >/dev/null 2>&1 || [[ -x /opt/homebrew/bin/verilator ]]; then
+        echo -n "Provisioning simulator Python deps... "
+        if swim_py_output=$(tools/ensure_swim_python_deps.sh 2>&1); then
+            echo -e "${GREEN}OK${NC}"
+        else
+            echo -e "${RED}FAILED${NC}"
+            echo "$swim_py_output"
+            exit 1
+        fi
         echo -n "Running tests... "
         if test_output=$("$SWIM" test test_ 2>&1); then
             echo -e "${GREEN}OK${NC}"
