@@ -21,7 +21,7 @@ ROOT = find_repo_root()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from spec.flag_policies import adc8, add8, cp8, sbc8, sub8
+from spec.flag_policies import adc8, add8, and8, cp8, or8, sbc8, sub8, xor8
 
 
 OP_ADD = 0
@@ -29,6 +29,9 @@ OP_ADC = 1
 OP_SUB = 2
 OP_SBC = 3
 OP_CP = 4
+OP_AND = 5
+OP_OR = 6
+OP_XOR = 7
 VALUES = (0x00, 0x01, 0x0F, 0x10, 0x7F, 0x80, 0xFE, 0xFF)
 
 
@@ -74,6 +77,12 @@ async def test_curated_arithmetic_flag_edges(dut):
         (OP_SBC, 0x00, 0x00, True, sbc8(0x00, 0x00, True)),
         (OP_CP, 0x00, 0x01, False, cp8(0x00, 0x01)),
         (OP_CP, 0x40, 0x40, False, cp8(0x40, 0x40)),
+        (OP_AND, 0xF0, 0x0F, False, and8(0xF0, 0x0F)),
+        (OP_AND, 0xFF, 0x00, False, and8(0xFF, 0x00)),
+        (OP_OR, 0x80, 0x01, False, or8(0x80, 0x01)),
+        (OP_OR, 0x00, 0x00, False, or8(0x00, 0x00)),
+        (OP_XOR, 0xFF, 0x0F, False, xor8(0xFF, 0x0F)),
+        (OP_XOR, 0xAA, 0xAA, False, xor8(0xAA, 0xAA)),
     ]
 
     for op, a, b, carry_in, expected in cases:
@@ -88,6 +97,9 @@ async def test_generated_arithmetic_vectors_match_spec_flag_policies(dut):
             assert_matches(await sample(dut, op=OP_ADD, a=a, b=b, carry_in=False), add8(a, b))
             assert_matches(await sample(dut, op=OP_SUB, a=a, b=b, carry_in=False), sub8(a, b))
             assert_matches(await sample(dut, op=OP_CP, a=a, b=b, carry_in=False), cp8(a, b))
+            assert_matches(await sample(dut, op=OP_AND, a=a, b=b, carry_in=False), and8(a, b))
+            assert_matches(await sample(dut, op=OP_OR, a=a, b=b, carry_in=False), or8(a, b))
+            assert_matches(await sample(dut, op=OP_XOR, a=a, b=b, carry_in=False), xor8(a, b))
             for carry_in in (False, True):
                 assert_matches(await sample(dut, op=OP_ADC, a=a, b=b, carry_in=carry_in), adc8(a, b, carry_in))
                 assert_matches(await sample(dut, op=OP_SBC, a=a, b=b, carry_in=carry_in), sbc8(a, b, carry_in))

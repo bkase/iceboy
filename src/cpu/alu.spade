@@ -138,6 +138,48 @@ fn cp8_result(a: uint<8>, b: uint<8>) -> AluResult {
     AluResult$(val8: a, val16: zext(a), flags: compared.flags)
 }
 
+fn and8_result(a: uint<8>, b: uint<8>) -> AluResult {
+    let result = a & b;
+
+    alu_result8(
+        result,
+        Flags$(
+            z: result == 0u8,
+            n: false,
+            h: true,
+            c: false,
+        ),
+    )
+}
+
+fn or8_result(a: uint<8>, b: uint<8>) -> AluResult {
+    let result = a | b;
+
+    alu_result8(
+        result,
+        Flags$(
+            z: result == 0u8,
+            n: false,
+            h: false,
+            c: false,
+        ),
+    )
+}
+
+fn xor8_result(a: uint<8>, b: uint<8>) -> AluResult {
+    let result = a ^ b;
+
+    alu_result8(
+        result,
+        Flags$(
+            z: result == 0u8,
+            n: false,
+            h: false,
+            c: false,
+        ),
+    )
+}
+
 pub fn idle_alu_result() -> AluResult {
     AluResult$(val8: 0, val16: 0, flags: zero_flags())
 }
@@ -146,6 +188,9 @@ pub fn alu(req: AluReq) -> AluResult {
     match req {
         AluReq::Add8$(a, b, carry_in) => if carry_in { adc8_result(a, b, true) } else { add8_result(a, b) },
         AluReq::Sub8$(a, b, carry_in) => if carry_in { sbc8_result(a, b, true) } else { sub8_result(a, b) },
+        AluReq::And8$(a, b) => and8_result(a, b),
+        AluReq::Or8$(a, b) => or8_result(a, b),
+        AluReq::Xor8$(a, b) => xor8_result(a, b),
         AluReq::Cp8$(a, b) => cp8_result(a, b),
         _ => idle_alu_result(),
     }
