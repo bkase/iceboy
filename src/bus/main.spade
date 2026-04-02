@@ -1,1 +1,1 @@
-// Bus module scaffold.
+pub mod types;

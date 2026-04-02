@@ -1,4 +1,5 @@
 use std::option::Option;
+use lib::bus::types::{BusReq, BusResp, idle_bus_req, idle_bus_resp};
 
 pub enum ModelProfile {
     DMG,
@@ -186,28 +187,6 @@ pub struct IrqAck {
     ack_bit: Option<uint<3>>,
 }
 
-pub enum BusReqKind {
-    Idle,
-    Read,
-    Write,
-}
-
-pub struct BusReq {
-    kind: BusReqKind,
-    addr: uint<16>,
-    data: uint<8>,
-}
-
-pub enum BusRespKind {
-    Idle,
-    Data,
-}
-
-pub struct BusResp {
-    kind: BusRespKind,
-    data: uint<8>,
-}
-
 pub enum CommitKind {
     MCycle,
     InstrCommit,
@@ -319,14 +298,6 @@ pub fn no_irq_pending() -> IrqPending {
 
 pub fn no_irq_ack() -> IrqAck {
     IrqAck$(ack_bit: Option::None)
-}
-
-pub fn idle_bus_req() -> BusReq {
-    BusReq$(kind: BusReqKind::Idle, addr: 0, data: 0)
-}
-
-pub fn idle_bus_resp() -> BusResp {
-    BusResp$(kind: BusRespKind::Idle, data: 0)
 }
 
 pub fn idle_reg_write_set() -> RegWriteSet {

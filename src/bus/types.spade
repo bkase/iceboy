@@ -1,0 +1,47 @@
+pub enum BusReq {
+    Idle,
+    Read { addr: uint<16> },
+    Write { addr: uint<16>, data: uint<8> },
+}
+
+pub struct BusResp {
+    data: uint<8>,
+}
+
+pub enum BusRegion {
+    Rom,
+    Vram,
+    CartRam,
+    Wram,
+    Echo,
+    Oam,
+    NotUsable,
+    Io,
+    Hram,
+    Ie,
+}
+
+pub enum BusOwner {
+    Cpu,
+    OamDma,
+    Ppu,
+    Idle,
+}
+
+pub struct BusObs {
+    region: BusRegion,
+    blocked: bool,
+    owner: BusOwner,
+}
+
+pub fn idle_bus_req() -> BusReq {
+    BusReq::Idle
+}
+
+pub fn idle_bus_resp() -> BusResp {
+    BusResp$(data: 0xff)
+}
+
+pub fn default_bus_obs() -> BusObs {
+    BusObs$(region: BusRegion::Rom, blocked: false, owner: BusOwner::Cpu)
+}
