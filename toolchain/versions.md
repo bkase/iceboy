@@ -37,7 +37,9 @@ The oracle layer and future hook-driven adapter rely on these public APIs from `
 ## Spade / Simulation Tooling
 
 - `swim`: `v0.17.0-r314-a9f0731`
-- Spade compiler pin: tracked in `swim.lock`
+- Spade compiler commit: `2f50feec89d7f72d406d74ddfa81d79add58e500`
+- Pin source: `swim.lock`
+- Project config: `swim.toml` pins `testbench_dir = "test"`, `simulator = "icarus"`, `synthesis.top = "icebreaker_top"`, and the `iCE40UP5K` / `sg48` target tuple
 
 ## Simulator Backend Policy
 
@@ -58,6 +60,7 @@ The oracle layer and future hook-driven adapter rely on these public APIs from `
 - Verification command: `build/oss-cad-suite/bin/yosys -V`
 - Install path: bundled by `swim install-tools`
 - Compatibility note: verified local binary provides `synth_ice40`, which is the command used by `swim.toml`
+- Project-level verification: `~/.cargo/bin/swim synth` succeeds and emits synthesized build artifacts for the current trivial top
 
 ### Place and Route
 

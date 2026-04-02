@@ -88,6 +88,15 @@ else
     exit 1
 fi
 
+echo -n "Synthesizing... "
+if synth_output=$("$SWIM" synth 2>&1); then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAILED${NC}"
+    echo "$synth_output"
+    exit 1
+fi
+
 patch_cocotb_config_wrapper
 
 if find test -type f -name 'test_*.py' -print -quit | grep -q .; then
