@@ -1,101 +1,37 @@
-use std::option::Option;
-use lib::bus::types::{BusReq, BusResp, idle_bus_req};
-use lib::cpu::debug::{CommitKind, CommitTrace};
-use lib::cpu::decode_types::{DecodedOp, invalid_decoded_op};
-use lib::cpu::regs::Registers;
-use lib::cpu::types::{CpuArchState, HaltState, ImeState, IrqPending, Phase};
+use lib::bus::types::BusResp;
+use lib::cpu::types::IrqPending;
 
-fn skipboot_registers() -> Registers {
-    Registers$(
-        a: 0x01u8,
-        f: 0xb0u8,
-        b: 0x00u8,
-        c: 0x13u8,
-        d: 0x00u8,
-        e: 0xd8u8,
-        h: 0x01u8,
-        l: 0x4du8,
-        sp: 0xfffeu16,
-        pc: 0x0100u16,
-    )
+pub struct CpuCoreOut {
+    commit_seq: uint<64>,
+    pc: uint<16>,
+    bus_req_kind: uint<2>,
+    bus_req_addr: uint<16>,
+    bus_req_data: uint<8>,
 }
 
-fn stub_advance_registers(regs: Registers) -> Registers {
-    Registers$(
-        a: regs.a,
-        f: regs.f,
-        b: regs.b,
-        c: regs.c,
-        d: regs.d,
-        e: regs.e,
-        h: regs.h,
-        l: regs.l,
-        sp: regs.sp,
-        pc: trunc(regs.pc + 1u16),
-    )
+fn skipboot_pc() -> uint<16> {
+    0x0100u16
 }
 
-fn make_arch_state(regs: Registers, ime_state: ImeState, halt_state: HaltState) -> CpuArchState {
-    CpuArchState$(regs: regs, ime_state: ime_state, halt_state: halt_state)
-}
-
-fn stub_commit_trace(
-    seq: uint<64>,
-    arch_state: CpuArchState,
-    phase_after: Phase,
-    bus_resp: BusResp,
-) -> CommitTrace {
-    CommitTrace$(
-        schema_version: 1u16,
-        kind: CommitKind::MCycle,
-        seq: seq,
-        pc_before: arch_state.regs.pc,
-        opcode: Option::None,
-        arch_after: arch_state,
-        phase_after: phase_after,
-        bus_req: idle_bus_req(),
-        bus_resp: bus_resp,
-        mem_touch: Option::None,
-        io_touch: Option::None,
-    )
-}
-
-entity cpu_core(
+pub entity cpu_core(
     clk: clock,
     rst: bool,
     m_ce: bool,
     bus_resp: BusResp,
     irq_pending: IrqPending,
-) -> (BusReq, CommitTrace) {
-    let _ = irq_pending;
+) -> CpuCoreOut {
+    let _ = (bus_resp, irq_pending);
 
-    reg(clk) regs: Registers reset(rst: skipboot_registers()) =
-        if m_ce { stub_advance_registers(regs) } else { regs };
-    reg(clk) ime_state: ImeState reset(rst: ImeState::Disabled) =
-        if m_ce { ime_state } else { ime_state };
-    reg(clk) halt_state: HaltState reset(rst: HaltState::Running) =
-        if m_ce { halt_state } else { halt_state };
-    reg(clk) phase: Phase reset(rst: Phase::Fetch) =
-        if m_ce { Phase::Fetch } else { phase };
-    reg(clk) opcode_latch: uint<8> reset(rst: 0u8) =
-        if m_ce { opcode_latch } else { opcode_latch };
-    reg(clk) imm_lo: uint<8> reset(rst: 0u8) =
-        if m_ce { imm_lo } else { imm_lo };
-    reg(clk) imm_hi: uint<8> reset(rst: 0u8) =
-        if m_ce { imm_hi } else { imm_hi };
-    reg(clk) decoded: DecodedOp reset(rst: invalid_decoded_op()) =
-        if m_ce { decoded } else { decoded };
-    reg(clk) temp: uint<16> reset(rst: 0u16) =
-        if m_ce { trunc(temp + 1u16) } else { temp };
+    reg(clk) pc: uint<16> reset(rst: skipboot_pc()) =
+        if m_ce { trunc(pc + 1u16) } else { pc };
     reg(clk) commit_seq: uint<64> reset(rst: 0u64) =
         if m_ce { trunc(commit_seq + 1u64) } else { commit_seq };
 
-    let _ = (opcode_latch, imm_lo, imm_hi, decoded, temp);
-
-    let committed_regs = if m_ce { stub_advance_registers(regs) } else { regs };
-    let committed_phase = if m_ce { Phase::Fetch } else { phase };
-    let committed_seq = if m_ce { trunc(commit_seq + 1u64) } else { commit_seq };
-    let committed_arch = make_arch_state(committed_regs, ime_state, halt_state);
-
-    (idle_bus_req(), stub_commit_trace(committed_seq, committed_arch, committed_phase, bus_resp))
+    CpuCoreOut$(
+        commit_seq: if m_ce { trunc(commit_seq + 1u64) } else { commit_seq },
+        pc: if m_ce { trunc(pc + 1u16) } else { pc },
+        bus_req_kind: 0u2,
+        bus_req_addr: 0u16,
+        bus_req_data: 0u8,
+    )
 }

@@ -108,16 +108,24 @@ def predicted_traces_for_schedule(
     irq_pending: int = 0,
 ) -> tuple[CpuCommitTrace, ...]:
     traces = []
+    commit_seq = 0
+    pc = 0x0100
     for commit_index in range(commit_count):
         stimulus = schedule.get(commit_index, SimStimulus.idle())
+        cpu_arch_time_enable = not stimulus.freeze_arch_time and not stimulus.cpu_hold_only
+        if cpu_arch_time_enable:
+            commit_seq += 1
+            pc = (pc + 1) & 0xFFFF
         traces.append(
             CpuCommitTrace(
                 seq=commit_index + 1,
                 bus_read_data=bus_read_data & 0xFF,
                 irq_pending=irq_pending & 0x1F,
-                cpu_arch_time_enable=not stimulus.freeze_arch_time and not stimulus.cpu_hold_only,
+                cpu_arch_time_enable=cpu_arch_time_enable,
                 freeze_arch_time=stimulus.freeze_arch_time,
                 cpu_hold_only=stimulus.cpu_hold_only,
+                commit_seq=commit_seq,
+                pc=pc,
             )
         )
     return tuple(traces)
@@ -131,16 +139,24 @@ def predicted_traces_for_script(
     irq_pending: int = 0,
 ) -> tuple[CpuCommitTrace, ...]:
     traces = []
+    commit_seq = 0
+    pc = 0x0100
     for commit_index in range(commit_count):
         stimulus = stimulus_from_events(script.events_for_commit(commit_index))
+        cpu_arch_time_enable = not stimulus.freeze_arch_time and not stimulus.cpu_hold_only
+        if cpu_arch_time_enable:
+            commit_seq += 1
+            pc = (pc + 1) & 0xFFFF
         traces.append(
             CpuCommitTrace(
                 seq=commit_index + 1,
                 bus_read_data=bus_read_data & 0xFF,
                 irq_pending=irq_pending & 0x1F,
-                cpu_arch_time_enable=not stimulus.freeze_arch_time and not stimulus.cpu_hold_only,
+                cpu_arch_time_enable=cpu_arch_time_enable,
                 freeze_arch_time=stimulus.freeze_arch_time,
                 cpu_hold_only=stimulus.cpu_hold_only,
+                commit_seq=commit_seq,
+                pc=pc,
             )
         )
     return tuple(traces)

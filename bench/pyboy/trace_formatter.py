@@ -20,6 +20,9 @@ def format_trace(value: Any) -> str:
     if hasattr(value, "bus_read_data"):
         return (
             f"seq={int(getattr(value, 'seq', 0))} "
+            f"commit_seq={int(getattr(value, 'commit_seq', 0))} "
+            f"pc=0x{int(getattr(value, 'pc', 0)):04X} "
+            f"bus_req_kind={int(getattr(value, 'bus_req_kind', 0))} "
             f"bus_read_data=0x{int(getattr(value, 'bus_read_data')):02X} "
             f"irq_pending=0x{int(getattr(value, 'irq_pending')):02X} "
             f"cpu_arch_time_enable={bool(getattr(value, 'cpu_arch_time_enable'))} "

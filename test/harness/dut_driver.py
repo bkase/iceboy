@@ -93,11 +93,21 @@ class CpuCommitTrace:
     cpu_arch_time_enable: bool
     freeze_arch_time: bool
     cpu_hold_only: bool
+    commit_seq: int = 0
+    pc: int = 0
+    bus_req_kind: int = 0
+    bus_req_addr: int = 0
+    bus_req_data: int = 0
 
     @classmethod
     def from_output(cls, output_value: int, *, seq: int) -> "CpuCommitTrace":
         return cls(
             seq=seq,
+            commit_seq=(output_value >> 58) & 0xFFFF_FFFF_FFFF_FFFF,
+            pc=(output_value >> 42) & 0xFFFF,
+            bus_req_kind=(output_value >> 40) & 0x3,
+            bus_req_addr=(output_value >> 24) & 0xFFFF,
+            bus_req_data=(output_value >> 16) & 0xFF,
             bus_read_data=(output_value >> 8) & 0xFF,
             irq_pending=(output_value >> 3) & 0x1F,
             cpu_arch_time_enable=bool((output_value >> 2) & 0x1),
@@ -158,7 +168,7 @@ class CpuTestDriver:
         await self.ensure_clock()
         self._seq = 0
         held_cycles = cycles if cycles is not None else (2 if reset_profile is ResetProfile.SkipBoot else 8)
-        self.inject_stimulus(SimStimulus.idle())
+        self.inject_stimulus(SimStimulus(freeze_arch_time=True, cpu_hold_only=True))
         self.set_bus_inputs(bus_read_data=0, irq_pending=0)
         self.dut.rst_i.value = 1
         await ClockCycles(self.dut.clk_i, held_cycles)
@@ -187,8 +197,7 @@ class CpuTestDriver:
     ) -> CpuCommitTrace:
         from cocotb.triggers import RisingEdge
 
-        if stimulus is not None:
-            self.inject_stimulus(stimulus)
+        self.inject_stimulus(stimulus or SimStimulus.idle())
         if bus_read_data is not None or irq_pending is not None:
             self.set_bus_inputs(
                 bus_read_data=0 if bus_read_data is None else bus_read_data,
@@ -232,7 +241,7 @@ class SoCLockstepDriver:
 
         await self.ensure_clock()
         self.set_profiles(profiles)
-        self.inject_stimulus(stimulus or SimStimulus.idle())
+        self.inject_stimulus(stimulus or SimStimulus(freeze_arch_time=True, cpu_hold_only=True))
         self.set_bus_inputs(bus_read_data=0, irq_pending=0)
         self.dut.rst_i.value = 1
         await ClockCycles(self.dut.clk_i, cycles)
@@ -261,8 +270,7 @@ class SoCLockstepDriver:
     ) -> SoCLockstepObservation:
         from cocotb.triggers import RisingEdge
 
-        if stimulus is not None:
-            self.inject_stimulus(stimulus)
+        self.inject_stimulus(stimulus or SimStimulus.idle())
         if bus_read_data is not None or irq_pending is not None:
             self.set_bus_inputs(
                 bus_read_data=0 if bus_read_data is None else bus_read_data,

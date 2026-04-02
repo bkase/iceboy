@@ -26,7 +26,17 @@ class SimScaffoldTest(unittest.TestCase):
             self.assertIn(field, text)
 
     def test_sim_top_scaffolds_exist_with_stable_entity_names(self) -> None:
-        self.assertIn("entity cpu_test_top(", CPU_TOP_PATH.read_text(encoding="utf-8"))
+        text = CPU_TOP_PATH.read_text(encoding="utf-8")
+        self.assertIn("entity cpu_test_top(", text)
+        for symbol in [
+            "commit_seq: uint<64>",
+            "pc: uint<16>",
+            "bus_req_kind: uint<2>",
+            "bus_req_addr: uint<16>",
+            "bus_req_data: uint<8>",
+            "let cpu = inst cpu_core(",
+        ]:
+            self.assertIn(symbol, text)
         self.assertIn("entity soc_lockstep_top(", SOC_TOP_PATH.read_text(encoding="utf-8"))
 
 
