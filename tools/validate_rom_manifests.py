@@ -7,6 +7,12 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from spec.compare_scopes import OracleMode
+from spec.profiles import MemoryBehaviorProfile, ModelProfile, ResetProfile
+
 SCHEMA_PATH = ROOT / "bench" / "manifests" / "rom_schema.yaml"
 INVENTORY_PATH = ROOT / "bench" / "manifests" / "rom_inventory.yaml"
 EXPECTED_ROM_IDS = [
@@ -69,10 +75,10 @@ def main() -> int:
     require_keys(inventory, schema["inventory_contract"]["top_level_required"], "rom_inventory.yaml")
 
     allowed_requires = set(schema["allowed_values"]["requires"])
-    allowed_model_profiles = set(schema["allowed_values"]["model_profile"])
-    allowed_reset_profiles = set(schema["allowed_values"]["reset_profile"])
-    allowed_oracle_modes = set(schema["allowed_values"]["oracle_mode"])
-    allowed_memory_profiles = set(schema["allowed_values"]["memory_behavior_profile"])
+    allowed_model_profiles = {profile.value for profile in ModelProfile}
+    allowed_reset_profiles = {profile.value for profile in ResetProfile}
+    allowed_oracle_modes = {mode.value for mode in OracleMode}
+    allowed_memory_profiles = {profile.value for profile in MemoryBehaviorProfile}
     allowed_compare_domains = set(schema["allowed_values"]["compare_domains"])
     allowed_pass_kinds = set(schema["allowed_values"]["pass_condition_kinds"])
     allowed_action_generators = set(schema["allowed_values"]["action_generators"])
