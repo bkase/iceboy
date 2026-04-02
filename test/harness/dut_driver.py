@@ -156,6 +156,7 @@ class CpuTestDriver:
         from cocotb.triggers import ClockCycles, RisingEdge
 
         await self.ensure_clock()
+        self._seq = 0
         held_cycles = cycles if cycles is not None else (2 if reset_profile is ResetProfile.SkipBoot else 8)
         self.inject_stimulus(SimStimulus.idle())
         self.set_bus_inputs(bus_read_data=0, irq_pending=0)
