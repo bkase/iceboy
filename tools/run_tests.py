@@ -74,7 +74,9 @@ SUITES: tuple[SuiteDefinition, ...] = (
         "python",
         "tools.tests.test_event_script_determinism",
     ),
+    SuiteDefinition("meta", "test_lockstep_driver.py", "python", "tools.tests.test_lockstep_driver"),
     SuiteDefinition("meta", "test_pyboy_oracle.py", "python", "tools.tests.test_pyboy_oracle"),
+    SuiteDefinition("meta", "test_pyboy_comparator.py", "python", "tools.tests.test_pyboy_comparator"),
     SuiteDefinition(
         "meta",
         "test_reset_profile_support.py",

@@ -1,7 +1,16 @@
 from __future__ import annotations
 
 import random
+import sys
+from pathlib import Path
 from typing import Any, Mapping, Sequence
+
+
+ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "swim.toml").exists())
+HARNESS = ROOT / "test" / "harness"
+for entry in [ROOT, HARNESS]:
+    if str(entry) not in sys.path:
+        sys.path.insert(0, str(entry))
 
 from dut_driver import CpuCommitTrace, JoypadState, SimStimulus
 
