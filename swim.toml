@@ -1,0 +1,18 @@
+name = "iceboy"
+
+[synthesis]
+top = "icebreaker_top"
+command = "synth_ice40"
+
+
+[pnr]
+architecture = "ice40"
+pin_file = "icebreaker.pcf"
+package = "sg48"
+device = "iCE40UP5K"
+
+[packing]
+tool = "icepack"
+
+[upload]
+tool="iceprog"
