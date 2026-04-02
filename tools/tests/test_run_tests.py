@@ -17,8 +17,11 @@ from run_tests import (
     TIERS,
     build_parser,
     coverage_lines,
+    include_nightly,
+    load_tier_config,
     parse_requested_tiers,
     parse_suite_counts,
+    requested_preset_names,
     selected_tiers,
     write_junit_xml,
 )
@@ -27,9 +30,17 @@ from run_tests import (
 class RunTestsTest(unittest.TestCase):
     def test_quick_mode_selects_meta_and_unit(self) -> None:
         args = build_parser().parse_args(["--quick"])
-        tiers = parse_requested_tiers(args)
+        tiers = parse_requested_tiers(args, load_tier_config())
         self.assertEqual(tiers, ["meta", "unit"])
         self.assertEqual([tier.key for tier in selected_tiers(tiers)], ["meta", "unit"])
+
+    def test_named_presets_expand_and_nightly_preset_enables_nightly_suites(self) -> None:
+        config = load_tier_config()
+        smoke_args = build_parser().parse_args(["--tier", "smoke"])
+        nightly_args = build_parser().parse_args(["--tier", "nightly"])
+        self.assertEqual(requested_preset_names(smoke_args, config), ["smoke"])
+        self.assertEqual(parse_requested_tiers(smoke_args, config), ["meta"])
+        self.assertTrue(include_nightly(nightly_args, config))
 
     def test_parse_suite_counts_for_python_and_swim(self) -> None:
         python_output = "Ran 3 tests in 0.001s\n\nOK\n"

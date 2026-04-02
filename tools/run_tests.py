@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -23,6 +25,7 @@ UV = "uv"
 SWIM = str(Path.home() / ".cargo" / "bin" / "swim")
 PYTHON_LOCK = "toolchain/python.lock"
 ENSURE_SWIM_PYTHON_DEPS = ROOT / "tools" / "ensure_swim_python_deps.sh"
+TIER_CONFIG_PATH = ROOT / "test" / "tiers.yaml"
 FAILED_COUNT_RE = re.compile(r"(\d+)/(\d+)\s+failed")
 UNITTEST_RAN_RE = re.compile(r"Ran (\d+) tests? in")
 UNITTEST_FAILED_RE = re.compile(r"FAILED \((.*?)\)")
@@ -51,6 +54,14 @@ class SuiteResult:
     duration_s: float
     exit_code: int
     output: str
+
+
+@dataclass(frozen=True)
+class TierPreset:
+    name: str
+    tier_keys: tuple[str, ...]
+    include_nightly_only: bool = False
+    suite_labels: tuple[str, ...] = ()
 
 
 TIERS: tuple[TierDefinition, ...] = (
@@ -132,12 +143,59 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def parse_requested_tiers(args: argparse.Namespace) -> list[str]:
+def load_tier_config(path: Path = TIER_CONFIG_PATH) -> dict[str, object]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else {}
+
+
+def preset_map(tier_config: dict[str, object]) -> dict[str, TierPreset]:
+    presets = {}
+    raw_presets = tier_config.get("presets", {})
+    if not isinstance(raw_presets, dict):
+        return presets
+    for name, raw in raw_presets.items():
+        if not isinstance(raw, dict):
+            continue
+        presets[str(name)] = TierPreset(
+            name=str(name),
+            tier_keys=tuple(str(item) for item in raw.get("tier_keys", [])),
+            include_nightly_only=bool(raw.get("include_nightly_only", False)),
+            suite_labels=tuple(str(item) for item in raw.get("suite_labels", [])),
+        )
+    return presets
+
+
+def parse_requested_tiers(args: argparse.Namespace, tier_config: dict[str, object] | None = None) -> list[str]:
+    presets = preset_map(tier_config or load_tier_config())
     if args.quick:
         return ["meta", "unit"]
     if args.tier:
-        return [item.strip() for item in args.tier.split(",") if item.strip()]
+        expanded = []
+        for item in [item.strip() for item in args.tier.split(",") if item.strip()]:
+            preset = presets.get(item)
+            if preset is not None:
+                for tier_key in preset.tier_keys:
+                    if tier_key not in expanded:
+                        expanded.append(tier_key)
+                continue
+            if item not in expanded:
+                expanded.append(item)
+        return expanded
     return [tier.key for tier in TIERS]
+
+
+def requested_preset_names(args: argparse.Namespace, tier_config: dict[str, object] | None = None) -> list[str]:
+    if not args.tier:
+        return []
+    presets = preset_map(tier_config or load_tier_config())
+    return [item for item in [part.strip() for part in args.tier.split(",") if part.strip()] if item in presets]
+
+
+def include_nightly(args: argparse.Namespace, tier_config: dict[str, object] | None = None) -> bool:
+    if args.nightly:
+        return True
+    presets = preset_map(tier_config or load_tier_config())
+    return any(presets[name].include_nightly_only for name in requested_preset_names(args, tier_config))
 
 
 def selected_tiers(requested: Iterable[str]) -> list[TierDefinition]:
@@ -253,6 +311,32 @@ def coverage_lines(tiers: list[TierDefinition], *, nightly: bool) -> list[str]:
     return lines
 
 
+def configured_coverage_report_lines(tier_config: dict[str, object]) -> list[str]:
+    lines = []
+    raw = tier_config.get("coverage_report", [])
+    if not isinstance(raw, list):
+        return lines
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        lines.append(f"{item['label']}: {item['value']}")
+    return lines
+
+
+def xfail_lines(tier_config: dict[str, object]) -> list[str]:
+    lines = []
+    raw = tier_config.get("xfail", [])
+    if not isinstance(raw, list):
+        return lines
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        lines.append(
+            f"{item['suite']}: strict={item['strict']} bead={item['bead']} reason={item['reason']}"
+        )
+    return lines
+
+
 def write_junit_xml(results: list[SuiteResult], target: Path) -> None:
     testsuites = ET.Element("testsuites")
     for tier in TIERS:
@@ -287,15 +371,23 @@ def write_junit_xml(results: list[SuiteResult], target: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    tiers = selected_tiers(parse_requested_tiers(args))
+    tier_config = load_tier_config()
+    tiers = selected_tiers(parse_requested_tiers(args, tier_config))
+    nightly_enabled = include_nightly(args, tier_config)
     logger = logger_from_args(args, suite_name="ICEBOY VERIFICATION SUITE", stream=sys.stdout)
     logger.suite()
+
+    preset_names = requested_preset_names(args, tier_config)
+    if preset_names:
+        logger.context("tier_presets", ", ".join(preset_names))
+    for line in xfail_lines(tier_config):
+        logger.context("xfail", line)
 
     results: list[SuiteResult] = []
     total_started = time.monotonic()
     for index, tier in enumerate(tiers, start=1):
         logger.step(f"[TIER {index}/{len(tiers)}] {tier.label}")
-        tier_suites = suites_for_tier(tier.key, nightly=args.nightly)
+        tier_suites = suites_for_tier(tier.key, nightly=nightly_enabled)
         if not tier_suites:
             logger.context(tier.label, "no suites implemented")
             continue
@@ -315,7 +407,20 @@ def main(argv: list[str] | None = None) -> int:
             json_mode=logger.json_mode,
         )
         coverage_logger.suite()
-        for line in coverage_lines(tiers, nightly=args.nightly):
+        for line in coverage_lines(tiers, nightly=nightly_enabled):
+            coverage_logger.context("coverage", line)
+        for line in configured_coverage_report_lines(tier_config):
+            coverage_logger.context("coverage", line)
+
+    if any(name in {"full", "nightly"} for name in preset_names):
+        coverage_logger = TestLogger(
+            suite_name="ICEBOY COVERAGE",
+            stream=sys.stdout,
+            level=logger.level,
+            json_mode=logger.json_mode,
+        )
+        coverage_logger.suite()
+        for line in configured_coverage_report_lines(tier_config):
             coverage_logger.context("coverage", line)
 
     if args.junit_xml:
