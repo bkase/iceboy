@@ -1,0 +1,154 @@
+use std::option::Option;
+use lib::cpu::alu::AluKind;
+use lib::cpu::regs::{R8, RegPair};
+
+pub enum PrefixKind {
+    Cb,
+}
+
+pub enum ConditionCode {
+    Nz,
+    Z,
+    Nc,
+    C,
+}
+
+pub enum Operand8 {
+    Register { r8: R8 },
+    Imm8,
+    AddrHl,
+    AddrBc,
+    AddrDe,
+    AddrImm16,
+    IoImm8,
+    IoC,
+    Literal { value: uint<8> },
+}
+
+pub enum Operand16 {
+    RegisterPair { pair: RegPair },
+    Imm16,
+    AddrImm16,
+    SpPlusE8,
+    Literal { value: uint<16> },
+}
+
+pub enum AddressingMode {
+    Implied,
+    Immediate8,
+    Immediate16,
+    Relative8,
+    Register8,
+    Register16,
+    MemoryViaRegPair { pair: RegPair },
+    MemoryImm16,
+    IoImm8,
+    IoC,
+    Prefixed { prefix: PrefixKind },
+}
+
+pub enum DecodedOpClass {
+    Load,
+    Alu,
+    ControlFlow,
+    BitOp,
+    Misc,
+    InterruptControl,
+}
+
+pub enum ControlTarget {
+    Absolute { target: Operand16 },
+    Relative,
+    Call { target: Operand16 },
+    Return,
+    Restart { vector: uint<8> },
+}
+
+pub enum MiscKind {
+    Nop,
+    Halt,
+    Stop,
+    Prefix { prefix: PrefixKind },
+    Daa,
+    Cpl,
+    Scf,
+    Ccf,
+}
+
+pub enum BitOpKind {
+    RotateShift,
+    Bit,
+    Res,
+    Set,
+}
+
+pub enum DecodedOp {
+    Invalid,
+    Load {
+        dst8: Option<Operand8>,
+        src8: Option<Operand8>,
+        dst16: Option<Operand16>,
+        src16: Option<Operand16>,
+        addressing: AddressingMode,
+    },
+    Alu {
+        kind: AluKind,
+        dst: Operand8,
+        src: Operand8,
+        addressing: AddressingMode,
+    },
+    ControlFlow {
+        condition: Option<ConditionCode>,
+        target: ControlTarget,
+        addressing: AddressingMode,
+    },
+    BitOp {
+        kind: BitOpKind,
+        prefix: PrefixKind,
+        target: Operand8,
+        bit_index: Option<uint<3>>,
+        addressing: AddressingMode,
+    },
+    Misc {
+        kind: MiscKind,
+        addressing: AddressingMode,
+    },
+    InterruptControl {
+        enable: bool,
+        addressing: AddressingMode,
+    },
+}
+
+pub fn decoded_op_class(op: DecodedOp) -> DecodedOpClass {
+    match op {
+        DecodedOp::Invalid => DecodedOpClass::Misc,
+        DecodedOp::Load$(dst8, src8, dst16, src16, addressing) => {
+            let _ = (dst8, src8, dst16, src16, addressing);
+            DecodedOpClass::Load
+        },
+        DecodedOp::Alu$(kind, dst, src, addressing) => {
+            let _ = (kind, dst, src, addressing);
+            DecodedOpClass::Alu
+        },
+        DecodedOp::ControlFlow$(condition, target, addressing) => {
+            let _ = (condition, target, addressing);
+            DecodedOpClass::ControlFlow
+        },
+        DecodedOp::BitOp$(kind, prefix, target, bit_index, addressing) => {
+            let _ = (kind, prefix, target, bit_index, addressing);
+            DecodedOpClass::BitOp
+        },
+        DecodedOp::Misc$(kind, addressing) => {
+            let _ = (kind, addressing);
+            DecodedOpClass::Misc
+        },
+        DecodedOp::InterruptControl$(enable, addressing) => {
+            let _ = (enable, addressing);
+            DecodedOpClass::InterruptControl
+        },
+    }
+}
+
+pub fn invalid_decoded_op() -> DecodedOp {
+    DecodedOp::Invalid
+}

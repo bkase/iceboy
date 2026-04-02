@@ -1,6 +1,7 @@
 use std::option::Option;
 use lib::bus::types::{BusReq, BusResp, idle_bus_resp};
 use lib::cpu::alu::AluKind;
+use lib::cpu::decode_types::{DecodedOp, PrefixKind, invalid_decoded_op};
 use lib::cpu::regs::{R8, RegPair, Registers, zero_registers};
 
 pub enum ModelProfile {
@@ -34,16 +35,6 @@ pub enum HaltState {
     Running,
     Halted,
     HaltBugPending,
-}
-
-pub enum PrefixKind {
-    Cb,
-}
-
-pub enum DecodedOp {
-    Invalid,
-    Unprefixed { opcode: uint<8> },
-    Prefixed { prefix: PrefixKind, opcode: uint<8> },
 }
 
 pub struct CpuArchState {
@@ -199,7 +190,7 @@ pub fn initial_cpu_micro_state() -> CpuMicroState {
         opcode_latch: 0,
         imm_lo: 0,
         imm_hi: 0,
-        decoded: DecodedOp::Invalid,
+        decoded: invalid_decoded_op(),
         temp: 0,
     )
 }

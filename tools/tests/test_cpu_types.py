@@ -20,7 +20,6 @@ class CpuTypesContractTest(unittest.TestCase):
             "struct CpuArchState",
             "struct CpuMicroState",
             "struct CpuState",
-            "enum PrefixKind",
             "enum Phase",
             "FetchPrefix { prefix: PrefixKind }",
             "ReadImm8 { k: Imm8Cont }",
