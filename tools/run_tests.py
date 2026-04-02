@@ -64,15 +64,16 @@ TIERS: tuple[TierDefinition, ...] = (
 
 SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("meta", "test_logging_std.py", "python", "tools.tests.test_logging_std"),
+    SuiteDefinition("meta", "test_harness_base.py", "python", "tools.tests.test_harness_base"),
     SuiteDefinition("meta", "test_profiles.py", "python", "tools.tests.test_profiles"),
     SuiteDefinition("meta", "test_sim_scaffolds.py", "python", "tools.tests.test_sim_scaffolds"),
     SuiteDefinition("meta", "test_event_generators.py", "python", "tools.tests.test_event_generators"),
     SuiteDefinition("meta", "test_pyboy_oracle.py", "python", "tools.tests.test_pyboy_oracle"),
     SuiteDefinition(
         "meta",
-        "test_spade_cocotb_integration.py",
+        "test_spade_cocotb_pipeline.py",
         "python",
-        "tools.tests.test_spade_cocotb_integration",
+        "tools.tests.test_spade_cocotb_pipeline",
     ),
     SuiteDefinition("unit", "test_sm83_opcodes.py", "python", "tools.tests.test_sm83_opcodes"),
     SuiteDefinition("unit", "test_reference_specs.py", "python", "tools.tests.test_reference_specs"),
