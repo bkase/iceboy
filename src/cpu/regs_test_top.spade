@@ -1,0 +1,32 @@
+use lib::cpu::regs::{Flags, flags_from_f, mask_f, pack_flags};
+
+pub struct FlagHelpersOut {
+    masked_f: uint<8>,
+    decoded_z: bool,
+    decoded_n: bool,
+    decoded_h: bool,
+    decoded_c: bool,
+    packed_f: uint<8>,
+    roundtrip_f: uint<8>,
+}
+
+pub entity flag_helpers_test_top(
+    f: uint<8>,
+    z: bool,
+    n: bool,
+    h: bool,
+    c: bool,
+) -> FlagHelpersOut {
+    let decoded = flags_from_f(f);
+    let packed = pack_flags(Flags$(z: z, n: n, h: h, c: c));
+
+    FlagHelpersOut$(
+        masked_f: mask_f(f),
+        decoded_z: decoded.z,
+        decoded_n: decoded.n,
+        decoded_h: decoded.h,
+        decoded_c: decoded.c,
+        packed_f: packed,
+        roundtrip_f: pack_flags(decoded),
+    )
+}
