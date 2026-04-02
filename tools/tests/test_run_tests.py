@@ -46,7 +46,7 @@ class RunTestsTest(unittest.TestCase):
     def test_coverage_lines_report_implemented_tiers(self) -> None:
         lines = coverage_lines(selected_tiers(["meta", "unit", "formal"]), nightly=False)
         self.assertEqual(lines[0], "Implemented tiers: 2/3")
-        self.assertIn("Meta/Infrastructure: 7 suite(s)", lines)
+        self.assertIn("Meta/Infrastructure: 8 suite(s)", lines)
         self.assertIn("Unit Tests: 9 suite(s)", lines)
         self.assertIn("Formal Verification: 0 suite(s)", lines)
 

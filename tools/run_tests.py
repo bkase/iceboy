@@ -71,6 +71,12 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("meta", "test_pyboy_oracle.py", "python", "tools.tests.test_pyboy_oracle"),
     SuiteDefinition(
         "meta",
+        "test_reset_profile_support.py",
+        "python",
+        "tools.tests.test_reset_profile_support",
+    ),
+    SuiteDefinition(
+        "meta",
         "test_spade_cocotb_pipeline.py",
         "python",
         "tools.tests.test_spade_cocotb_pipeline",
