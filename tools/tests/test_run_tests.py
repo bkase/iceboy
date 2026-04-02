@@ -16,6 +16,7 @@ from run_tests import (
     SuiteResult,
     TIERS,
     build_parser,
+    command_env,
     coverage_lines,
     include_nightly,
     load_tier_config,
@@ -57,10 +58,15 @@ class RunTestsTest(unittest.TestCase):
     def test_coverage_lines_report_implemented_tiers(self) -> None:
         lines = coverage_lines(selected_tiers(["meta", "unit", "formal", "lockstep"]), nightly=False)
         self.assertEqual(lines[0], "Implemented tiers: 3/4")
-        self.assertIn("Meta/Infrastructure: 13 suite(s)", lines)
+        self.assertIn("Meta/Infrastructure: 14 suite(s)", lines)
         self.assertIn("Unit Tests: 9 suite(s)", lines)
         self.assertIn("Formal Verification: 0 suite(s)", lines)
         self.assertIn("Lockstep: 1 suite(s)", lines)
+
+    def test_command_env_propagates_requested_simulator(self) -> None:
+        env = command_env(sim="verilator")
+        self.assertEqual(env["SIM"], "verilator")
+        self.assertEqual(env["ICEBOY_SMOKE_SIM"], "verilator")
 
     def test_write_junit_xml_emits_parseable_report(self) -> None:
         results = [

@@ -102,6 +102,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
         "python",
         "tools.tests.test_spade_cocotb_pipeline",
     ),
+    SuiteDefinition("meta", "test_verilator_backend.py", "python", "tools.tests.test_verilator_backend"),
     SuiteDefinition("meta", "test_local_entrypoints.py", "python", "tools.tests.test_local_entrypoints"),
     SuiteDefinition("unit", "test_sm83_opcodes.py", "python", "tools.tests.test_sm83_opcodes"),
     SuiteDefinition(
@@ -215,6 +216,7 @@ def command_env(*, sim: str) -> dict[str, str]:
     env = os.environ.copy()
     env["PATH"] = f"/opt/homebrew/bin:{env.get('PATH', '')}"
     env["SIM"] = sim
+    env["ICEBOY_SMOKE_SIM"] = sim
     return env
 
 

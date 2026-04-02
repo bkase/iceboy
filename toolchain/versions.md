@@ -58,6 +58,8 @@ The oracle layer and future hook-driven adapter rely on these public APIs from `
 - Optional long-regression backend: `verilator`
 - Local machine verification currently has Verilator available at `/opt/homebrew/bin/verilator` (`5.046`)
 - Rationale: keep all authored tests in Python/Cocotb, use the simpler backend by default, and reserve Verilator for longer-running regressions rather than maintaining a separate C++ test lane
+- Supported entry points for the Verilator lane are `tools/run_tests.py --sim verilator`, `tools/smoke.sh --sim verilator`, and `tools/regress.sh --sim verilator`
+- Local caveat: raw batched `SIM=verilator swim test test_` runs can race in generated build directories on the current toolchain; use the unified runner entry points above, which invoke the Cocotb benches one at a time
 
 ## Synthesis / P&R / Formal Toolchain
 

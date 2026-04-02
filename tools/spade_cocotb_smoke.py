@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -88,9 +87,11 @@ def patch_cocotb_config_wrapper() -> None:
     config_py.chmod(0o755)
 
 
-def command_env() -> dict[str, str]:
+def command_env(*, sim: str) -> dict[str, str]:
     env = os.environ.copy()
     env["PATH"] = f"/opt/homebrew/bin:{env.get('PATH', '')}"
+    env["SIM"] = sim
+    env["ICEBOY_SMOKE_SIM"] = sim
     return env
 
 
@@ -109,13 +110,13 @@ def report_intermediate_state(logger: TestLogger) -> None:
     logger.context("fst2vcd", summarize_tree(FST2VCD))
 
 
-def run_step(logger: TestLogger, name: str, command: list[str]) -> StepResult:
+def run_step(logger: TestLogger, name: str, command: list[str], *, sim: str) -> StepResult:
     logger.step(f"{utc_timestamp()} {name}: running {' '.join(command)}")
     started = time.monotonic()
     completed = subprocess.run(
         command,
         cwd=ROOT,
-        env=command_env(),
+        env=command_env(sim=sim),
         capture_output=True,
         text=True,
     )
@@ -136,11 +137,6 @@ def run_step(logger: TestLogger, name: str, command: list[str]) -> StepResult:
             f"{name} failed with exit code {completed.returncode}: {' '.join(command)}"
         )
     return StepResult(name=name, duration_s=duration_s, exit_code=completed.returncode, output=output)
-
-
-def clear_old_artifacts() -> None:
-    for path in HARNESS_BUILD_DIR.glob("test_spade_cocotb_integration_*"):
-        shutil.rmtree(path)
 
 
 def clear_stale_swim_lock() -> None:
@@ -179,7 +175,7 @@ def extract_case_count(output: str) -> str:
     return "unknown"
 
 
-def run_smoke(*, logger: TestLogger | None = None) -> Path:
+def run_smoke(*, sim: str = "icarus", logger: TestLogger | None = None) -> Path:
     if not SWIM.is_file():
         raise FileNotFoundError(f"Missing swim binary at {SWIM}")
     if not FST2VCD.is_file():
@@ -192,10 +188,10 @@ def run_smoke(*, logger: TestLogger | None = None) -> Path:
     )
     suite_logger.suite()
     logger = suite_logger.bind_case("test_spade_cocotb_smoke_pipeline")
-    clear_old_artifacts()
+    logger.context("simulator", sim)
     started_at = time.time()
     try:
-        build = run_step(logger, "spade_compile", [str(SWIM), "build"])
+        build = run_step(logger, "spade_compile", [str(SWIM), "build"], sim=sim)
 
         if not VERILOG_PATH.is_file():
             raise FileNotFoundError(f"Expected generated Verilog at {VERILOG_PATH}")
@@ -204,13 +200,14 @@ def run_smoke(*, logger: TestLogger | None = None) -> Path:
         logger.context("verilog_lines", verilog_lines)
 
         patch_cocotb_config_wrapper()
-        test = run_step(logger, "simulator_cocotb", [str(SWIM), "test", TEST_FILTER])
+        test = run_step(logger, "simulator_cocotb", [str(SWIM), "test", TEST_FILTER], sim=sim)
 
         fst_waveform = locate_fst_waveform(started_at=started_at)
         run_step(
             logger,
             "waveform_translate",
             [str(FST2VCD), "-f", str(fst_waveform), "-o", str(fst_waveform.with_name("dump.vcd"))],
+            sim=sim,
         )
         waveform = locate_dump_vcd(fst_waveform=fst_waveform)
         exported = export_waveforms(f"test_{TEST_FILTER}", failed=False)
@@ -238,8 +235,10 @@ def main() -> int:
     parser = add_logging_args(
         argparse.ArgumentParser(description="Run the Spade-to-Cocotb toolchain smoke test.")
     )
+    parser.add_argument("--sim", choices=("icarus", "verilator"), default=os.environ.get("ICEBOY_SMOKE_SIM", "icarus"))
     args = parser.parse_args()
     run_smoke(
+        sim=args.sim,
         logger=logger_from_args(
             args,
             suite_name="test_spade_cocotb_integration.py",
