@@ -1,7 +1,22 @@
-use lib::cpu::types::{MemoryBehaviorProfile, ModelProfile, ResetProfile, SimulationProfiles};
+use lib::board::clockgen::timebase;
+use lib::bus::types::BusResp;
+use lib::cpu::core::cpu_core;
+use lib::cpu::types::{IrqPending, MemoryBehaviorProfile, ModelProfile, ResetProfile, SimulationProfiles};
 use lib::sim::types::{SimStimulus, cpu_arch_time_enable, peripheral_arch_time_enable};
 
 struct SocLockstepTopOut {
+    commit_seq: uint<64>,
+    pc: uint<16>,
+    bus_req_kind: uint<2>,
+    bus_req_addr: uint<16>,
+    bus_req_data: uint<8>,
+    sys_counter: uint<32>,
+    t_index: uint<2>,
+    m_index: uint<30>,
+    m_ce: bool,
+    bus_region: uint<4>,
+    bus_owner: uint<2>,
+    bus_blocked: bool,
     model_profile: uint<2>,
     reset_profile: uint<2>,
     memory_behavior_profile: uint<2>,
@@ -40,13 +55,32 @@ entity soc_lockstep_top(
     bus_read_data: uint<8>,
     irq_pending: uint<5>,
 ) -> SocLockstepTopOut {
-    let _ = (clk, rst);
+    let requested_cpu_arch_time = cpu_arch_time_enable(stimulus);
+    let requested_peripheral_arch_time = peripheral_arch_time_enable(stimulus);
+    let tb = inst timebase(clk, rst);
+    let cpu_m_ce = requested_cpu_arch_time && tb.m_ce;
+    let cpu_bus_resp = BusResp$(data: bus_read_data);
+    let cpu_irq_pending = IrqPending$(pending: irq_pending);
+    let cpu = inst cpu_core(clk, rst, cpu_m_ce, cpu_bus_resp, cpu_irq_pending);
+
     SocLockstepTopOut$(
+        commit_seq: cpu.commit_seq,
+        pc: cpu.pc,
+        bus_req_kind: cpu.bus_req_kind,
+        bus_req_addr: cpu.bus_req_addr,
+        bus_req_data: cpu.bus_req_data,
+        sys_counter: tb.sys_counter,
+        t_index: tb.t_index,
+        m_index: tb.m_index,
+        m_ce: tb.m_ce,
+        bus_region: 0u4,
+        bus_owner: 0u2,
+        bus_blocked: false,
         model_profile: encode_model_profile(profiles),
         reset_profile: encode_reset_profile(profiles),
         memory_behavior_profile: encode_memory_behavior_profile(profiles),
-        cpu_arch_time_enable: cpu_arch_time_enable(stimulus),
-        peripheral_arch_time_enable: peripheral_arch_time_enable(stimulus),
+        cpu_arch_time_enable: requested_cpu_arch_time,
+        peripheral_arch_time_enable: requested_peripheral_arch_time,
         irq_pending: irq_pending,
         bus_read_data: bus_read_data,
     )

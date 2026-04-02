@@ -22,7 +22,7 @@ fn m_cycle_enable(sys_counter: uint<32>) -> bool {
     t_cycle_index(sys_counter) == 3u2
 }
 
-entity timebase(clk: clock, rst: bool) -> TimebaseOut {
+pub entity timebase(clk: clock, rst: bool) -> TimebaseOut {
     reg(clk) sys_counter: uint<32> reset(rst: 0) = next_sys_counter(sys_counter);
 
     TimebaseOut$(

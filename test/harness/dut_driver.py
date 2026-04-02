@@ -125,10 +125,34 @@ class SoCLockstepObservation:
     peripheral_arch_time_enable: bool
     irq_pending: int
     bus_read_data: int
+    commit_seq: int = 0
+    pc: int = 0
+    bus_req_kind: int = 0
+    bus_req_addr: int = 0
+    bus_req_data: int = 0
+    sys_counter: int = 0
+    t_index: int = 0
+    m_index: int = 0
+    m_ce: bool = False
+    bus_region: int = 0
+    bus_owner: int = 0
+    bus_blocked: bool = False
 
     @classmethod
     def from_output(cls, output_value: int) -> "SoCLockstepObservation":
         return cls(
+            commit_seq=(output_value >> 135) & 0xFFFF_FFFF_FFFF_FFFF,
+            pc=(output_value >> 119) & 0xFFFF,
+            bus_req_kind=(output_value >> 117) & 0x3,
+            bus_req_addr=(output_value >> 101) & 0xFFFF,
+            bus_req_data=(output_value >> 93) & 0xFF,
+            sys_counter=(output_value >> 61) & 0xFFFF_FFFF,
+            t_index=(output_value >> 59) & 0x3,
+            m_index=(output_value >> 29) & 0x3FFF_FFFF,
+            m_ce=bool((output_value >> 28) & 0x1),
+            bus_region=(output_value >> 24) & 0xF,
+            bus_owner=(output_value >> 22) & 0x3,
+            bus_blocked=bool((output_value >> 21) & 0x1),
             model_profile=(output_value >> 19) & 0x3,
             reset_profile=(output_value >> 17) & 0x3,
             memory_behavior_profile=(output_value >> 15) & 0x3,

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from spec.profiles import CPU_BRING_UP_PROFILES, SimulationProfiles
 
-from dut_driver import CpuTestDriver
+from dut_driver import CpuTestDriver, SoCLockstepDriver
 
 if TYPE_CHECKING:
     from bench.actions.generators import SeededEventScript
@@ -32,6 +32,10 @@ class LockstepPair:
 
 def cpu_dut(dut: Any, *, logger: Any | None = None) -> CpuTestDriver:
     return CpuTestDriver(dut, logger=logger)
+
+
+def soc_lockstep_dut(dut: Any, *, logger: Any | None = None) -> SoCLockstepDriver:
+    return SoCLockstepDriver(dut, logger=logger)
 
 
 def oracle(

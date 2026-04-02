@@ -37,7 +37,17 @@ class SimScaffoldTest(unittest.TestCase):
             "let cpu = inst cpu_core(",
         ]:
             self.assertIn(symbol, text)
-        self.assertIn("entity soc_lockstep_top(", SOC_TOP_PATH.read_text(encoding="utf-8"))
+        soc_text = SOC_TOP_PATH.read_text(encoding="utf-8")
+        self.assertIn("entity soc_lockstep_top(", soc_text)
+        for symbol in [
+            "commit_seq: uint<64>",
+            "sys_counter: uint<32>",
+            "m_ce: bool",
+            "bus_region: uint<4>",
+            "let tb = inst timebase(",
+            "let cpu = inst cpu_core(",
+        ]:
+            self.assertIn(symbol, soc_text)
 
 
 if __name__ == "__main__":
