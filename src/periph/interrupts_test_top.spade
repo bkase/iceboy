@@ -1,0 +1,44 @@
+use std::option::Option;
+use lib::cpu::types::IrqAck;
+use lib::periph::interrupts::interrupts;
+
+fn irq_ack_from_inputs(valid: bool, ack_bit: uint<3>) -> IrqAck {
+    if valid {
+        IrqAck$(ack_bit: Option::Some(ack_bit))
+    } else {
+        IrqAck$(ack_bit: Option::None)
+    }
+}
+
+pub entity interrupts_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    write_en_i: bool,
+    write_addr_i: uint<16>,
+    write_data_i: uint<8>,
+    vblank_irq_i: bool,
+    lcd_stat_irq_i: bool,
+    timer_irq_i: bool,
+    serial_irq_i: bool,
+    joypad_irq_i: bool,
+    irq_ack_valid_i: bool,
+    irq_ack_bit_i: uint<3>,
+) -> uint<21> {
+    let controller = inst interrupts(
+        clk_i,
+        rst_i,
+        write_en_i,
+        write_addr_i,
+        write_data_i,
+        vblank_irq_i,
+        lcd_stat_irq_i,
+        timer_irq_i,
+        serial_irq_i,
+        joypad_irq_i,
+        irq_ack_from_inputs(irq_ack_valid_i, irq_ack_bit_i),
+    );
+
+    (zext(controller.ie) << 13)
+    | (zext(controller.iflags) << 5)
+    | zext(controller.irq_pending.pending)
+}

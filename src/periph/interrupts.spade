@@ -1,0 +1,98 @@
+use std::option::Option;
+use lib::cpu::types::{IrqAck, IrqPending};
+
+pub struct InterruptsOut {
+    ie: uint<8>,
+    iflags: uint<8>,
+    irq_pending: IrqPending,
+}
+
+fn io_write(write_en: bool, write_addr: uint<16>, target: uint<16>) -> bool {
+    write_en && write_addr == target
+}
+
+fn read_visible(bits: uint<5>) -> uint<8> {
+    0xe0u8 | zext(bits)
+}
+
+fn irq_source_bits(
+    vblank_irq: bool,
+    lcd_stat_irq: bool,
+    timer_irq: bool,
+    serial_irq: bool,
+    joypad_irq: bool,
+) -> uint<5> {
+    ((if joypad_irq { 1u5 } else { 0u5 }) << 4)
+    | ((if serial_irq { 1u5 } else { 0u5 }) << 3)
+    | ((if timer_irq { 1u5 } else { 0u5 }) << 2)
+    | ((if lcd_stat_irq { 1u5 } else { 0u5 }) << 1)
+    | (if vblank_irq { 1u5 } else { 0u5 })
+}
+
+fn ack_bits(irq_ack: IrqAck) -> uint<5> {
+    match irq_ack.ack_bit {
+        Option::Some(bit) => match bit {
+            0u3 => 0x01u5,
+            1u3 => 0x02u5,
+            2u3 => 0x04u5,
+            3u3 => 0x08u5,
+            4u3 => 0x10u5,
+            _ => 0u5,
+        },
+        Option::None => 0u5,
+    }
+}
+
+fn pending_bits(ie_bits: uint<5>, if_bits: uint<5>) -> IrqPending {
+    IrqPending$(pending: ie_bits & if_bits)
+}
+
+pub entity interrupts(
+    clk: clock,
+    rst: bool,
+    write_en: bool,
+    write_addr: uint<16>,
+    write_data: uint<8>,
+    vblank_irq: bool,
+    lcd_stat_irq: bool,
+    timer_irq: bool,
+    serial_irq: bool,
+    joypad_irq: bool,
+    irq_ack: IrqAck,
+) -> InterruptsOut {
+    let write_ie = io_write(write_en, write_addr, 0xffffu16);
+    let write_if = io_write(write_en, write_addr, 0xff0fu16);
+    let source_bits = irq_source_bits(
+        vblank_irq,
+        lcd_stat_irq,
+        timer_irq,
+        serial_irq,
+        joypad_irq,
+    );
+
+    decl ie_reg;
+    decl if_reg;
+
+    let next_ie_reg =
+        if write_ie {
+            trunc(write_data)
+        } else {
+            ie_reg
+        };
+    let written_if =
+        if write_if {
+            trunc(write_data)
+        } else {
+            if_reg
+        };
+    let next_if_reg = (written_if & ~ack_bits(irq_ack)) | source_bits;
+
+    reg(clk) ie_reg: uint<5> reset(rst: 0u5) = next_ie_reg;
+    reg(clk) if_reg: uint<5> reset(rst: 0u5) = next_if_reg;
+
+    InterruptsOut$(
+        ie: read_visible(ie_reg),
+        iflags: read_visible(if_reg),
+        irq_pending: pending_bits(ie_reg, if_reg),
+    )
+}

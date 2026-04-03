@@ -1,2 +1,4 @@
+pub mod interrupts;
+pub mod interrupts_test_top;
 pub mod timer;
 pub mod timer_test_top;
