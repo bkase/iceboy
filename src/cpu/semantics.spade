@@ -16,6 +16,7 @@ use lib::cpu::types::{
     Imm16HiCont,
     Imm8Cont,
     ImeState,
+    IrqPending,
     MicroInput,
     MicroWriteSet,
     Phase,
@@ -101,6 +102,24 @@ fn resolve_ime(write: Option<ImeState>, current: ImeState, next_phase: Phase) ->
                 _ => current,
             }
         },
+    }
+}
+
+fn any_irq_pending(irq_pending: IrqPending) -> bool {
+    irq_pending.pending != 0u5
+}
+
+fn irq_sel_from_pending(pending: uint<5>) -> lib::cpu::types::IrqSel {
+    if (pending & 0x01u5) == 0x01u5 {
+        lib::cpu::types::IrqSel::VBlank
+    } else if (pending & 0x02u5) == 0x02u5 {
+        lib::cpu::types::IrqSel::LcdStat
+    } else if (pending & 0x04u5) == 0x04u5 {
+        lib::cpu::types::IrqSel::Timer
+    } else if (pending & 0x08u5) == 0x08u5 {
+        lib::cpu::types::IrqSel::Serial
+    } else {
+        lib::cpu::types::IrqSel::Joypad
     }
 }
 
@@ -288,15 +307,24 @@ fn execute_misc_delta(state: CpuState, kind: MiscKind) -> CpuDelta {
         MiscKind::Ccf => reg_writes_for_flags(result.flags),
         _ => idle_reg_write_set(),
     };
-
-    CpuDelta(
-        reg_writes,
-        Option::None,
-        Option::None,
-        Option::None,
-        Option::None,
-        MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, some_u16(result.val16)),
-    )
+    match kind {
+        MiscKind::Halt => CpuDelta(
+            idle_reg_write_set(),
+            Option::None,
+            Option::None,
+            Option::None,
+            Option::Some(HaltState::Halted),
+            MicroWriteSet(some_phase(Phase::Halted), Option::None, Option::None, Option::None, Option::None, Option::None),
+        ),
+        _ => CpuDelta(
+            reg_writes,
+            Option::None,
+            Option::None,
+            Option::None,
+            Option::None,
+            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, some_u16(result.val16)),
+        ),
+    }
 }
 
 fn bit_res_set_kind(kind: BitOpKind) -> BitResSetKind {
@@ -1137,7 +1165,39 @@ fn handle_fetch_prefix(state: CpuState, input: MicroInput, prefix: PrefixKind) -
 }
 
 fn handle_halted(state: CpuState, input: MicroInput) -> MicroOutput {
-    let delta = idle_cpu_delta();
+    let delta =
+        if any_irq_pending(input.irq_pending) {
+            match state.arch.ime_state {
+                ImeState::Enabled => {
+                    let irq = irq_sel_from_pending(input.irq_pending.pending);
+                    CpuDelta(
+                        idle_reg_write_set(),
+                        Option::None,
+                        Option::None,
+                        Option::Some(ImeState::Disabled),
+                        Option::Some(HaltState::Running),
+                        MicroWriteSet(
+                            some_phase(Phase::ServiceInterrupt$(irq: irq, subphase: lib::cpu::types::IrqPhase::Delay1)),
+                            Option::None,
+                            Option::None,
+                            Option::None,
+                            Option::None,
+                            Option::None,
+                        ),
+                    )
+                },
+                _ => CpuDelta(
+                    idle_reg_write_set(),
+                    Option::None,
+                    Option::None,
+                    Option::None,
+                    Option::Some(HaltState::Running),
+                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
+                ),
+            }
+        } else {
+            idle_cpu_delta()
+        };
     let bus_req = idle_bus_req();
     let commit = make_commit(state, input, bus_req, delta, Option::None);
 

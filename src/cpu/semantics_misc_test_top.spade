@@ -1,4 +1,5 @@
 use lib::bus::types::{BusReq, BusResp};
+use lib::cpu::decode::decode;
 use lib::cpu::decode_types::invalid_decoded_op;
 use lib::cpu::regs::Registers;
 use lib::cpu::semantics::{apply_delta, step_mcycle};
@@ -25,6 +26,22 @@ fn halt_code(halt: HaltState) -> uint<2> {
         HaltState::Running => 0u2,
         HaltState::Halted => 1u2,
         HaltState::HaltBugPending => 2u2,
+    }
+}
+
+fn halt_from_code(code: uint<2>) -> HaltState {
+    match code {
+        1u2 => HaltState::Halted,
+        2u2 => HaltState::HaltBugPending,
+        _ => HaltState::Running,
+    }
+}
+
+fn phase_from_code(code: uint<4>, opcode: uint<8>) -> Phase {
+    match code {
+        1u4 => Phase::Halted,
+        2u4 => Phase::Execute$(op: decode(opcode)),
+        _ => Phase::Fetch,
     }
 }
 
@@ -66,12 +83,15 @@ entity semantics_misc_test_top(
     state_a_i: uint<8>,
     state_f_i: uint<8>,
     state_ime_i: uint<2>,
+    state_halt_i: uint<2>,
+    state_phase_i: uint<4>,
     bus_resp_i: uint<8>,
     irq_pending_i: uint<5>,
 ) -> uint<128> {
     let regs = Registers(state_a_i, state_f_i, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, state_sp_i, state_pc_i);
-    let arch = CpuArchState(regs, ime_from_code(state_ime_i), HaltState::Running);
-    let micro = CpuMicroState(Phase::Fetch, 0u8, 0u8, 0u8, invalid_decoded_op(), 0u16);
+    let arch = CpuArchState(regs, ime_from_code(state_ime_i), halt_from_code(state_halt_i));
+    let phase = phase_from_code(state_phase_i, bus_resp_i);
+    let micro = CpuMicroState(phase, 0u8, 0u8, 0u8, decode(bus_resp_i), 0u16);
     let state = CpuState(arch, micro);
     let step = step_mcycle(state, MicroInput(BusResp$(data: bus_resp_i), IrqPending$(pending: irq_pending_i)));
     let next_state = apply_delta(state, step.delta);

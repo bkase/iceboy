@@ -4,12 +4,16 @@ from cocotb.triggers import Timer
 
 
 PHASE_FETCH = 0
+PHASE_HALTED = 1
 PHASE_EXECUTE = 2
+PHASE_SERVICE_INTERRUPT = 9
 IME_DISABLED = 0
 IME_PENDING_ENABLE = 1
 IME_ENABLED = 2
 HALT_RUNNING = 0
+HALT_HALTED = 1
 BUS_REQ_READ = 1
+BUS_REQ_IDLE = 0
 
 
 def decode_output(output_value: int) -> dict[str, int | bool]:
@@ -38,6 +42,8 @@ async def sample(
     state_a: int = 0x12,
     state_f: int = 0xA0,
     state_ime: int = IME_DISABLED,
+    state_halt: int = HALT_RUNNING,
+    state_phase: int = PHASE_FETCH,
     bus_resp: int,
     irq_pending: int = 0,
 ) -> dict[str, int | bool]:
@@ -46,6 +52,8 @@ async def sample(
     dut.state_a_i.value = state_a & 0xFF
     dut.state_f_i.value = state_f & 0xFF
     dut.state_ime_i.value = state_ime & 0x3
+    dut.state_halt_i.value = state_halt & 0x3
+    dut.state_phase_i.value = state_phase & 0xF
     dut.bus_resp_i.value = bus_resp & 0xFF
     dut.irq_pending_i.value = irq_pending & 0x1F
     await Timer(1, units="ns")
@@ -160,3 +168,116 @@ async def test_misc_alu_controls_route_into_execute_phase(dut):
             "pc_write": 0x0401,
         }
         assert_snapshot(name, expected, actual)
+
+
+@cocotb.test()
+async def test_halt_fetch_routes_into_execute_phase(dut):
+    actual = await sample(dut, state_pc=0x0500, state_ime=IME_DISABLED, bus_resp=0x76)
+    expected = {
+        "next_pc": 0x0501,
+        "next_ime": IME_DISABLED,
+        "next_halt": HALT_RUNNING,
+        "next_phase_kind": PHASE_EXECUTE,
+        "next_opcode": 0x76,
+        "bus_req_kind": BUS_REQ_READ,
+        "bus_req_addr": 0x0500,
+        "commit_present": True,
+        "pc_write_valid": True,
+        "pc_write": 0x0501,
+    }
+    assert_snapshot("HALT_FETCH", expected, actual)
+
+
+@cocotb.test()
+async def test_halt_execute_enters_halted_state(dut):
+    actual = await sample(
+        dut,
+        state_pc=0x0501,
+        state_ime=IME_DISABLED,
+        state_halt=HALT_RUNNING,
+        state_phase=PHASE_EXECUTE,
+        bus_resp=0x76,
+    )
+    expected = {
+        "next_pc": 0x0501,
+        "next_ime": IME_DISABLED,
+        "next_halt": HALT_HALTED,
+        "next_phase_kind": PHASE_HALTED,
+        "bus_req_kind": BUS_REQ_IDLE,
+        "bus_req_addr": 0x0000,
+        "commit_present": True,
+        "pc_write_valid": False,
+    }
+    assert_snapshot("HALT_EXECUTE", expected, actual)
+
+
+@cocotb.test()
+async def test_halted_state_stays_quiet_without_pending_irq(dut):
+    actual = await sample(
+        dut,
+        state_pc=0x0600,
+        state_ime=IME_DISABLED,
+        state_halt=HALT_HALTED,
+        state_phase=PHASE_HALTED,
+        bus_resp=0xAA,
+        irq_pending=0,
+    )
+    expected = {
+        "next_pc": 0x0600,
+        "next_ime": IME_DISABLED,
+        "next_halt": HALT_HALTED,
+        "next_phase_kind": PHASE_HALTED,
+        "bus_req_kind": BUS_REQ_IDLE,
+        "bus_req_addr": 0x0000,
+        "commit_present": True,
+        "pc_write_valid": False,
+    }
+    assert_snapshot("HALT_IDLE", expected, actual)
+
+
+@cocotb.test()
+async def test_halted_state_resumes_fetch_when_pending_irq_and_ime_disabled(dut):
+    actual = await sample(
+        dut,
+        state_pc=0x0601,
+        state_ime=IME_DISABLED,
+        state_halt=HALT_HALTED,
+        state_phase=PHASE_HALTED,
+        bus_resp=0x00,
+        irq_pending=0x04,
+    )
+    expected = {
+        "next_pc": 0x0601,
+        "next_ime": IME_DISABLED,
+        "next_halt": HALT_RUNNING,
+        "next_phase_kind": PHASE_FETCH,
+        "bus_req_kind": BUS_REQ_IDLE,
+        "bus_req_addr": 0x0000,
+        "commit_present": True,
+        "pc_write_valid": False,
+    }
+    assert_snapshot("HALT_WAKE_DISABLED", expected, actual)
+
+
+@cocotb.test()
+async def test_halted_state_transitions_to_service_when_pending_irq_and_ime_enabled(dut):
+    actual = await sample(
+        dut,
+        state_pc=0x0602,
+        state_ime=IME_ENABLED,
+        state_halt=HALT_HALTED,
+        state_phase=PHASE_HALTED,
+        bus_resp=0x00,
+        irq_pending=0x04,
+    )
+    expected = {
+        "next_pc": 0x0602,
+        "next_ime": IME_DISABLED,
+        "next_halt": HALT_RUNNING,
+        "next_phase_kind": PHASE_SERVICE_INTERRUPT,
+        "bus_req_kind": BUS_REQ_IDLE,
+        "bus_req_addr": 0x0000,
+        "commit_present": True,
+        "pc_write_valid": False,
+    }
+    assert_snapshot("HALT_WAKE_ENABLED", expected, actual)

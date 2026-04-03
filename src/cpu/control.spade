@@ -403,6 +403,7 @@ pub fn aluish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase {
                 MiscKind::Cpl => Phase::Execute$(op: op),
                 MiscKind::Scf => Phase::Execute$(op: op),
                 MiscKind::Ccf => Phase::Execute$(op: op),
+                MiscKind::Halt => Phase::Execute$(op: op),
                 _ => Phase::Fetch,
             }
         },
