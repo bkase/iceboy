@@ -1,0 +1,104 @@
+use lib::bus::types::{BusReq, BusResp};
+use lib::cpu::decode_types::invalid_decoded_op;
+use lib::cpu::regs::Registers;
+use lib::cpu::semantics::{apply_delta, step_mcycle};
+use lib::cpu::types::{CpuArchState, CpuMicroState, CpuState, HaltState, ImeState, IrqPending, MicroInput, Phase};
+
+fn ime_from_code(code: uint<2>) -> ImeState {
+    match code {
+        1u2 => ImeState::PendingEnable,
+        2u2 => ImeState::Enabled,
+        _ => ImeState::Disabled,
+    }
+}
+
+fn ime_code(ime: ImeState) -> uint<2> {
+    match ime {
+        ImeState::Disabled => 0u2,
+        ImeState::PendingEnable => 1u2,
+        ImeState::Enabled => 2u2,
+    }
+}
+
+fn halt_code(halt: HaltState) -> uint<2> {
+    match halt {
+        HaltState::Running => 0u2,
+        HaltState::Halted => 1u2,
+        HaltState::HaltBugPending => 2u2,
+    }
+}
+
+fn phase_kind(phase: Phase) -> uint<4> {
+    match phase {
+        Phase::Fetch => 0u4,
+        Phase::Halted => 1u4,
+        Phase::Execute$(op: _) => 2u4,
+        Phase::ReadImm8$(k: _) => 3u4,
+        Phase::ReadImm16Lo$(k: _) => 4u4,
+        Phase::ReadImm16Hi$(lo: _, k: _) => 5u4,
+        Phase::ReadMem$(addr: _, k: _) => 6u4,
+        Phase::WriteMem$(addr: _, data: _, k: _) => 7u4,
+        Phase::FetchPrefix$(prefix: _) => 8u4,
+        Phase::ServiceInterrupt$(irq: _, subphase: _) => 9u4,
+        _ => 15u4,
+    }
+}
+
+fn bus_req_kind(req: BusReq) -> uint<2> {
+    match req {
+        BusReq::Idle => 0u2,
+        BusReq::Read$(addr: _) => 1u2,
+        BusReq::Write$(addr: _, data: _) => 2u2,
+    }
+}
+
+fn bus_req_addr(req: BusReq) -> uint<16> {
+    match req {
+        BusReq::Idle => 0u16,
+        BusReq::Read$(addr: addr) => addr,
+        BusReq::Write$(addr: addr, data: _) => addr,
+    }
+}
+
+entity semantics_misc_test_top(
+    state_pc_i: uint<16>,
+    state_sp_i: uint<16>,
+    state_a_i: uint<8>,
+    state_f_i: uint<8>,
+    state_ime_i: uint<2>,
+    bus_resp_i: uint<8>,
+    irq_pending_i: uint<5>,
+) -> uint<128> {
+    let regs = Registers(state_a_i, state_f_i, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, state_sp_i, state_pc_i);
+    let arch = CpuArchState(regs, ime_from_code(state_ime_i), HaltState::Running);
+    let micro = CpuMicroState(Phase::Fetch, 0u8, 0u8, 0u8, invalid_decoded_op(), 0u16);
+    let state = CpuState(arch, micro);
+    let step = step_mcycle(state, MicroInput(BusResp$(data: bus_resp_i), IrqPending$(pending: irq_pending_i)));
+    let next_state = apply_delta(state, step.delta);
+    let step_pc_write = match step.delta.pc_write {
+        Option::Some(value) => value,
+        Option::None => 0u16,
+    };
+    let commit_present = match step.commit {
+        Option::Some(value) => { let _ = value; true },
+        Option::None => false,
+    };
+    let pc_write_valid = match step.delta.pc_write {
+        Option::Some(value) => { let _ = value; true },
+        Option::None => false,
+    };
+
+    (zext(next_state.arch.regs.pc) << 112)
+    | (zext(next_state.arch.regs.sp) << 96)
+    | (zext(next_state.arch.regs.a) << 88)
+    | (zext(next_state.arch.regs.f) << 80)
+    | (zext(ime_code(next_state.arch.ime_state)) << 78)
+    | (zext(halt_code(next_state.arch.halt_state)) << 76)
+    | (zext(phase_kind(next_state.micro.phase)) << 72)
+    | (zext(next_state.micro.opcode_latch) << 64)
+    | (zext(bus_req_kind(step.bus_req)) << 62)
+    | (zext(bus_req_addr(step.bus_req)) << 46)
+    | ((if commit_present { 1u128 } else { 0u128 }) << 45)
+    | ((if pc_write_valid { 1u128 } else { 0u128 }) << 44)
+    | (zext(step_pc_write) << 28)
+}

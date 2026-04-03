@@ -928,11 +928,39 @@ fn direct_load_phase(op: DecodedOp) -> Option<Phase> {
     }
 }
 
+fn misc_fetch_pc_write(op: DecodedOp, pc: uint<16>) -> Option<uint<16>> {
+    match op {
+        DecodedOp::Misc$(kind, addressing) => {
+            let _ = addressing;
+            match kind {
+                MiscKind::Stop => some_u16(trunc(pc + 2u16)),
+                _ => Option::None,
+            }
+        },
+        _ => Option::None,
+    }
+}
+
+fn interrupt_control_fetch_ime_write(op: DecodedOp) -> Option<ImeState> {
+    match op {
+        DecodedOp::InterruptControl$(enable, addressing) => {
+            let _ = addressing;
+            if enable {
+                Option::Some(ImeState::PendingEnable)
+            } else {
+                Option::Some(ImeState::Disabled)
+            }
+        },
+        _ => Option::None,
+    }
+}
+
 fn fetch_delta(state: CpuState, opcode: uint<8>) -> CpuDelta {
     let decoded = decode(opcode);
     let reg_writes = direct_load_reg_writes(decoded, state.arch.regs);
     let sp_write = direct_load_sp_write(decoded, state.arch.regs);
     let direct_pc_write = control_flow_fetch_pc_write(decoded, state.arch.regs);
+    let misc_pc_write = misc_fetch_pc_write(decoded, state.arch.regs.pc);
     let phase_write = match direct_load_phase(decoded) {
         Option::Some(value) => Option::Some(value),
         Option::None => {
@@ -1001,10 +1029,15 @@ fn fetch_delta(state: CpuState, opcode: uint<8>) -> CpuDelta {
         reg_writes,
         match direct_pc_write {
             Option::Some(value) => Option::Some(value),
-            Option::None => some_u16(trunc(state.arch.regs.pc + 1u16)),
+            Option::None => {
+                match misc_pc_write {
+                    Option::Some(value) => Option::Some(value),
+                    Option::None => some_u16(trunc(state.arch.regs.pc + 1u16)),
+                }
+            },
         },
         sp_write,
-        Option::None,
+        interrupt_control_fetch_ime_write(decoded),
         Option::None,
         micro_write,
     )

@@ -26,6 +26,7 @@ class CpuSemanticsContractTest(unittest.TestCase):
         self.assertIn("pub mod semantics_cb_test_top;", text)
         self.assertIn("pub mod semantics_flow_test_top;", text)
         self.assertIn("pub mod semantics_load_test_top;", text)
+        self.assertIn("pub mod semantics_misc_test_top;", text)
         self.assertIn("pub mod semantics_test_top;", text)
         self.assertIn("pub mod semantics_wordalu_test_top;", text)
 
@@ -75,6 +76,8 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "fn execute_stack_delta(",
             "fn condition_matches(regs: Registers, condition: Option<ConditionCode>) -> bool",
             "fn fetch_imm_hi_seed(decoded: DecodedOp, phase_write: Option<Phase>) -> Option<uint<8>>",
+            "fn misc_fetch_pc_write(op: DecodedOp, pc: uint<16>) -> Option<uint<16>>",
+            "fn interrupt_control_fetch_ime_write(op: DecodedOp) -> Option<ImeState>",
             "fn execute_word_alu_delta(",
             "ReadCont::AluFromMem$(kind)",
             "ReadCont::BitOpFromMem$(kind, bit_index, zero_on_result) =>",
@@ -87,6 +90,9 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "Imm16HiCont::CallTarget$(lo) =>",
             "WriteCont::PushHi$(next_pc) =>",
             "ControlTarget::Return$(enable_interrupts)",
+            "MiscKind::Stop => some_u16(trunc(pc + 2u16))",
+            "DecodedOp::InterruptControl$(enable, addressing) => {",
+            "Option::Some(ImeState::PendingEnable)",
             "aluish_fetch_phase(decoded, state.arch.regs)",
             "cb_prefixed_fetch_phase(decoded, state.arch.regs)",
             "control_flow_fetch_pc_write(decoded, state.arch.regs)",
@@ -104,6 +110,21 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "Phase::ReadMem$(addr, k) => handle_read_mem(state, input, addr, k)",
             "Phase::WriteMem$(addr, data, k) => handle_write_mem(state, input, addr, data, k)",
             "Phase::Execute$(op) => handle_execute(state, input, op)",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_semantics_misc_test_top_exposes_single_cycle_misc_projection_surface(self) -> None:
+        text = (ROOT / "src" / "cpu" / "semantics_misc_test_top.spade").read_text(encoding="utf-8")
+        for symbol in [
+            "entity semantics_misc_test_top(",
+            "state_ime_i: uint<2>",
+            "fn ime_from_code(code: uint<2>) -> ImeState",
+            "fn ime_code(ime: ImeState) -> uint<2>",
+            "fn halt_code(halt: HaltState) -> uint<2>",
+            "fn phase_kind(phase: Phase) -> uint<4>",
+            "let next_state = apply_delta(state, step.delta);",
+            "zext(ime_code(next_state.arch.ime_state)) << 78",
+            "zext(phase_kind(next_state.micro.phase)) << 72",
         ]:
             self.assertIn(symbol, text)
 
