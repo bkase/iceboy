@@ -243,9 +243,16 @@ SUITE_COVERAGE: dict[str, SuiteCoverage] = {
         rom_suites=frozenset({"ALU_LOOP"}),
         profile_triples=_profiles(CPU_BRING_UP_PROFILE),
     ),
+    "test_write_enable.py": SuiteCoverage(
+        opcode_families=_families("control_misc", "load", "memory_load", "alu8"),
+    ),
     "test_cpu_invariants_loads.py": SuiteCoverage(opcode_families=_families("load", "memory_load")),
     "test_cpu_invariants_flow.py": SuiteCoverage(opcode_families=_families("control_flow")),
     "test_arch_time_invariants.py": SuiteCoverage(
+        phase_constructors=frozenset({"skipboot_reset", "mcycle_commit"}),
+        profile_triples=_profiles(CPU_BRING_UP_PROFILE),
+    ),
+    "test_write_enable_hold.py": SuiteCoverage(
         phase_constructors=frozenset({"skipboot_reset", "mcycle_commit"}),
         profile_triples=_profiles(CPU_BRING_UP_PROFILE),
     ),

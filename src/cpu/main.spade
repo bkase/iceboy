@@ -18,3 +18,4 @@ pub mod semantics_misc_test_top;
 pub mod semantics_test_top;
 pub mod semantics_wordalu_test_top;
 pub mod types;
+pub mod write_enable_test_top;

@@ -160,6 +160,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("unit", "test_semantics_loads.py", "swim", "test_semantics_loads"),
     SuiteDefinition("unit", "test_semantics_wordalu.py", "swim", "test_semantics_wordalu"),
     SuiteDefinition("unit", "test_timebase.py", "swim", "test_timebase"),
+    SuiteDefinition("unit", "test_write_enable.py", "swim", "test_write_enable"),
     SuiteDefinition("formal", "cpu_invariants.sby", "shell", "tools/run_formal_cpu_invariants.sh"),
     SuiteDefinition("formal", "cpu_reset.sby", "shell", "tools/run_formal_cpu_reset.sh"),
     SuiteDefinition("formal", "cpu_hold.sby", "shell", "tools/run_formal_cpu_hold.sh"),
@@ -175,6 +176,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("invariant", "test_cpu_invariants_loads.py", "swim", "test_cpu_invariants_loads"),
     SuiteDefinition("invariant", "test_cpu_invariants_flow.py", "swim", "test_cpu_invariants_flow"),
     SuiteDefinition("invariant", "test_arch_time_invariants.py", "swim", "test_arch_time_invariants"),
+    SuiteDefinition("invariant", "test_write_enable_hold.py", "swim", "test_write_enable_hold"),
 )
 
 
