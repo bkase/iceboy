@@ -277,14 +277,18 @@ async def test_ld_nn_sp_emits_two_writes(dut):
 @cocotb.test()
 async def test_push_and_pop_pair_follow_two_cycle_stack_sequence(dut):
     push_fetch = await sample(dut, initial_state(opcode=0xC5, sp=0xFFF0, b=0x12, c=0x34), bus_resp=0xC5)
-    assert push_fetch["next_phase_kind"] == 7
-    assert push_fetch["next_phase_addr"] == 0xFFEF
-    assert push_fetch["next_phase_data"] == 0x12
-    assert push_fetch["next_phase_cont"] == 2
-    assert push_fetch["next_phase_cont_data"] == 0x34
-    assert push_fetch["next_phase_aux"] == 0xFFEE
+    assert push_fetch["next_phase_kind"] == 2
+    assert push_fetch["next_pc"] == 0x0101
 
-    push_hi = await sample(dut, follow_state(push_fetch), bus_resp=0x00)
+    push_execute = await sample(dut, follow_state(push_fetch), bus_resp=0x00)
+    assert push_execute["next_phase_kind"] == 7
+    assert push_execute["next_phase_addr"] == 0xFFEF
+    assert push_execute["next_phase_data"] == 0x12
+    assert push_execute["next_phase_cont"] == 2
+    assert push_execute["next_phase_cont_data"] == 0x34
+    assert push_execute["next_phase_aux"] == 0xFFEE
+
+    push_hi = await sample(dut, follow_state(push_execute), bus_resp=0x00)
     assert push_hi["bus_req_kind"] == 2
     assert push_hi["bus_req_addr"] == 0xFFEF
     assert push_hi["bus_req_data"] == 0x12
@@ -303,6 +307,7 @@ async def test_push_and_pop_pair_follow_two_cycle_stack_sequence(dut):
     assert pop_fetch["next_phase_kind"] == 6
     assert pop_fetch["next_phase_addr"] == 0xFFEE
     assert pop_fetch["next_phase_cont"] == 2
+    assert pop_fetch["next_phase_cont_data"] == 0
 
     pop_lo = await sample(dut, follow_state(pop_fetch), bus_resp=0x34)
     assert pop_lo["next_sp"] == 0xFFEF

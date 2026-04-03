@@ -1,10 +1,10 @@
 use std::option::Option;
 use lib::bus::types::{BusReq, idle_bus_req};
 use lib::cpu::alu::{AluReq, AluKind, alu};
-use lib::cpu::control::{aluish_fetch_phase, hl_post_adjust, loadish_fetch_phase, operand16_value, word_alu_fetch_phase};
+use lib::cpu::control::{aluish_fetch_phase, control_flow_fetch_pc_write, control_flow_fetch_phase, hl_post_adjust, loadish_fetch_phase, operand16_value, word_alu_fetch_phase};
 use lib::cpu::debug::{CommitKind, CommitTrace, MicroOutput};
 use lib::cpu::decode::decode;
-use lib::cpu::decode_types::{AddressingMode, BitOpKind, DecodedOp, MiscKind, Operand16, Operand8, StackOpKind, WordAluKind};
+use lib::cpu::decode_types::{AddressingMode, BitOpKind, ConditionCode, ControlTarget, DecodedOp, MiscKind, Operand16, Operand8, StackOpKind, WordAluKind};
 use lib::cpu::regs::{Flags, R8, RegPair, Registers, flags_from_f, get_r16, get_r8, mask_f, pack_flags};
 use lib::cpu::types::{
     CpuArchState,
@@ -435,6 +435,270 @@ fn execute_word_alu_delta(
     }
 }
 
+fn sign_extend_e8_u16(off: uint<8>) -> uint<16> {
+    if (off & 0x80u8) == 0x80u8 {
+        0xff00u16 | zext(off)
+    } else {
+        zext(off)
+    }
+}
+
+fn condition_matches(regs: Registers, condition: Option<ConditionCode>) -> bool {
+    let flags = flags_from_f(regs.f);
+
+    match condition {
+        Option::None => true,
+        Option::Some(value) => {
+            match value {
+                ConditionCode::Nz => !flags.z,
+                ConditionCode::Z => flags.z,
+                ConditionCode::Nc => !flags.c,
+                ConditionCode::C => flags.c,
+            }
+        },
+    }
+}
+
+fn fetch_imm_hi_seed(decoded: DecodedOp, phase_write: Option<Phase>) -> Option<uint<8>> {
+    match phase_write {
+        Option::Some(value) => {
+            match value {
+                Phase::Execute$(op) => {
+                    let _ = op;
+                    match decoded {
+                        DecodedOp::ControlFlow$(condition, target, addressing) => {
+                            let _ = addressing;
+                            match target {
+                                ControlTarget::Return$(enable_interrupts) => {
+                                    let _ = enable_interrupts;
+                                    match condition {
+                                        Option::Some(value) => {
+                                            let _ = value;
+                                            some_u8(1u8)
+                                        },
+                                        Option::None => Option::None,
+                                    }
+                                },
+                                _ => Option::None,
+                            }
+                        },
+                        _ => Option::None,
+                    }
+                },
+                _ => Option::None,
+            }
+        },
+        Option::None => Option::None,
+    }
+}
+
+fn execute_control_flow_delta(state: CpuState, condition: Option<ConditionCode>, target: ControlTarget, addressing: AddressingMode) -> CpuDelta {
+    let _ = addressing;
+    match target {
+        ControlTarget::Absolute$(target) => {
+            match target {
+                Operand16::Imm16 => {
+                    if condition_matches(state.arch.regs, condition) {
+                        CpuDelta(
+                            idle_reg_write_set(),
+                            some_u16(state.micro.temp),
+                            Option::None,
+                            Option::None,
+                            Option::None,
+                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, some_u16(state.micro.temp)),
+                        )
+                    } else {
+                        CpuDelta(
+                            idle_reg_write_set(),
+                            Option::None,
+                            Option::None,
+                            Option::None,
+                            Option::None,
+                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, Option::None),
+                        )
+                    }
+                },
+                Operand16::RegisterPair$(pair) => {
+                    let _ = pair;
+                    CpuDelta(
+                        idle_reg_write_set(),
+                        Option::None,
+                        Option::None,
+                        Option::None,
+                        Option::None,
+                        MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, Option::None),
+                    )
+                },
+                _ => idle_cpu_delta(),
+            }
+        },
+        ControlTarget::Relative => {
+            if condition_matches(state.arch.regs, condition) {
+                let target_pc = trunc(state.arch.regs.pc + sign_extend_e8_u16(state.micro.imm_lo));
+                CpuDelta(
+                    idle_reg_write_set(),
+                    some_u16(target_pc),
+                    Option::None,
+                    Option::None,
+                    Option::None,
+                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, some_u16(target_pc)),
+                )
+            } else {
+                CpuDelta(
+                    idle_reg_write_set(),
+                    Option::None,
+                    Option::None,
+                    Option::None,
+                    Option::None,
+                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, Option::None),
+                )
+            }
+        },
+        ControlTarget::Call$(target) => {
+            match target {
+                Operand16::Imm16 => {
+                    if condition_matches(state.arch.regs, condition) {
+                        let next_pc = state.arch.regs.pc;
+                        let target_hi = trunc(state.arch.regs.sp - 1u16);
+                        CpuDelta(
+                            idle_reg_write_set(),
+                            Option::None,
+                            Option::None,
+                            Option::None,
+                            Option::None,
+                            MicroWriteSet(
+                                some_phase(Phase::WriteMem$(addr: target_hi, data: hi_byte(next_pc), k: WriteCont::PushHi$(next_pc: next_pc))),
+                                Option::None,
+                                Option::None,
+                                some_u8(0u8),
+                                Option::None,
+                                some_u16(state.micro.temp),
+                            ),
+                        )
+                    } else {
+                        CpuDelta(
+                            idle_reg_write_set(),
+                            Option::None,
+                            Option::None,
+                            Option::None,
+                            Option::None,
+                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, Option::None),
+                        )
+                    }
+                },
+                _ => idle_cpu_delta(),
+            }
+        },
+        ControlTarget::Return$(enable_interrupts) => {
+            match condition {
+                Option::Some(value) => {
+                    let _ = value;
+                    match state.micro.imm_hi {
+                        1u8 => {
+                            if condition_matches(state.arch.regs, condition) {
+                                CpuDelta(
+                                    idle_reg_write_set(),
+                                    Option::None,
+                                    Option::None,
+                                    Option::None,
+                                    Option::None,
+                                    MicroWriteSet(
+                                        some_phase(Phase::ReadMem$(addr: state.arch.regs.sp, k: ReadCont::PopLo$(pair: RegPair::SP))),
+                                        Option::None,
+                                        Option::None,
+                                        some_u8(0u8),
+                                        Option::None,
+                                        Option::None,
+                                    ),
+                                )
+                            } else {
+                                CpuDelta(
+                                    idle_reg_write_set(),
+                                    Option::None,
+                                    Option::None,
+                                    Option::None,
+                                    Option::None,
+                                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, Option::None),
+                                )
+                            }
+                        },
+                        _ => CpuDelta(
+                            idle_reg_write_set(),
+                            some_u16(state.micro.temp),
+                            Option::None,
+                            if enable_interrupts { Option::Some(ImeState::Enabled) } else { Option::None },
+                            Option::None,
+                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, some_u16(state.micro.temp)),
+                        ),
+                    }
+                },
+                Option::None => CpuDelta(
+                    idle_reg_write_set(),
+                    some_u16(state.micro.temp),
+                    Option::None,
+                    if enable_interrupts { Option::Some(ImeState::Enabled) } else { Option::None },
+                    Option::None,
+                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, some_u16(state.micro.temp)),
+                ),
+            }
+        },
+        ControlTarget::Restart$(vector) => {
+            let next_pc = state.arch.regs.pc;
+            let target_hi = trunc(state.arch.regs.sp - 1u16);
+            let rst_target = zext(vector);
+            CpuDelta(
+                idle_reg_write_set(),
+                Option::None,
+                Option::None,
+                Option::None,
+                Option::None,
+                MicroWriteSet(
+                    some_phase(Phase::WriteMem$(addr: target_hi, data: hi_byte(next_pc), k: WriteCont::PushHi$(next_pc: next_pc))),
+                    Option::None,
+                    Option::None,
+                    some_u8(0u8),
+                    Option::None,
+                    some_u16(rst_target),
+                ),
+            )
+        },
+    }
+}
+
+fn execute_stack_delta(state: CpuState, kind: StackOpKind, pair: RegPair, addressing: AddressingMode) -> CpuDelta {
+    let _ = addressing;
+    match kind {
+        StackOpKind::Push => {
+            let pair_value = get_r16(state.arch.regs, pair);
+            let target_hi = trunc(state.arch.regs.sp - 1u16);
+            let target_lo = trunc(state.arch.regs.sp - 2u16);
+            CpuDelta(
+                idle_reg_write_set(),
+                Option::None,
+                Option::None,
+                Option::None,
+                Option::None,
+                MicroWriteSet(
+                    some_phase(Phase::WriteMem$(addr: target_hi, data: hi_byte(pair_value), k: WriteCont::PushLo$(low: lo_byte(pair_value), target: target_lo))),
+                    Option::None,
+                    Option::None,
+                    Option::None,
+                    Option::None,
+                    some_u16(pair_value),
+                ),
+            )
+        },
+        StackOpKind::Pop => CpuDelta(
+            idle_reg_write_set(),
+            Option::None,
+            Option::None,
+            Option::None,
+            Option::None,
+            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
+        ),
+    }
+}
+
 pub fn apply_delta(state: CpuState, delta: CpuDelta) -> CpuState {
     let next_pc = select_u16(delta.pc_write, state.arch.regs.pc);
     let next_sp = select_u16(delta.sp_write, state.arch.regs.sp);
@@ -612,6 +876,7 @@ fn fetch_delta(state: CpuState, opcode: uint<8>) -> CpuDelta {
     let decoded = decode(opcode);
     let reg_writes = direct_load_reg_writes(decoded, state.arch.regs);
     let sp_write = direct_load_sp_write(decoded, state.arch.regs);
+    let direct_pc_write = control_flow_fetch_pc_write(decoded, state.arch.regs);
     let phase_write = match direct_load_phase(decoded) {
         Option::Some(value) => Option::Some(value),
         Option::None => {
@@ -632,9 +897,19 @@ fn fetch_delta(state: CpuState, opcode: uint<8>) -> CpuDelta {
                         Option::Some(value) => Option::Some(value),
                         Option::None => {
                             let word_phase = word_alu_fetch_phase(decoded);
-                            match word_phase {
+                            let next_word_phase = match word_phase {
                                 Phase::Fetch => Option::None,
                                 _ => Option::Some(word_phase),
+                            };
+                            match next_word_phase {
+                                Option::Some(value) => Option::Some(value),
+                                Option::None => {
+                                    let flow_phase = control_flow_fetch_phase(decoded, state.arch.regs);
+                                    match flow_phase {
+                                        Phase::Fetch => Option::None,
+                                        _ => Option::Some(flow_phase),
+                                    }
+                                },
                             }
                         },
                     }
@@ -646,14 +921,17 @@ fn fetch_delta(state: CpuState, opcode: uint<8>) -> CpuDelta {
         phase_write,
         some_u8(opcode),
         Option::None,
-        Option::None,
+        fetch_imm_hi_seed(decoded, phase_write),
         some_decoded(decoded),
         Option::None,
     );
 
     CpuDelta(
         reg_writes,
-        some_u16(trunc(state.arch.regs.pc + 1u16)),
+        match direct_pc_write {
+            Option::Some(value) => Option::Some(value),
+            Option::None => some_u16(trunc(state.arch.regs.pc + 1u16)),
+        },
         sp_write,
         Option::None,
         Option::None,
@@ -766,6 +1044,27 @@ fn handle_read_imm8(state: CpuState, input: MicroInput, k: Imm8Cont) -> MicroOut
                 MicroWriteSet(some_phase(Phase::Execute$(op: state.micro.decoded)), Option::None, some_u8(imm), some_u8(0u8), Option::None, Option::None),
             )
         },
+        Imm8Cont::RelativeJump => {
+            let next_phase = match state.micro.decoded {
+                DecodedOp::ControlFlow$(condition, target, addressing) => {
+                    let _ = (target, addressing);
+                    if condition_matches(state.arch.regs, condition) {
+                        Phase::Execute$(op: state.micro.decoded)
+                    } else {
+                        Phase::Fetch
+                    }
+                },
+                _ => Phase::Fetch,
+            };
+            CpuDelta(
+                idle_reg_write_set(),
+                some_u16(trunc(state.arch.regs.pc + 1u16)),
+                Option::None,
+                Option::None,
+                Option::None,
+                MicroWriteSet(some_phase(next_phase), Option::None, some_u8(imm), some_u8(0u8), Option::None, Option::None),
+            )
+        },
         Imm8Cont::AluImm8$(kind) => {
             let _ = kind;
             CpuDelta(
@@ -789,6 +1088,8 @@ fn handle_read_imm16_lo(state: CpuState, input: MicroInput, k: Imm16Cont) -> Mic
     let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
     let next_phase = match k {
         Imm16Cont::LoadRegPair$(pair) => Phase::ReadImm16Hi$(lo: lo, k: Imm16HiCont::LoadRegPair$(pair: pair, lo: lo)),
+        Imm16Cont::JumpAbs => Phase::ReadImm16Hi$(lo: lo, k: Imm16HiCont::JumpAbs$(lo: lo)),
+        Imm16Cont::CallTarget => Phase::ReadImm16Hi$(lo: lo, k: Imm16HiCont::CallTarget$(lo: lo)),
         Imm16Cont::ReadAddrToA => Phase::ReadImm16Hi$(lo: lo, k: Imm16HiCont::ReadAddrToA$(lo: lo)),
         Imm16Cont::WriteAToAddr => Phase::ReadImm16Hi$(lo: lo, k: Imm16HiCont::WriteAToAddr$(lo: lo)),
         Imm16Cont::StoreSpToAddr => Phase::ReadImm16Hi$(lo: lo, k: Imm16HiCont::StoreSpToAddr$(lo: lo)),
@@ -831,6 +1132,48 @@ fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm1
                     MicroWriteSet(some_phase(Phase::Fetch), Option::None, some_u8(lo), some_u8(hi), Option::None, Option::None),
                 ),
             }
+        },
+        Imm16HiCont::JumpAbs$(lo) => {
+            let next_phase = match state.micro.decoded {
+                DecodedOp::ControlFlow$(condition, target, addressing) => {
+                    let _ = (target, addressing);
+                    if condition_matches(state.arch.regs, condition) {
+                        Phase::Execute$(op: state.micro.decoded)
+                    } else {
+                        Phase::Fetch
+                    }
+                },
+                _ => Phase::Fetch,
+            };
+            CpuDelta(
+                idle_reg_write_set(),
+                some_u16(trunc(state.arch.regs.pc + 1u16)),
+                Option::None,
+                Option::None,
+                Option::None,
+                MicroWriteSet(some_phase(next_phase), Option::None, some_u8(lo), some_u8(hi), Option::None, some_u16(addr)),
+            )
+        },
+        Imm16HiCont::CallTarget$(lo) => {
+            let next_phase = match state.micro.decoded {
+                DecodedOp::ControlFlow$(condition, target, addressing) => {
+                    let _ = (target, addressing);
+                    if condition_matches(state.arch.regs, condition) {
+                        Phase::Execute$(op: state.micro.decoded)
+                    } else {
+                        Phase::Fetch
+                    }
+                },
+                _ => Phase::Fetch,
+            };
+            CpuDelta(
+                idle_reg_write_set(),
+                some_u16(trunc(state.arch.regs.pc + 1u16)),
+                Option::None,
+                Option::None,
+                Option::None,
+                MicroWriteSet(some_phase(next_phase), Option::None, some_u8(lo), some_u8(hi), Option::None, some_u16(addr)),
+            )
         },
         Imm16HiCont::ReadAddrToA$(lo) => {
             CpuDelta(
@@ -971,6 +1314,42 @@ fn handle_read_mem(state: CpuState, input: MicroInput, addr: uint<16>, k: ReadCo
                 RegPair::SP => idle_reg_write_set(),
                 _ => reg_writes_for_pair(pair, value16),
             };
+            let next_phase = match pair {
+                RegPair::SP => {
+                    match state.micro.decoded {
+                        DecodedOp::ControlFlow$(condition, target, addressing) => {
+                            let _ = (condition, addressing);
+                            match target {
+                                ControlTarget::Return$(enable_interrupts) => {
+                                    let _ = enable_interrupts;
+                                    Phase::Execute$(op: state.micro.decoded)
+                                },
+                                _ => Phase::Fetch,
+                            }
+                        },
+                        _ => Phase::Fetch,
+                    }
+                },
+                _ => Phase::Fetch,
+            };
+            let next_imm_hi = match pair {
+                RegPair::SP => {
+                    match state.micro.decoded {
+                        DecodedOp::ControlFlow$(condition, target, addressing) => {
+                            let _ = (condition, addressing);
+                            match target {
+                                ControlTarget::Return$(enable_interrupts) => {
+                                    let _ = enable_interrupts;
+                                    some_u8(2u8)
+                                },
+                                _ => some_u8(0u8),
+                            }
+                        },
+                        _ => some_u8(0u8),
+                    }
+                },
+                _ => some_u8(0u8),
+            };
 
             CpuDelta(
                 writes,
@@ -978,7 +1357,7 @@ fn handle_read_mem(state: CpuState, input: MicroInput, addr: uint<16>, k: ReadCo
                 some_u16(next_sp),
                 Option::None,
                 Option::None,
-                MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, some_u16(value16)),
+                MicroWriteSet(some_phase(next_phase), Option::None, Option::None, next_imm_hi, Option::None, some_u16(value16)),
             )
         },
         ReadCont::AluFromMem$(kind) => {
@@ -1019,12 +1398,43 @@ fn handle_write_mem(state: CpuState, input: MicroInput, addr: uint<16>, data: ui
                         _ => Option::None,
                     }
                 },
+                DecodedOp::ControlFlow$(condition, target, addressing) => {
+                    let _ = (condition, addressing);
+                    match target {
+                        ControlTarget::Call$(target) => {
+                            let _ = target;
+                            some_u16(addr)
+                        },
+                        ControlTarget::Restart$(vector) => {
+                            let _ = vector;
+                            some_u16(addr)
+                        },
+                        _ => Option::None,
+                    }
+                },
+                _ => Option::None,
+            };
+            let pc_write = match state.micro.decoded {
+                DecodedOp::ControlFlow$(condition, target, addressing) => {
+                    let _ = (condition, addressing);
+                    match target {
+                        ControlTarget::Call$(target) => {
+                            let _ = target;
+                            some_u16(state.micro.temp)
+                        },
+                        ControlTarget::Restart$(vector) => {
+                            let _ = vector;
+                            some_u16(state.micro.temp)
+                        },
+                        _ => Option::None,
+                    }
+                },
                 _ => Option::None,
             };
 
             CpuDelta(
                 hl_writes,
-                Option::None,
+                pc_write,
                 sp_write,
                 Option::None,
                 Option::None,
@@ -1039,6 +1449,24 @@ fn handle_write_mem(state: CpuState, input: MicroInput, addr: uint<16>, data: ui
                 Option::None,
                 Option::None,
                 MicroWriteSet(some_phase(Phase::WriteMem$(addr: addr, data: data, k: WriteCont::StoreDone)), Option::None, Option::None, Option::None, Option::None, some_u16(addr)),
+            )
+        },
+        WriteCont::PushHi$(next_pc) => {
+            let target = trunc(addr - 1u16);
+            CpuDelta(
+                idle_reg_write_set(),
+                Option::None,
+                some_u16(addr),
+                Option::None,
+                Option::None,
+                MicroWriteSet(
+                    some_phase(Phase::WriteMem$(addr: target, data: lo_byte(next_pc), k: WriteCont::StoreDone)),
+                    Option::None,
+                    Option::None,
+                    Option::None,
+                    Option::None,
+                    some_u16(state.micro.temp),
+                ),
             )
         },
         WriteCont::PushLo$(low, target) => {
@@ -1186,6 +1614,8 @@ fn handle_execute(state: CpuState, input: MicroInput, op: DecodedOp) -> MicroOut
         DecodedOp::WordAlu$(kind, dst, src, addressing) => {
             execute_word_alu_delta(state, kind, dst, src, addressing)
         },
+        DecodedOp::Stack$(kind, pair, addressing) => execute_stack_delta(state, kind, pair, addressing),
+        DecodedOp::ControlFlow$(condition, target, addressing) => execute_control_flow_delta(state, condition, target, addressing),
         DecodedOp::Alu$(kind, dst, src, addressing) => execute_alu_delta(state, kind, dst, src, addressing),
         DecodedOp::Misc$(kind, addressing) => {
             let _ = addressing;

@@ -99,7 +99,7 @@ async def test_apply_delta_updates_only_selected_fields_and_masks_f(dut):
 
 @cocotb.test()
 async def test_step_mcycle_fetch_issues_read_and_advances_pc_delta(dut):
-    snapshot = await sample(dut, state_pc=0x0100, state_phase=0, bus_resp=0xC3)
+    snapshot = await sample(dut, state_pc=0x0100, state_phase=0, bus_resp=0x00)
 
     assert snapshot["step_commit_present"] is True
     assert snapshot["step_bus_req_kind"] == 1
@@ -108,7 +108,7 @@ async def test_step_mcycle_fetch_issues_read_and_advances_pc_delta(dut):
     assert snapshot["step_pc_write"] == 0x0101
     assert snapshot["step_phase_write_valid"] is False
     assert snapshot["step_opcode_write_valid"] is True
-    assert snapshot["step_opcode_write"] == 0xC3
+    assert snapshot["step_opcode_write"] == 0x00
 
 
 @cocotb.test()

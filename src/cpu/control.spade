@@ -1,5 +1,5 @@
 use std::option::Option;
-use lib::cpu::decode_types::{AddressingMode, BitOpKind, DecodedOp, MiscKind, Operand16, Operand8, StackOpKind, WordAluKind};
+use lib::cpu::decode_types::{AddressingMode, BitOpKind, ControlTarget, DecodedOp, MiscKind, Operand16, Operand8, StackOpKind, WordAluKind};
 use lib::cpu::regs::{Registers, get_r16, get_r8};
 use lib::cpu::types::{Imm16Cont, Imm16HiCont, Imm8Cont, Phase, ReadCont, WriteCont};
 
@@ -376,23 +376,6 @@ pub fn loadish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase {
                 _ => Phase::Fetch,
             }
         },
-        DecodedOp::Stack$(kind, pair, addressing) => {
-            let _ = addressing;
-            match kind {
-                StackOpKind::Push => {
-                    let pair_value = get_r16(regs, pair);
-                    let target_hi = trunc(regs.sp - 1u16);
-                    let target_lo = trunc(regs.sp - 2u16);
-
-                    Phase::WriteMem$(
-                        addr: target_hi,
-                        data: trunc(pair_value >> 8),
-                        k: WriteCont::PushLo$(low: trunc(pair_value), target: target_lo),
-                    )
-                },
-                StackOpKind::Pop => Phase::ReadMem$(addr: regs.sp, k: ReadCont::PopLo$(pair: pair)),
-            }
-        },
         _ => Phase::Fetch,
     }
 }
@@ -474,5 +457,84 @@ pub fn word_alu_fetch_phase(op: DecodedOp) -> Phase {
             }
         },
         _ => Phase::Fetch,
+    }
+}
+
+pub fn control_flow_fetch_phase(op: DecodedOp, regs: Registers) -> Phase {
+    match op {
+        DecodedOp::Stack$(kind, pair, addressing) => {
+            let _ = addressing;
+            match kind {
+                StackOpKind::Push => Phase::Execute$(op: op),
+                StackOpKind::Pop => Phase::ReadMem$(addr: regs.sp, k: ReadCont::PopLo$(pair: pair)),
+            }
+        },
+        DecodedOp::ControlFlow$(condition, target, addressing) => {
+            let _ = addressing;
+            match target {
+                ControlTarget::Absolute$(target) => {
+                    match target {
+                        Operand16::Imm16 => Phase::ReadImm16Lo$(k: Imm16Cont::JumpAbs),
+                        Operand16::RegisterPair$(pair) => {
+                            let _ = (condition, pair);
+                            Phase::Fetch
+                        },
+                        _ => Phase::Fetch,
+                    }
+                },
+                ControlTarget::Relative => Phase::ReadImm8$(k: Imm8Cont::RelativeJump),
+                ControlTarget::Call$(target) => {
+                    match target {
+                        Operand16::Imm16 => Phase::ReadImm16Lo$(k: Imm16Cont::CallTarget),
+                        _ => Phase::Fetch,
+                    }
+                },
+                ControlTarget::Return$(enable_interrupts) => {
+                    let _ = enable_interrupts;
+                    match condition {
+                        Option::Some(value) => {
+                            let _ = value;
+                            Phase::Execute$(op: op)
+                        },
+                        Option::None => Phase::ReadMem$(addr: regs.sp, k: ReadCont::PopLo$(pair: lib::cpu::regs::RegPair::SP)),
+                    }
+                },
+                ControlTarget::Restart$(vector) => {
+                    let _ = vector;
+                    Phase::Execute$(op: op)
+                },
+            }
+        },
+        _ => Phase::Fetch,
+    }
+}
+
+pub fn control_flow_fetch_pc_write(op: DecodedOp, regs: Registers) -> Option<uint<16>> {
+    match op {
+        DecodedOp::ControlFlow$(condition, target, addressing) => {
+            match target {
+                ControlTarget::Absolute$(target) => {
+                    match addressing {
+                        AddressingMode::Register16 => {
+                            match condition {
+                                Option::None => {
+                                    match target {
+                                        Operand16::RegisterPair$(pair) => Option::Some(get_r16(regs, pair)),
+                                        _ => Option::None,
+                                    }
+                                },
+                                Option::Some(value) => {
+                                    let _ = value;
+                                    Option::None
+                                },
+                            }
+                        },
+                        _ => Option::None,
+                    }
+                },
+                _ => Option::None,
+            }
+        },
+        _ => Option::None,
     }
 }

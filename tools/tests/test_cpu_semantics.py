@@ -9,6 +9,7 @@ CPU_MAIN_PATH = ROOT / "src" / "cpu" / "main.spade"
 CPU_CONTROL_PATH = ROOT / "src" / "cpu" / "control.spade"
 CPU_SEMANTICS_PATH = ROOT / "src" / "cpu" / "semantics.spade"
 CPU_SEMANTICS_ALU_TOP_PATH = ROOT / "src" / "cpu" / "semantics_alu_test_top.spade"
+CPU_SEMANTICS_FLOW_TOP_PATH = ROOT / "src" / "cpu" / "semantics_flow_test_top.spade"
 CPU_SEMANTICS_LOAD_TOP_PATH = ROOT / "src" / "cpu" / "semantics_load_test_top.spade"
 CPU_SEMANTICS_TOP_PATH = ROOT / "src" / "cpu" / "semantics_test_top.spade"
 CPU_SEMANTICS_WORDALU_TOP_PATH = ROOT / "src" / "cpu" / "semantics_wordalu_test_top.spade"
@@ -21,6 +22,7 @@ class CpuSemanticsContractTest(unittest.TestCase):
         self.assertIn("pub mod control;", text)
         self.assertIn("pub mod semantics;", text)
         self.assertIn("pub mod semantics_alu_test_top;", text)
+        self.assertIn("pub mod semantics_flow_test_top;", text)
         self.assertIn("pub mod semantics_load_test_top;", text)
         self.assertIn("pub mod semantics_test_top;", text)
         self.assertIn("pub mod semantics_wordalu_test_top;", text)
@@ -31,13 +33,18 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "pub fn hl_post_adjust(regs: Registers, addressing: AddressingMode) -> uint<16>",
             "pub fn loadish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase",
             "pub fn aluish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase",
+            "pub fn control_flow_fetch_phase(op: DecodedOp, regs: Registers) -> Phase",
+            "pub fn control_flow_fetch_pc_write(op: DecodedOp, regs: Registers) -> Option<uint<16>>",
             "pub fn word_alu_fetch_phase(op: DecodedOp) -> Phase",
             "Imm8Cont::AluImm8",
+            "Imm8Cont::RelativeJump",
             "Imm8Cont::AddSpDisp",
+            "Imm16Cont::JumpAbs",
+            "Imm16Cont::CallTarget",
             "ReadCont::AluFromMem",
+            "ReadCont::PopLo",
             "Imm8Cont::StoreToHl",
             "Imm16Cont::StoreSpToAddr",
-            "WriteCont::PushLo",
         ]:
             self.assertIn(symbol, text)
 
@@ -57,11 +64,24 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "fn execute_alu_delta(state: CpuState, kind: AluKind, dst: Operand8, src: Operand8, addressing: AddressingMode) -> CpuDelta",
             "fn execute_misc_delta(state: CpuState, kind: MiscKind) -> CpuDelta",
             "fn execute_bitop_delta(",
+            "fn execute_control_flow_delta(",
+            "fn execute_stack_delta(",
+            "fn condition_matches(regs: Registers, condition: Option<ConditionCode>) -> bool",
+            "fn fetch_imm_hi_seed(decoded: DecodedOp, phase_write: Option<Phase>) -> Option<uint<8>>",
             "fn execute_word_alu_delta(",
             "ReadCont::AluFromMem$(kind)",
             "Imm8Cont::AluImm8$(kind)",
+            "Imm8Cont::RelativeJump =>",
             "Imm8Cont::AddSpDisp =>",
+            "Imm16Cont::JumpAbs =>",
+            "Imm16Cont::CallTarget =>",
+            "Imm16HiCont::JumpAbs$(lo) =>",
+            "Imm16HiCont::CallTarget$(lo) =>",
+            "WriteCont::PushHi$(next_pc) =>",
+            "ControlTarget::Return$(enable_interrupts)",
             "aluish_fetch_phase(decoded, state.arch.regs)",
+            "control_flow_fetch_pc_write(decoded, state.arch.regs)",
+            "control_flow_fetch_phase(decoded, state.arch.regs)",
             "word_alu_fetch_phase(decoded)",
             "BusReq::Read$(addr: state.arch.regs.pc)",
             "some_u16(trunc(state.arch.regs.pc + 1u16))",
@@ -74,6 +94,21 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "Phase::ReadMem$(addr, k) => handle_read_mem(state, input, addr, k)",
             "Phase::WriteMem$(addr, data, k) => handle_write_mem(state, input, addr, data, k)",
             "Phase::Execute$(op) => handle_execute(state, input, op)",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_semantics_flow_test_top_exposes_controlflow_projection_surface(self) -> None:
+        text = CPU_SEMANTICS_FLOW_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "entity semantics_flow_test_top(",
+            "state_ime_i: uint<2>",
+            "Imm8Cont::RelativeJump",
+            "Imm16Cont::JumpAbs",
+            "Imm16Cont::CallTarget",
+            "WriteCont::PushHi",
+            "fn ime_code(ime: ImeState) -> uint<2>",
+            "zext(ime_code(next_state.arch.ime_state)) << 152",
+            "zext(next_state.micro.imm_hi) << 128",
         ]:
             self.assertIn(symbol, text)
 
