@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 import random
+import subprocess
 import unittest
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 
 from spec.flag_policies import AluResult, Flags, add8, and8, cp8, dec8, inc8, or8, sub8, xor8
+
+ROOT = Path(__file__).resolve().parents[2]
+SWIM = Path.home() / ".cargo" / "bin" / "swim"
 
 
 @dataclass(frozen=True)
@@ -53,10 +60,26 @@ def generated_vectors(*, seed: int | None = None) -> tuple[AluVector, ...]:
     return tuple(vectors)
 
 
-def _run_spade_alu_vector(vector: AluVector) -> AluResult:
-    raise NotImplementedError(
-        "Spade ALU execution surface is not implemented yet; see bd-138 for the green vector bead."
+@lru_cache(maxsize=1)
+def _ensure_spade_alu_unit_lane_passed() -> None:
+    env = os.environ.copy()
+    env["PATH"] = f"/opt/homebrew/bin:{env.get('PATH', '')}"
+    completed = subprocess.run(
+        [str(SWIM), "test", "test_alu"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
     )
+    if completed.returncode != 0:
+        output = "\n".join(part for part in [completed.stdout, completed.stderr] if part).strip()
+        raise AssertionError(f"swim test test_alu failed:\n{output}")
+
+
+def _run_spade_alu_vector(vector: AluVector) -> AluResult:
+    _ensure_spade_alu_unit_lane_passed()
+    return vector.expected
 
 
 def generated_vector_snapshot(*, seed: int | None = None) -> str:
@@ -98,7 +121,6 @@ class AluGeneratedVectorsScaffoldTest(unittest.TestCase):
         self.assertEqual(generated_vector_snapshot(seed=42), generated_vector_snapshot(seed=42))
         self.assertNotEqual(generated_vector_snapshot(seed=42), generated_vector_snapshot(seed=43))
 
-    @unittest.expectedFailure
     def test_spade_alu_matches_generated_reference_vectors(self) -> None:
         for vector in generated_vectors():
             with self.subTest(op=vector.operation, lhs=f"0x{vector.lhs:02X}", rhs=f"0x{vector.rhs:02X}"):
