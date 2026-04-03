@@ -120,6 +120,12 @@ class LocalEntrypointsTest(unittest.TestCase):
     def test_oracle_smoke_main_round_trips_snapshot(self) -> None:
         oracle_smoke_main()
 
+    def test_precommit_runs_live_swim_tests_serially(self) -> None:
+        text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
+        self.assertIn("find test -type f -name 'test_*.py' | sort", text)
+        self.assertIn('label="$(basename "${test_file%.py}")"', text)
+        self.assertIn('"$SWIM" test "$label"', text)
+
 
 if __name__ == "__main__":
     unittest.main()

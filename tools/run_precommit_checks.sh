@@ -128,7 +128,12 @@ if find test -type f -name 'test_*.py' -print -quit | grep -q .; then
             exit 1
         fi
         echo -n "Running tests... "
-        if test_output=$("$SWIM" test test_ 2>&1); then
+        if test_output=$(
+            while IFS= read -r test_file; do
+                label="$(basename "${test_file%.py}")"
+                "$SWIM" test "$label"
+            done < <(find test -type f -name 'test_*.py' | sort)
+        2>&1); then
             echo -e "${GREEN}OK${NC}"
         else
             echo -e "${RED}FAILED${NC}"

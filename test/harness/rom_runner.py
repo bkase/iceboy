@@ -162,6 +162,40 @@ async def run_dut_to_abi_result(
     raise TimeoutError(f"DUT did not finish within {max_mcycles} M-cycles")
 
 
+async def assert_rom_matches_pyboy_signature(
+    driver: Any,
+    *,
+    rom_id: str,
+    max_mcycles: int = 20000,
+) -> DutTerminalState:
+    entry = load_manifest_entry(rom_id)
+    expected_labels, expected_abi = run_oracle_to_terminal(entry, build_manifest(entry))
+    actual = await run_dut_to_abi_result(
+        driver,
+        rom_bytes=entry.rom_path.read_bytes(),
+        max_mcycles=min(entry.timeout_commits, max_mcycles),
+    )
+
+    if "__pass" not in expected_labels[-1]:
+        raise AssertionError(f"PyBoy oracle did not pass for {rom_id}: {expected_labels}")
+    if actual.abi.result != ABI_RESULT_PASS:
+        raise AssertionError(
+            f"{rom_id} DUT ended with ABI result 0x{actual.abi.result:02X} "
+            f"after {actual.cycles} cycles; expected terminal labels {expected_labels}"
+        )
+    if actual.abi.signature != expected_abi.signature:
+        raise AssertionError(
+            f"{rom_id} signature mismatch\n"
+            f"expected={expected_abi.signature.hex()}\n"
+            f"actual={actual.abi.signature.hex()}"
+        )
+    if actual.abi.log != expected_abi.log:
+        raise AssertionError(
+            f"{rom_id} log mismatch\nexpected={expected_abi.log.hex()}\nactual={actual.abi.log.hex()}"
+        )
+    return actual
+
+
 def run_oracle_to_terminal(
     entry: RomManifestEntry,
     manifest: HookManifest,

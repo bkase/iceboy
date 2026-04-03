@@ -12,9 +12,7 @@ for entry in [ROOT, ROOT / "test" / "harness"]:
         sys.path.insert(0, str(entry))
 
 from fixtures import cpu_dut
-from rom_runner import (
-    assert_rom_matches_pyboy_signature,
-)
+from rom_runner import assert_rom_matches_pyboy_signature
 from spec.profiles import ResetProfile
 
 
@@ -22,7 +20,7 @@ warnings.filterwarnings("ignore", message="Using SDL2 binaries from pysdl2-dll.*
 
 
 @cocotb.test()
-async def test_loads_basic_rom_matches_pyboy_signature(dut):
+async def test_alu_flags_rom_matches_pyboy_signature(dut):
     driver = cpu_dut(dut)
     await driver.reset(ResetProfile.SkipBoot)
-    await assert_rom_matches_pyboy_signature(driver, rom_id="LOADS_BASIC")
+    await assert_rom_matches_pyboy_signature(driver, rom_id="ALU_FLAGS")
