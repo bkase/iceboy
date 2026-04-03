@@ -174,7 +174,7 @@ roms:
     model_profile: DMG
     reset_profile: SkipBoot
     requires: [cpu]
-    oracle_mode: instr_commit
+    oracle_mode: mcycle_commit
     memory_behavior_profile: DmgConservative
     timeout_commits: 400000
     checkpoint_symbols: [__checkpoint_ei_nop, __checkpoint_ei_di, __checkpoint_reti]

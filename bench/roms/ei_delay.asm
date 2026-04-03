@@ -50,9 +50,6 @@ Entry:
     ld sp, $FFFE
     call InitAbiSignature
     xor a
-    ld [rTAC], a
-    ld [rTIMA], a
-    ld [rTMA], a
     ld [rIF], a
     ld a, IEF_TIMER
     ld [rIE], a
@@ -62,10 +59,9 @@ __checkpoint_ei_nop:
     ld a, SCENARIO_EI_NOP
     ld [wDebugCounters + 5], a
     ld a, IEF_TIMER
-    ld [rIF], a
     ei
-    nop
-.after_ei_nop:
+    ld [rIF], a
+.after_ei_request:
     nop
     ld a, [wDebugCounters + 0]
     cp 1
@@ -77,19 +73,19 @@ __checkpoint_ei_nop:
     jp FailTest
 .ei_nop_count_ok:
     ld a, [wDebugCounters + 1]
-    cp LOW(.after_ei_nop)
+    cp LOW(.after_ei_request)
     jr z, .ei_nop_lo_ok
     ld b, TEST_EI_NOP
-    ld d, LOW(.after_ei_nop)
+    ld d, LOW(.after_ei_request)
     ld e, a
     ld c, $02
     jp FailTest
 .ei_nop_lo_ok:
     ld a, [wDebugCounters + 2]
-    cp HIGH(.after_ei_nop)
+    cp HIGH(.after_ei_request)
     jr z, .ei_nop_done
     ld b, TEST_EI_NOP
-    ld d, HIGH(.after_ei_nop)
+    ld d, HIGH(.after_ei_request)
     ld e, a
     ld c, $03
     jp FailTest
@@ -101,10 +97,10 @@ __checkpoint_ei_di:
     call ClearTrace
     ld a, SCENARIO_EI_DI
     ld [wDebugCounters + 5], a
-    ld a, IEF_TIMER
-    ld [rIF], a
     ei
     di
+    ld a, IEF_TIMER
+    ld [rIF], a
     nop
     nop
     ld a, [wDebugCounters + 0]
@@ -133,11 +129,10 @@ __checkpoint_reti:
     call ClearTrace
     ld a, SCENARIO_RETI_CHAIN
     ld [wDebugCounters + 5], a
-    ld a, IEF_TIMER
-    ld [rIF], a
-    ei
-    nop
-.after_reti_chain:
+    ld hl, .reti_slot
+    push hl
+    jp TimerVector
+.reti_slot:
     nop
     ld a, [wDebugCounters + 0]
     cp 2
@@ -149,37 +144,37 @@ __checkpoint_reti:
     jp FailTest
 .reti_count_ok:
     ld a, [wDebugCounters + 1]
-    cp LOW(.after_reti_chain)
+    cp LOW(.reti_slot)
     jr z, .reti_lo0_ok
     ld b, TEST_RETI_CHAIN
-    ld d, LOW(.after_reti_chain)
+    ld d, LOW(.reti_slot)
     ld e, a
     ld c, $07
     jp FailTest
 .reti_lo0_ok:
     ld a, [wDebugCounters + 2]
-    cp HIGH(.after_reti_chain)
+    cp HIGH(.reti_slot)
     jr z, .reti_hi0_ok
     ld b, TEST_RETI_CHAIN
-    ld d, HIGH(.after_reti_chain)
+    ld d, HIGH(.reti_slot)
     ld e, a
     ld c, $08
     jp FailTest
 .reti_hi0_ok:
     ld a, [wDebugCounters + 3]
-    cp LOW(.after_reti_chain)
+    cp LOW(.reti_slot)
     jr z, .reti_lo1_ok
     ld b, TEST_RETI_CHAIN
-    ld d, LOW(.after_reti_chain)
+    ld d, LOW(.reti_slot)
     ld e, a
     ld c, $09
     jp FailTest
 .reti_lo1_ok:
     ld a, [wDebugCounters + 4]
-    cp HIGH(.after_reti_chain)
+    cp HIGH(.reti_slot)
     jr z, .pass
     ld b, TEST_RETI_CHAIN
-    ld d, HIGH(.after_reti_chain)
+    ld d, HIGH(.reti_slot)
     ld e, a
     ld c, $0A
     jp FailTest

@@ -64,7 +64,7 @@ class SimulationProfilesTest(unittest.TestCase):
                 "__checkpoint_reti",
             ],
         )
-        self.assertEqual(roms["EI_DELAY"]["oracle_mode"], "instr_commit")
+        self.assertEqual(roms["EI_DELAY"]["oracle_mode"], "mcycle_commit")
 
         self.assertEqual(
             roms["TIMER_IRQ_HALT"]["checkpoint_symbols"],
