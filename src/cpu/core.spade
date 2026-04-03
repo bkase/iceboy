@@ -1,5 +1,7 @@
-use lib::bus::types::BusResp;
-use lib::cpu::types::IrqPending;
+use lib::bus::types::{BusReq, BusResp};
+use lib::cpu::regs::Registers;
+use lib::cpu::semantics::{apply_delta, step_mcycle};
+use lib::cpu::types::{CpuArchState, CpuMicroState, CpuState, HaltState, ImeState, IrqPending, MicroInput, initial_cpu_micro_state};
 
 pub struct CpuCoreOut {
     commit_seq: uint<64>,
@@ -13,6 +15,39 @@ fn skipboot_pc() -> uint<16> {
     0x0100u16
 }
 
+fn skipboot_sp() -> uint<16> {
+    0xfffeu16
+}
+
+fn skipboot_arch_state() -> CpuArchState {
+    let regs = Registers(0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, skipboot_sp(), skipboot_pc());
+    CpuArchState(regs, ImeState::Disabled, HaltState::Running)
+}
+
+fn bus_req_kind(req: BusReq) -> uint<2> {
+    match req {
+        BusReq::Idle => 0u2,
+        BusReq::Read$(addr: _) => 1u2,
+        BusReq::Write$(addr: _, data: _) => 2u2,
+    }
+}
+
+fn bus_req_addr(req: BusReq) -> uint<16> {
+    match req {
+        BusReq::Idle => 0u16,
+        BusReq::Read$(addr: addr) => addr,
+        BusReq::Write$(addr: addr, data: _) => addr,
+    }
+}
+
+fn bus_req_data(req: BusReq) -> uint<8> {
+    match req {
+        BusReq::Idle => 0u8,
+        BusReq::Read$(addr: _) => 0u8,
+        BusReq::Write$(addr: _, data: data) => data,
+    }
+}
+
 pub entity cpu_core(
     clk: clock,
     rst: bool,
@@ -20,18 +55,24 @@ pub entity cpu_core(
     bus_resp: BusResp,
     irq_pending: IrqPending,
 ) -> CpuCoreOut {
-    let _ = (bus_resp, irq_pending);
-
-    reg(clk) pc: uint<16> reset(rst: skipboot_pc()) =
-        if m_ce { trunc(pc + 1u16) } else { pc };
+    decl arch_state;
+    decl micro_state;
+    let state = CpuState(arch_state, micro_state);
+    let step = step_mcycle(state, MicroInput(bus_resp, irq_pending));
+    let next_state = apply_delta(state, step.delta);
+    reg(clk) arch_state: CpuArchState reset(rst: skipboot_arch_state()) =
+        if m_ce { next_state.arch } else { arch_state };
+    reg(clk) micro_state: CpuMicroState reset(rst: initial_cpu_micro_state()) =
+        if m_ce { next_state.micro } else { micro_state };
     reg(clk) commit_seq: uint<64> reset(rst: 0u64) =
         if m_ce { trunc(commit_seq + 1u64) } else { commit_seq };
+    let visible_bus_req = if m_ce { step.bus_req } else { BusReq::Idle };
 
     CpuCoreOut$(
         commit_seq: if m_ce { trunc(commit_seq + 1u64) } else { commit_seq },
-        pc: if m_ce { trunc(pc + 1u16) } else { pc },
-        bus_req_kind: 0u2,
-        bus_req_addr: 0u16,
-        bus_req_data: 0u8,
+        pc: if m_ce { next_state.arch.regs.pc } else { arch_state.regs.pc },
+        bus_req_kind: bus_req_kind(visible_bus_req),
+        bus_req_addr: bus_req_addr(visible_bus_req),
+        bus_req_data: bus_req_data(visible_bus_req),
     )
 }

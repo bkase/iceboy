@@ -1,0 +1,172 @@
+use std::option::Option;
+use lib::bus::types::{BusReq, BusResp};
+use lib::cpu::decode_types::invalid_decoded_op;
+use lib::cpu::regs::Registers;
+use lib::cpu::semantics::{apply_delta, step_mcycle};
+use lib::cpu::types::{
+    CpuArchState,
+    CpuDelta,
+    CpuMicroState,
+    CpuState,
+    HaltState,
+    ImeState,
+    IrqPending,
+    MicroInput,
+    MicroWriteSet,
+    Phase,
+    RegWriteSet,
+};
+
+fn phase_from_code(code: uint<2>) -> Phase {
+    match code {
+        1u2 => Phase::Halted,
+        2u2 => Phase::Execute$(op: invalid_decoded_op()),
+        _ => Phase::Fetch,
+    }
+}
+
+fn phase_code(phase: Phase) -> uint<2> {
+    match phase {
+        Phase::Fetch => 0u2,
+        Phase::Halted => 1u2,
+        Phase::Execute$(op: _) => 2u2,
+        _ => 3u2,
+    }
+}
+
+fn bus_req_kind(req: BusReq) -> uint<2> {
+    match req {
+        BusReq::Idle => 0u2,
+        BusReq::Read$(addr: _) => 1u2,
+        BusReq::Write$(addr: _, data: _) => 2u2,
+    }
+}
+
+fn bus_req_addr(req: BusReq) -> uint<16> {
+    match req {
+        BusReq::Idle => 0u16,
+        BusReq::Read$(addr: addr) => addr,
+        BusReq::Write$(addr: addr, data: _) => addr,
+    }
+}
+
+fn state_from_inputs(pc: uint<16>, sp: uint<16>, a: uint<8>, f: uint<8>, opcode_latch: uint<8>, phase_code_i: uint<2>) -> CpuState {
+    let regs = Registers(a, f, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, sp, pc);
+    let arch = CpuArchState(regs, ImeState::Disabled, HaltState::Running);
+    let micro = CpuMicroState(phase_from_code(phase_code_i), opcode_latch, 0u8, 0u8, invalid_decoded_op(), 0u16);
+    CpuState(arch, micro)
+}
+
+fn maybe_u8(en: bool, value: uint<8>) -> Option<uint<8>> {
+    if en { Option::Some(value) } else { Option::None }
+}
+
+fn maybe_u16(en: bool, value: uint<16>) -> Option<uint<16>> {
+    if en { Option::Some(value) } else { Option::None }
+}
+
+fn maybe_phase(en: bool, code: uint<2>) -> Option<Phase> {
+    if en { Option::Some(phase_from_code(code)) } else { Option::None }
+}
+
+entity semantics_test_top(
+    state_pc_i: uint<16>,
+    state_sp_i: uint<16>,
+    state_a_i: uint<8>,
+    state_f_i: uint<8>,
+    state_opcode_i: uint<8>,
+    state_phase_i: uint<2>,
+    bus_resp_i: uint<8>,
+    irq_pending_i: uint<5>,
+    delta_a_we_i: bool,
+    delta_a_i: uint<8>,
+    delta_f_we_i: bool,
+    delta_f_i: uint<8>,
+    delta_pc_we_i: bool,
+    delta_pc_i: uint<16>,
+    delta_phase_we_i: bool,
+    delta_phase_i: uint<2>,
+    delta_opcode_we_i: bool,
+    delta_opcode_i: uint<8>,
+) -> uint<128> {
+    let state = state_from_inputs(
+        state_pc_i,
+        state_sp_i,
+        state_a_i,
+        state_f_i,
+        state_opcode_i,
+        state_phase_i,
+    );
+    let reg_writes = RegWriteSet(
+        maybe_u8(delta_a_we_i, delta_a_i),
+        maybe_u8(delta_f_we_i, delta_f_i),
+        Option::None,
+        Option::None,
+        Option::None,
+        Option::None,
+        Option::None,
+        Option::None,
+    );
+    let micro_writes = MicroWriteSet(
+        maybe_phase(delta_phase_we_i, delta_phase_i),
+        maybe_u8(delta_opcode_we_i, delta_opcode_i),
+        Option::None,
+        Option::None,
+        Option::None,
+        Option::None,
+    );
+    let delta = CpuDelta(
+        reg_writes,
+        maybe_u16(delta_pc_we_i, delta_pc_i),
+        Option::None,
+        Option::None,
+        Option::None,
+        micro_writes,
+    );
+    let applied = apply_delta(state, delta);
+    let step = step_mcycle(state, MicroInput(BusResp$(data: bus_resp_i), IrqPending$(pending: irq_pending_i)));
+    let step_pc_write = match step.delta.pc_write {
+        Option::Some(value) => value,
+        Option::None => 0u16,
+    };
+    let step_phase_write = match step.delta.micro_write.phase {
+        Option::Some(value) => phase_code(value),
+        Option::None => 0u2,
+    };
+    let step_opcode_write = match step.delta.micro_write.opcode_latch {
+        Option::Some(value) => value,
+        Option::None => 0u8,
+    };
+    let commit_present = match step.commit {
+        Option::Some(value) => { let _ = value; true },
+        Option::None => false,
+    };
+    let pc_write_valid = match step.delta.pc_write {
+        Option::Some(value) => { let _ = value; true },
+        Option::None => false,
+    };
+    let phase_write_valid = match step.delta.micro_write.phase {
+        Option::Some(value) => { let _ = value; true },
+        Option::None => false,
+    };
+    let opcode_write_valid = match step.delta.micro_write.opcode_latch {
+        Option::Some(value) => { let _ = value; true },
+        Option::None => false,
+    };
+
+    (zext(applied.arch.regs.pc) << 112)
+    | (zext(applied.arch.regs.sp) << 96)
+    | (zext(applied.arch.regs.a) << 88)
+    | (zext(applied.arch.regs.f) << 80)
+    | (zext(phase_code(applied.micro.phase)) << 78)
+    | (zext(applied.micro.opcode_latch) << 70)
+    | ((if commit_present { 1u128 } else { 0u128 }) << 69)
+    | (zext(bus_req_kind(step.bus_req)) << 67)
+    | (zext(bus_req_addr(step.bus_req)) << 51)
+    | ((if pc_write_valid { 1u128 } else { 0u128 }) << 50)
+    | (zext(step_pc_write) << 34)
+    | ((if phase_write_valid { 1u128 } else { 0u128 }) << 33)
+    | (zext(step_phase_write) << 31)
+    | ((if opcode_write_valid { 1u128 } else { 0u128 }) << 30)
+    | (zext(step_opcode_write) << 22)
+}

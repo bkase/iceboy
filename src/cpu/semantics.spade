@@ -1,0 +1,171 @@
+use std::option::Option;
+use lib::bus::types::{BusReq, idle_bus_req};
+use lib::cpu::debug::{CommitKind, CommitTrace, MicroOutput};
+use lib::cpu::decode_types::DecodedOp;
+use lib::cpu::regs::{Registers, mask_f};
+use lib::cpu::types::{
+    CpuArchState,
+    CpuDelta,
+    CpuMicroState,
+    CpuState,
+    HaltState,
+    ImeState,
+    MicroInput,
+    MicroWriteSet,
+    Phase,
+    RegWriteSet,
+    idle_cpu_delta,
+    idle_reg_write_set,
+};
+
+fn select_u8(write: Option<uint<8>>, current: uint<8>) -> uint<8> {
+    match write {
+        Option::Some(value) => value,
+        Option::None => current,
+    }
+}
+
+fn select_u16(write: Option<uint<16>>, current: uint<16>) -> uint<16> {
+    match write {
+        Option::Some(value) => value,
+        Option::None => current,
+    }
+}
+
+fn select_phase(write: Option<Phase>, current: Phase) -> Phase {
+    match write {
+        Option::Some(value) => value,
+        Option::None => current,
+    }
+}
+
+fn select_decoded(write: Option<DecodedOp>, current: DecodedOp) -> DecodedOp {
+    match write {
+        Option::Some(value) => value,
+        Option::None => current,
+    }
+}
+
+fn select_ime(write: Option<ImeState>, current: ImeState) -> ImeState {
+    match write {
+        Option::Some(value) => value,
+        Option::None => current,
+    }
+}
+
+fn select_halt(write: Option<HaltState>, current: HaltState) -> HaltState {
+    match write {
+        Option::Some(value) => value,
+        Option::None => current,
+    }
+}
+
+fn apply_reg_writes(regs: Registers, writes: RegWriteSet, pc: uint<16>, sp: uint<16>) -> Registers {
+    Registers(
+        select_u8(writes.a, regs.a),
+        mask_f(select_u8(writes.f, regs.f)),
+        select_u8(writes.b, regs.b),
+        select_u8(writes.c, regs.c),
+        select_u8(writes.d, regs.d),
+        select_u8(writes.e, regs.e),
+        select_u8(writes.h, regs.h),
+        select_u8(writes.l, regs.l),
+        sp,
+        pc,
+    )
+}
+
+fn apply_micro_writes(micro: CpuMicroState, writes: MicroWriteSet) -> CpuMicroState {
+    CpuMicroState(
+        select_phase(writes.phase, micro.phase),
+        select_u8(writes.opcode_latch, micro.opcode_latch),
+        select_u8(writes.imm_lo, micro.imm_lo),
+        select_u8(writes.imm_hi, micro.imm_hi),
+        select_decoded(writes.decoded, micro.decoded),
+        select_u16(writes.temp, micro.temp),
+    )
+}
+
+pub fn apply_delta(state: CpuState, delta: CpuDelta) -> CpuState {
+    let next_pc = select_u16(delta.pc_write, state.arch.regs.pc);
+    let next_sp = select_u16(delta.sp_write, state.arch.regs.sp);
+    let next_regs = apply_reg_writes(state.arch.regs, delta.regs_write, next_pc, next_sp);
+    let next_arch = CpuArchState(
+        next_regs,
+        select_ime(delta.ime_write, state.arch.ime_state),
+        select_halt(delta.halt_write, state.arch.halt_state),
+    );
+    let next_micro = apply_micro_writes(state.micro, delta.micro_write);
+
+    CpuState(next_arch, next_micro)
+}
+
+fn make_commit(state: CpuState, input: MicroInput, bus_req: BusReq, delta: CpuDelta, opcode: Option<uint<8>>) -> CommitTrace {
+    let next_state = apply_delta(state, delta);
+
+    CommitTrace(
+        1u16,
+        CommitKind::MCycle,
+        0u64,
+        state.arch.regs.pc,
+        opcode,
+        next_state.arch,
+        next_state.micro.phase,
+        bus_req,
+        input.bus_resp,
+        Option::None,
+        Option::None,
+    )
+}
+
+fn fetch_delta(state: CpuState, input: MicroInput) -> CpuDelta {
+    let micro_write = MicroWriteSet(
+        Option::None,
+        Option::Some(input.bus_resp.data),
+        Option::None,
+        Option::None,
+        Option::None,
+        Option::None,
+    );
+
+    CpuDelta(
+        idle_reg_write_set(),
+        Option::Some(trunc(state.arch.regs.pc + 1u16)),
+        Option::None,
+        Option::None,
+        Option::None,
+        micro_write,
+    )
+}
+
+fn handle_fetch(state: CpuState, input: MicroInput) -> MicroOutput {
+    let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
+    let delta = fetch_delta(state, input);
+    let commit = make_commit(state, input, bus_req, delta, Option::Some(input.bus_resp.data));
+
+    MicroOutput(delta, bus_req, Option::Some(commit), Option::None)
+}
+
+fn handle_halted(state: CpuState, input: MicroInput) -> MicroOutput {
+    let delta = idle_cpu_delta();
+    let bus_req = idle_bus_req();
+    let commit = make_commit(state, input, bus_req, delta, Option::None);
+
+    MicroOutput(delta, bus_req, Option::Some(commit), Option::None)
+}
+
+fn handle_passthrough(state: CpuState, input: MicroInput) -> MicroOutput {
+    let delta = idle_cpu_delta();
+    let bus_req = idle_bus_req();
+    let commit = make_commit(state, input, bus_req, delta, Option::None);
+
+    MicroOutput(delta, bus_req, Option::Some(commit), Option::None)
+}
+
+pub fn step_mcycle(state: CpuState, input: MicroInput) -> MicroOutput {
+    match state.micro.phase {
+        Phase::Fetch => handle_fetch(state, input),
+        Phase::Halted => handle_halted(state, input),
+        _ => handle_passthrough(state, input),
+    }
+}

@@ -115,6 +115,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("meta", "test_cpu_decode_types.py", "python", "tools.tests.test_cpu_decode_types"),
     SuiteDefinition("meta", "test_cpu_decode.py", "python", "tools.tests.test_cpu_decode"),
     SuiteDefinition("meta", "test_cpu_core_stub.py", "python", "tools.tests.test_cpu_core_stub"),
+    SuiteDefinition("meta", "test_cpu_semantics.py", "python", "tools.tests.test_cpu_semantics"),
     SuiteDefinition("meta", "test_bus_types.py", "python", "tools.tests.test_bus_types"),
     SuiteDefinition("meta", "test_membus_scaffold.py", "python", "tools.tests.test_membus_scaffold"),
     SuiteDefinition("meta", "test_timebase_scaffold.py", "python", "tools.tests.test_timebase_scaffold"),
@@ -149,6 +150,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("unit", "test_decode_cb.py", "swim", "test_decode_cb"),
     SuiteDefinition("unit", "test_membus.py", "swim", "test_membus"),
     SuiteDefinition("unit", "test_regs.py", "swim", "test_regs"),
+    SuiteDefinition("unit", "test_semantics.py", "swim", "test_semantics"),
     SuiteDefinition("unit", "test_timebase.py", "swim", "test_timebase"),
     SuiteDefinition("lockstep", "test_cpu_lockstep.py", "swim", "test_cpu_lockstep"),
 )

@@ -18,6 +18,8 @@ from dut_driver import CpuCommitTrace, JoypadState, SimStimulus
 JOYPAD_ORDER = ("up", "down", "left", "right", "a", "b", "start", "select")
 IDLE_BUS_REGION = 8
 IDLE_BUS_OWNER = 3
+ACTIVE_BUS_REGION = 0
+ACTIVE_BUS_OWNER = 0
 
 
 def striped_manifest_entry(*, seed: int, rom_id: str = "ALU_LOOP", timeout_commits: int = 80) -> dict[str, object]:
@@ -118,6 +120,10 @@ def predicted_traces_for_schedule(
         if cpu_arch_time_enable:
             commit_seq += 1
             pc = (pc + 1) & 0xFFFF
+        bus_req_kind = 1 if cpu_arch_time_enable else 0
+        bus_req_addr = ((pc - 1) & 0xFFFF) if cpu_arch_time_enable else 0
+        bus_region = ACTIVE_BUS_REGION if cpu_arch_time_enable else IDLE_BUS_REGION
+        bus_owner = ACTIVE_BUS_OWNER if cpu_arch_time_enable else IDLE_BUS_OWNER
         traces.append(
             CpuCommitTrace(
                 seq=commit_index + 1,
@@ -128,8 +134,10 @@ def predicted_traces_for_schedule(
                 cpu_hold_only=stimulus.cpu_hold_only,
                 commit_seq=commit_seq,
                 pc=pc,
-                bus_region=IDLE_BUS_REGION,
-                bus_owner=IDLE_BUS_OWNER,
+                bus_req_kind=bus_req_kind,
+                bus_req_addr=bus_req_addr,
+                bus_region=bus_region,
+                bus_owner=bus_owner,
                 bus_blocked=False,
             )
         )
@@ -152,6 +160,10 @@ def predicted_traces_for_script(
         if cpu_arch_time_enable:
             commit_seq += 1
             pc = (pc + 1) & 0xFFFF
+        bus_req_kind = 1 if cpu_arch_time_enable else 0
+        bus_req_addr = ((pc - 1) & 0xFFFF) if cpu_arch_time_enable else 0
+        bus_region = ACTIVE_BUS_REGION if cpu_arch_time_enable else IDLE_BUS_REGION
+        bus_owner = ACTIVE_BUS_OWNER if cpu_arch_time_enable else IDLE_BUS_OWNER
         traces.append(
             CpuCommitTrace(
                 seq=commit_index + 1,
@@ -162,8 +174,10 @@ def predicted_traces_for_script(
                 cpu_hold_only=stimulus.cpu_hold_only,
                 commit_seq=commit_seq,
                 pc=pc,
-                bus_region=IDLE_BUS_REGION,
-                bus_owner=IDLE_BUS_OWNER,
+                bus_req_kind=bus_req_kind,
+                bus_req_addr=bus_req_addr,
+                bus_region=bus_region,
+                bus_owner=bus_owner,
                 bus_blocked=False,
             )
         )
