@@ -98,16 +98,22 @@ class CpuCommitTrace:
     bus_req_kind: int = 0
     bus_req_addr: int = 0
     bus_req_data: int = 0
+    bus_region: int = 0
+    bus_owner: int = 0
+    bus_blocked: bool = False
 
     @classmethod
     def from_output(cls, output_value: int, *, seq: int) -> "CpuCommitTrace":
         return cls(
             seq=seq,
-            commit_seq=(output_value >> 58) & 0xFFFF_FFFF_FFFF_FFFF,
-            pc=(output_value >> 42) & 0xFFFF,
-            bus_req_kind=(output_value >> 40) & 0x3,
-            bus_req_addr=(output_value >> 24) & 0xFFFF,
-            bus_req_data=(output_value >> 16) & 0xFF,
+            commit_seq=(output_value >> 65) & 0xFFFF_FFFF_FFFF_FFFF,
+            pc=(output_value >> 49) & 0xFFFF,
+            bus_req_kind=(output_value >> 47) & 0x3,
+            bus_req_addr=(output_value >> 31) & 0xFFFF,
+            bus_req_data=(output_value >> 23) & 0xFF,
+            bus_region=(output_value >> 19) & 0xF,
+            bus_owner=(output_value >> 17) & 0x3,
+            bus_blocked=bool((output_value >> 16) & 0x1),
             bus_read_data=(output_value >> 8) & 0xFF,
             irq_pending=(output_value >> 3) & 0x1F,
             cpu_arch_time_enable=bool((output_value >> 2) & 0x1),

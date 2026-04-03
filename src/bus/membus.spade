@@ -52,6 +52,15 @@ fn req_owner(req: BusReq) -> BusOwner {
     }
 }
 
+pub fn observe_req(rst: bool, m_ce: bool, req: BusReq) -> BusObs {
+    let req = active_req(rst, m_ce, req);
+    let region = req_region(req);
+    match req {
+        BusReq::Idle => idle_bus_obs(),
+        _ => BusObs$(region: region, blocked: false, owner: req_owner(req)),
+    }
+}
+
 fn rom_addr(region: BusRegion, addr: uint<16>) -> uint<15> {
     match region {
         BusRegion::Rom => trunc(addr),
@@ -109,12 +118,9 @@ pub entity membus(
     req: BusReq,
 ) -> (BusResp, BusObs) {
     let req = active_req(rst, m_ce, req);
-    let region = req_region(req);
     let addr = req_addr(req);
-    let obs = match req {
-        BusReq::Idle => idle_bus_obs(),
-        _ => BusObs$(region: region, blocked: false, owner: req_owner(req)),
-    };
+    let region = req_region(req);
+    let obs = observe_req(rst, m_ce, req);
 
     let rom_mem = inst clocked_memory_init::<32768, 1, 15, uint<8>>(clk, [(false, 0u15, 0u8)], [0u8; 32768]);
     let (wram_we, wram_waddr, wram_wdata) = wram_write(req);

@@ -16,6 +16,8 @@ from dut_driver import CpuCommitTrace, JoypadState, SimStimulus
 
 
 JOYPAD_ORDER = ("up", "down", "left", "right", "a", "b", "start", "select")
+IDLE_BUS_REGION = 8
+IDLE_BUS_OWNER = 3
 
 
 def striped_manifest_entry(*, seed: int, rom_id: str = "ALU_LOOP", timeout_commits: int = 80) -> dict[str, object]:
@@ -126,6 +128,9 @@ def predicted_traces_for_schedule(
                 cpu_hold_only=stimulus.cpu_hold_only,
                 commit_seq=commit_seq,
                 pc=pc,
+                bus_region=IDLE_BUS_REGION,
+                bus_owner=IDLE_BUS_OWNER,
+                bus_blocked=False,
             )
         )
     return tuple(traces)
@@ -157,6 +162,9 @@ def predicted_traces_for_script(
                 cpu_hold_only=stimulus.cpu_hold_only,
                 commit_seq=commit_seq,
                 pc=pc,
+                bus_region=IDLE_BUS_REGION,
+                bus_owner=IDLE_BUS_OWNER,
+                bus_blocked=False,
             )
         )
     return tuple(traces)

@@ -48,11 +48,14 @@ class HarnessBaseTest(unittest.TestCase):
 
     def test_cpu_and_soc_output_decoders_are_stable(self) -> None:
         cpu = CpuCommitTrace.from_output(
-            (0x12 << 58)
-            | (0x1234 << 42)
-            | (0x2 << 40)
-            | (0x4567 << 24)
-            | (0x89 << 16)
+            (0x12 << 65)
+            | (0x1234 << 49)
+            | (0x2 << 47)
+            | (0x4567 << 31)
+            | (0x89 << 23)
+            | (0x3 << 19)
+            | (0x2 << 17)
+            | (0x1 << 16)
             | (0xA5 << 8)
             | (0x12 << 3)
             | 0b100,
@@ -64,6 +67,9 @@ class HarnessBaseTest(unittest.TestCase):
         self.assertEqual(cpu.bus_req_kind, 0x2)
         self.assertEqual(cpu.bus_req_addr, 0x4567)
         self.assertEqual(cpu.bus_req_data, 0x89)
+        self.assertEqual(cpu.bus_region, 0x3)
+        self.assertEqual(cpu.bus_owner, 0x2)
+        self.assertTrue(cpu.bus_blocked)
         self.assertEqual(cpu.bus_read_data, 0xA5)
         self.assertEqual(cpu.irq_pending, 0x12)
         self.assertTrue(cpu.cpu_arch_time_enable)

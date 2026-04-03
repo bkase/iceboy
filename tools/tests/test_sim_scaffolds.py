@@ -34,7 +34,11 @@ class SimScaffoldTest(unittest.TestCase):
             "bus_req_kind: uint<2>",
             "bus_req_addr: uint<16>",
             "bus_req_data: uint<8>",
+            "bus_region: uint<4>",
+            "bus_owner: uint<2>",
+            "bus_blocked: bool",
             "let cpu = inst cpu_core(",
+            "let bus_obs = observe_req(",
         ]:
             self.assertIn(symbol, text)
         soc_text = SOC_TOP_PATH.read_text(encoding="utf-8")

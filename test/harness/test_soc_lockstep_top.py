@@ -45,6 +45,6 @@ async def test_soc_lockstep_top_surfaces_timebase_and_core_state(dut):
     assert final.bus_req_kind == 0
     assert final.bus_req_addr == 0
     assert final.bus_req_data == 0
-    assert final.bus_region == 0
-    assert final.bus_owner == 0
+    assert final.bus_region == 8
+    assert final.bus_owner == 3
     assert final.bus_blocked is False

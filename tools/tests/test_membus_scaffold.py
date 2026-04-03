@@ -20,6 +20,7 @@ class MembusScaffoldTest(unittest.TestCase):
         text = MEMBUS_PATH.read_text(encoding="utf-8")
         for symbol in [
             "pub entity membus(",
+            "pub fn observe_req(rst: bool, m_ce: bool, req: BusReq) -> BusObs",
             "clk: clock",
             "rst: bool",
             "m_ce: bool",
