@@ -26,6 +26,7 @@ PRECOMMIT_SWIM_TESTS=(
     "test/unit/test_alu.py"
     "test/unit/test_decode.py"
     "test/unit/test_decode_cb.py"
+    "test/unit/test_halt_bug.py"
     "test/unit/test_interrupt_service.py"
     "test/unit/test_interrupts_basic.py"
     "test/unit/test_timer.py"

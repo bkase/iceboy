@@ -123,6 +123,7 @@ class LocalEntrypointsTest(unittest.TestCase):
     def test_precommit_uses_curated_exact_swim_paths(self) -> None:
         text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
         self.assertIn('"test/unit/test_main.py"', text)
+        self.assertIn('"test/unit/test_halt_bug.py"', text)
         self.assertIn('"test/lockstep/test_ei_halt_corners.py"', text)
         self.assertIn('"test/harness/test_reset_profile.py"', text)
         self.assertIn('"test/rom/test_alu16_sp.py"', text)

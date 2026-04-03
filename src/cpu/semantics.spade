@@ -338,7 +338,43 @@ fn execute_alu_delta(state: CpuState, kind: AluKind, dst: Operand8, src: Operand
     )
 }
 
-fn execute_misc_delta(state: CpuState, kind: MiscKind) -> CpuDelta {
+fn halt_enter_delta(state: CpuState, irq_pending: IrqPending) -> CpuDelta {
+    match state.arch.ime_state {
+        ImeState::Disabled => {
+            if !any_irq_pending(irq_pending) {
+                CpuDelta(
+                    idle_reg_write_set(),
+                    Option::None,
+                    Option::None,
+                    Option::None,
+                    Option::Some(HaltState::HaltBugPending),
+                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
+                )
+            } else {
+                CpuDelta(
+                    idle_reg_write_set(),
+                    Option::None,
+                    Option::None,
+                    Option::None,
+                    Option::Some(HaltState::Halted),
+                    MicroWriteSet(some_phase(Phase::Halted), Option::None, Option::None, Option::None, Option::None, Option::None),
+                )
+            }
+        },
+        _ => {
+            CpuDelta(
+                idle_reg_write_set(),
+                Option::None,
+                Option::None,
+                Option::None,
+                Option::Some(HaltState::Halted),
+                MicroWriteSet(some_phase(Phase::Halted), Option::None, Option::None, Option::None, Option::None, Option::None),
+            )
+        },
+    }
+}
+
+fn execute_misc_delta(state: CpuState, irq_pending: IrqPending, kind: MiscKind) -> CpuDelta {
     let f_prev = flags_from_f(state.arch.regs.f);
     let result = match kind {
         MiscKind::Daa => alu(AluReq::Daa$(a: state.arch.regs.a, f_prev: f_prev)),
@@ -355,14 +391,7 @@ fn execute_misc_delta(state: CpuState, kind: MiscKind) -> CpuDelta {
         _ => idle_reg_write_set(),
     };
     match kind {
-        MiscKind::Halt => CpuDelta(
-            idle_reg_write_set(),
-            Option::None,
-            Option::None,
-            Option::None,
-            Option::Some(HaltState::Halted),
-            MicroWriteSet(some_phase(Phase::Halted), Option::None, Option::None, Option::None, Option::None, Option::None),
-        ),
+        MiscKind::Halt => halt_enter_delta(state, irq_pending),
         _ => CpuDelta(
             reg_writes,
             Option::None,
@@ -1144,27 +1173,52 @@ fn fetch_delta(state: CpuState, opcode: uint<8>) -> CpuDelta {
     )
 }
 
-fn handle_fetch(state: CpuState, input: MicroInput) -> MicroOutput {
-    match state.arch.ime_state {
-        ImeState::Enabled => {
-            if any_irq_pending(input.irq_pending) {
-                service_entry_output(state, input, irq_sel_from_pending(input.irq_pending.pending))
-            } else {
-                let opcode = input.bus_resp.data;
-                let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
-                let delta = fetch_delta(state, opcode);
-                let commit = make_commit(state, input, bus_req, delta, Option::Some(opcode));
+fn halt_bug_fetch_delta(state: CpuState, opcode: uint<8>) -> CpuDelta {
+    let base = fetch_delta(state, opcode);
 
-                MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
-            }
-        },
-        _ => {
+    CpuDelta(
+        base.regs_write,
+        Option::None,
+        base.sp_write,
+        base.ime_write,
+        Option::Some(HaltState::Running),
+        base.micro_write,
+    )
+}
+
+fn handle_fetch(state: CpuState, input: MicroInput) -> MicroOutput {
+    match state.arch.halt_state {
+        HaltState::HaltBugPending => {
             let opcode = input.bus_resp.data;
             let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
-            let delta = fetch_delta(state, opcode);
+            let delta = halt_bug_fetch_delta(state, opcode);
             let commit = make_commit(state, input, bus_req, delta, Option::Some(opcode));
 
             MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+        },
+        _ => {
+            match state.arch.ime_state {
+                ImeState::Enabled => {
+                    if any_irq_pending(input.irq_pending) {
+                        service_entry_output(state, input, irq_sel_from_pending(input.irq_pending.pending))
+                    } else {
+                        let opcode = input.bus_resp.data;
+                        let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
+                        let delta = fetch_delta(state, opcode);
+                        let commit = make_commit(state, input, bus_req, delta, Option::Some(opcode));
+
+                        MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+                    }
+                },
+                _ => {
+                    let opcode = input.bus_resp.data;
+                    let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
+                    let delta = fetch_delta(state, opcode);
+                    let commit = make_commit(state, input, bus_req, delta, Option::Some(opcode));
+
+                    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+                },
+            }
         },
     }
 }
@@ -2002,7 +2056,7 @@ fn handle_execute(state: CpuState, input: MicroInput, op: DecodedOp) -> MicroOut
         DecodedOp::Alu$(kind, dst, src, addressing) => execute_alu_delta(state, kind, dst, src, addressing),
         DecodedOp::Misc$(kind, addressing) => {
             let _ = addressing;
-            execute_misc_delta(state, kind)
+            execute_misc_delta(state, input.irq_pending, kind)
         },
         DecodedOp::BitOp$(kind, prefix, target, bit_index, zero_on_result, addressing) => {
             let _ = addressing;

@@ -12,6 +12,7 @@ IME_PENDING_ENABLE = 1
 IME_ENABLED = 2
 HALT_RUNNING = 0
 HALT_HALTED = 1
+HALT_BUG_PENDING = 2
 BUS_REQ_READ = 1
 BUS_REQ_IDLE = 0
 
@@ -193,14 +194,14 @@ async def test_halt_execute_enters_halted_state(dut):
     actual = await sample(
         dut,
         state_pc=0x0501,
-        state_ime=IME_DISABLED,
+        state_ime=IME_ENABLED,
         state_halt=HALT_RUNNING,
         state_phase=PHASE_EXECUTE,
         bus_resp=0x76,
     )
     expected = {
         "next_pc": 0x0501,
-        "next_ime": IME_DISABLED,
+        "next_ime": IME_ENABLED,
         "next_halt": HALT_HALTED,
         "next_phase_kind": PHASE_HALTED,
         "bus_req_kind": BUS_REQ_IDLE,
