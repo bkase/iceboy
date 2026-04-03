@@ -24,6 +24,36 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DMG_BOOTROM = ROOT / "roms" / "bootrom_fast_dmg.bin"
 DEFAULT_PHASE_AFTER = "HookCheckpoint"
 DEFAULT_BUS_KIND = "unavailable"
+DMG_SKIPBOOT_REGISTERS = {
+    "A": 0x01,
+    "F": 0xB0,
+    "B": 0x00,
+    "C": 0x13,
+    "D": 0x00,
+    "E": 0xD8,
+    "HL": 0x014D,
+    "SP": 0xFFFE,
+    "PC": 0x0100,
+}
+DMG_SKIPBOOT_IO = {
+    0xFFFF: 0x00,
+    0xFF0F: 0xE1,
+    0xFF05: 0x00,
+    0xFF06: 0x00,
+    0xFF07: 0x00,
+    0xFF00: 0xCF,
+    0xFF40: 0x91,
+    0xFF41: 0x85,
+    0xFF42: 0x00,
+    0xFF43: 0x00,
+    0xFF44: 0x00,
+    0xFF45: 0x00,
+    0xFF47: 0xFC,
+    0xFF48: 0xFF,
+    0xFF49: 0xFF,
+    0xFF4A: 0x00,
+    0xFF4B: 0x00,
+}
 SYMBOL_RE = re.compile(r"^(?P<bank>[0-9A-Fa-f]{2,}):(?P<addr>[0-9A-Fa-f]{4})\s+(?P<label>\S+)$")
 RESERVED_HOOK_PREFIXES = ("__checkpoint_", "__commit_")
 RESERVED_HOOK_LABELS = RESERVED_HOOK_PREFIXES + ("__pass", "__fail")
@@ -222,6 +252,8 @@ class PyBoyOracle:
 
         self._pyboy = PyBoy(str(self.rom_path), **kwargs)
         self._pyboy.set_emulation_speed(0)
+        if reset is ResetProfile.SkipBoot:
+            self._apply_skipboot_state(model)
         self._install_hooks()
 
     def step_commit(self) -> OracleCommit:
@@ -350,6 +382,17 @@ class PyBoyOracle:
         if not self.bootrom_path.exists():
             raise FileNotFoundError(f"RawPowerOn requested but boot ROM is missing: {self.bootrom_path}")
         return self.bootrom_path
+
+    def _apply_skipboot_state(self, model: ModelProfile) -> None:
+        pyboy = self._require_pyboy()
+        if model is not ModelProfile.DMG:
+            raise NotImplementedError("SkipBoot is only scaffolded for DMG because no CGB post-boot state is pinned")
+
+        rf = pyboy.register_file
+        for name, value in DMG_SKIPBOOT_REGISTERS.items():
+            setattr(rf, name, value)
+        for addr, value in DMG_SKIPBOOT_IO.items():
+            pyboy.memory[addr] = value
 
     def _require_pyboy(self) -> PyBoy:
         if self._pyboy is None:

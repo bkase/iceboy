@@ -63,6 +63,22 @@ class PyBoyOracleTest(unittest.TestCase):
             oracle.restore(snapshot)
             self.assertEqual(oracle.read_mem(0xC100), 0x34)
 
+    def test_skipboot_reset_applies_dmg_post_boot_register_state(self) -> None:
+        with self.make_oracle() as oracle:
+            oracle.reset(ModelProfile.DMG, ResetProfile.SkipBoot)
+            rf = oracle._require_pyboy().register_file
+            self.assertEqual(int(rf.A), 0x01)
+            self.assertEqual(int(rf.F), 0xB0)
+            self.assertEqual(int(rf.B), 0x00)
+            self.assertEqual(int(rf.C), 0x13)
+            self.assertEqual(int(rf.D), 0x00)
+            self.assertEqual(int(rf.E), 0xD8)
+            self.assertEqual(int(rf.HL), 0x014D)
+            self.assertEqual(int(rf.SP), 0xFFFE)
+            self.assertEqual(int(rf.PC), 0x0100)
+            self.assertEqual(oracle.read_mem(0xFF40), 0x91)
+            self.assertEqual(oracle.read_mem(0xFF47), 0xFC)
+
 
 if __name__ == "__main__":
     unittest.main()
