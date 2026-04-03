@@ -87,6 +87,27 @@ fn interrupt_control(enable: bool, addressing: AddressingMode) -> DecodedOp {
     DecodedOp::InterruptControl$(enable: enable, addressing: addressing)
 }
 
+fn operand8_from_reg_code(code: uint<3>) -> Operand8 {
+    match code {
+        0u3 => Operand8::Register$(r8: R8::B),
+        1u3 => Operand8::Register$(r8: R8::C),
+        2u3 => Operand8::Register$(r8: R8::D),
+        3u3 => Operand8::Register$(r8: R8::E),
+        4u3 => Operand8::Register$(r8: R8::H),
+        5u3 => Operand8::Register$(r8: R8::L),
+        6u3 => Operand8::AddrHl,
+        _ => Operand8::Register$(r8: R8::A),
+    }
+}
+
+fn addressing_for_r8_target(code: uint<3>) -> AddressingMode {
+    if code == 6u3 {
+        AddressingMode::MemoryViaHl
+    } else {
+        AddressingMode::Register8
+    }
+}
+
 pub fn decode(opcode: uint<8>) -> DecodedOp {
     match opcode {
         // BEGIN GENERATED UNPREFIXED TABLE
@@ -347,5 +368,34 @@ pub fn decode(opcode: uint<8>) -> DecodedOp {
         0xFEu8 => alu(AluKind::Cp, Operand8::Register$(r8: R8::A), Operand8::Imm8, AddressingMode::Immediate8),
         0xFFu8 => control(Option::None, ControlTarget::Restart$(vector: 0x38u8), AddressingMode::Implied),
         // END GENERATED UNPREFIXED TABLE
+    }
+}
+
+pub fn decode_cb(opcode: uint<8>) -> DecodedOp {
+    let group: uint<2> = trunc(opcode >> 6);
+    let y: uint<3> = trunc(opcode >> 3);
+    let z: uint<3> = trunc(opcode);
+    let target = operand8_from_reg_code(z);
+    let addressing = addressing_for_r8_target(z);
+    let prefix = some_prefix(PrefixKind::Cb);
+
+    match group {
+        0u2 => {
+            let kind = match y {
+                0u3 => RotShiftKind::Rlc,
+                1u3 => RotShiftKind::Rrc,
+                2u3 => RotShiftKind::Rl,
+                3u3 => RotShiftKind::Rr,
+                4u3 => RotShiftKind::Sla,
+                5u3 => RotShiftKind::Sra,
+                6u3 => RotShiftKind::Swap,
+                _ => RotShiftKind::Srl,
+            };
+
+            bit_op(BitOpKind::RotateShift$(kind: kind), prefix, target, Option::None, true, addressing)
+        },
+        1u2 => bit_op(BitOpKind::Bit, prefix, target, some_bit_index(y), false, addressing),
+        2u2 => bit_op(BitOpKind::Res, prefix, target, some_bit_index(y), false, addressing),
+        _ => bit_op(BitOpKind::Set, prefix, target, some_bit_index(y), false, addressing),
     }
 }

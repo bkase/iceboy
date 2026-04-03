@@ -1,6 +1,6 @@
 use std::option::Option;
 use lib::cpu::alu::{AluKind, RotShiftKind};
-use lib::cpu::decode::decode;
+use lib::cpu::decode::{decode, decode_cb};
 use lib::cpu::decode_types::{
     AddressingMode,
     BitOpKind,
@@ -520,4 +520,8 @@ fn pack_projection(value: DecodeProjection) -> uint<82> {
 
 pub entity decode_test_top(opcode: uint<8>) -> uint<82> {
     pack_projection(project(decode(opcode)))
+}
+
+pub entity decode_cb_test_top(opcode: uint<8>) -> uint<82> {
+    pack_projection(project(decode_cb(opcode)))
 }

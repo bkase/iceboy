@@ -190,6 +190,10 @@ def _r8_operand_by_index(index: int) -> tuple[int, int]:
     return _register8(name)
 
 
+def _addressing_for_r8_kind(kind: int) -> int:
+    return ADDRESSING_MEMORY_HL if kind == OPERAND8_ADDR_HL else ADDRESSING_REGISTER8
+
+
 def _jp_call_target_kind(name: str) -> tuple[int, int]:
     if name == "HL":
         return _register16("HL")
@@ -560,6 +564,65 @@ def projection_for_unprefixed_opcode(opcode: int) -> dict[str, int]:
     )
 
 
+def projection_for_cb_opcode(opcode: int) -> dict[str, int]:
+    group = opcode >> 6
+    y = (opcode >> 3) & 0x7
+    z = opcode & 0x7
+    target_kind, target_reg = _r8_operand_by_index(z)
+    addressing = _addressing_for_r8_kind(target_kind)
+
+    if group == 0:
+        rot_kind = (
+            ROT_RLC,
+            ROT_RRC,
+            ROT_RL,
+            ROT_RR,
+            ROT_SLA,
+            ROT_SRA,
+            ROT_SWAP,
+            ROT_SRL,
+        )[y]
+        return _projection(
+            class_id=CLASS_BIT_OP,
+            addressing=addressing,
+            dst8_kind=target_kind,
+            dst8_reg=target_reg,
+            bit_kind=BIT_ROT_SHIFT,
+            rot_shift_kind=rot_kind,
+            zero_on_result=1,
+            prefix=PREFIX_CB,
+        )
+    if group == 1:
+        return _projection(
+            class_id=CLASS_BIT_OP,
+            addressing=addressing,
+            dst8_kind=target_kind,
+            dst8_reg=target_reg,
+            bit_kind=BIT_BIT,
+            bit_index=y + 1,
+            prefix=PREFIX_CB,
+        )
+    if group == 2:
+        return _projection(
+            class_id=CLASS_BIT_OP,
+            addressing=addressing,
+            dst8_kind=target_kind,
+            dst8_reg=target_reg,
+            bit_kind=BIT_RES,
+            bit_index=y + 1,
+            prefix=PREFIX_CB,
+        )
+    return _projection(
+        class_id=CLASS_BIT_OP,
+        addressing=addressing,
+        dst8_kind=target_kind,
+        dst8_reg=target_reg,
+        bit_kind=BIT_SET,
+        bit_index=y + 1,
+        prefix=PREFIX_CB,
+    )
+
+
 def _bool_expr(value: int) -> str:
     return "true" if value else "false"
 
@@ -796,4 +859,3 @@ def extract_generated_table(text: str) -> str:
     start = text.index(GENERATED_TABLE_BEGIN) + len(GENERATED_TABLE_BEGIN)
     end = text.index(GENERATED_TABLE_END)
     return text[start:end].strip()
-

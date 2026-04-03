@@ -24,8 +24,13 @@ class CpuDecodeModuleTest(unittest.TestCase):
 
     def test_decode_test_top_invokes_decoder_projection(self) -> None:
         text = CPU_DECODE_TEST_TOP_PATH.read_text(encoding="utf-8")
-        self.assertIn("use lib::cpu::decode::decode;", text)
+        self.assertIn("use lib::cpu::decode::{decode, decode_cb};", text)
         self.assertIn("pub entity decode_test_top(opcode: uint<8>) -> uint<82>", text)
+        self.assertIn("pub entity decode_cb_test_top(opcode: uint<8>) -> uint<82>", text)
+
+    def test_decode_module_exposes_cb_decoder(self) -> None:
+        text = CPU_DECODE_PATH.read_text(encoding="utf-8")
+        self.assertIn("pub fn decode_cb(opcode: uint<8>) -> DecodedOp", text)
 
 
 if __name__ == "__main__":
