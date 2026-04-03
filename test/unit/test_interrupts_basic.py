@@ -18,6 +18,16 @@ def decode_interrupts(output_value: int) -> dict[str, int]:
     }
 
 
+def log_snapshot(label: str, snapshot: dict[str, int]) -> None:
+    cocotb.log.info(
+        "%s IE=0x%02X IF=0x%02X pending=0x%02X",
+        label,
+        snapshot["ie"],
+        snapshot["iflags"],
+        snapshot["pending"],
+    )
+
+
 async def reset_dut(dut) -> None:
     cocotb.start_soon(Clock(dut.clk_i, 10, units="ns").start())
     dut.write_en_i.value = 0
@@ -115,3 +125,57 @@ async def test_ack_clears_selected_flag_and_fresh_source_wins(dut):
     snapshot = await step(dut, timer_irq=True, ack_bit=2)
     assert snapshot["iflags"] == 0xF4, snapshot
     assert snapshot["pending"] == 0x14, snapshot
+
+
+@cocotb.test()
+async def test_pending_matches_ie_and_if_across_full_5bit_space(dut):
+    await reset_dut(dut)
+
+    for ie_bits in range(0x20):
+        ie_visible = 0xE0 | ie_bits
+        snapshot = await step(dut, write_addr=IE_ADDR, write_data=ie_bits)
+        assert snapshot["ie"] == ie_visible, (ie_bits, snapshot)
+
+        for if_bits in range(0x20):
+            if_visible = 0xE0 | if_bits
+            snapshot = await step(dut, write_addr=IF_ADDR, write_data=if_bits)
+            if ie_bits in (0x00, 0x1F) and if_bits in (0x00, 0x15, 0x1F):
+                log_snapshot(f"ie=0x{ie_bits:02X} if=0x{if_bits:02X}", snapshot)
+            assert snapshot["iflags"] == if_visible, (ie_bits, if_bits, snapshot)
+            assert snapshot["pending"] == (ie_bits & if_bits), (ie_bits, if_bits, snapshot)
+
+
+@cocotb.test()
+async def test_ack_clears_only_requested_bit_when_multiple_flags_pending(dut):
+    await reset_dut(dut)
+
+    await step(dut, write_addr=IE_ADDR, write_data=0x1F)
+    snapshot = await step(dut, write_addr=IF_ADDR, write_data=0x1F)
+    log_snapshot("all pending", snapshot)
+    assert snapshot["pending"] == 0x1F, snapshot
+
+    snapshot = await step(dut, ack_bit=3)
+    log_snapshot("ack serial", snapshot)
+    assert snapshot["iflags"] == 0xF7, snapshot
+    assert snapshot["pending"] == 0x17, snapshot
+
+    snapshot = await step(dut, ack_bit=0)
+    log_snapshot("ack vblank", snapshot)
+    assert snapshot["iflags"] == 0xF6, snapshot
+    assert snapshot["pending"] == 0x16, snapshot
+
+
+@cocotb.test()
+async def test_if_write_and_ack_same_cycle_clear_requested_bit_before_sources(dut):
+    await reset_dut(dut)
+
+    await step(dut, write_addr=IE_ADDR, write_data=0x1F)
+    snapshot = await step(dut, write_addr=IF_ADDR, write_data=0x1F, ack_bit=2)
+    log_snapshot("if write + ack", snapshot)
+    assert snapshot["iflags"] == 0xFB, snapshot
+    assert snapshot["pending"] == 0x1B, snapshot
+
+    snapshot = await step(dut, write_addr=IF_ADDR, write_data=0x00, ack_bit=4, joypad_irq=True)
+    log_snapshot("if clear + ack + fresh joypad", snapshot)
+    assert snapshot["iflags"] == 0xF0, snapshot
+    assert snapshot["pending"] == 0x10, snapshot
