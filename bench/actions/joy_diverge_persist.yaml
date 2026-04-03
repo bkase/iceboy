@@ -1,0 +1,15 @@
+seed: 0
+source: joy_diverge_persist
+events:
+  - commit_index: 1
+    event:
+      kind: joypad_buttons
+      buttons: [left]
+  - commit_index: 2
+    event:
+      kind: joypad_buttons
+      buttons: [start]
+  - commit_index: 3
+    event:
+      kind: joypad_buttons
+      buttons: []

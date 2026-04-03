@@ -37,6 +37,7 @@ PRECOMMIT_SWIM_TESTS=(
     "test/rom/test_ei_delay.py"
     "test/rom/test_loads_basic.py"
     "test/rom/test_alu16_sp.py"
+    "test/rom/test_joy_diverge_persist.py"
     "test/rom/test_timer_div_basic.py"
     "test/rom/test_timer_irq_halt.py"
 )

@@ -139,14 +139,14 @@ class HarnessBaseTest(unittest.TestCase):
     def test_fixture_helpers_resolve_profiles_and_event_scripts(self) -> None:
         entry = {
             "id": "JOY_DIVERGE_PERSIST",
-            "path": "bench/roms/out/JOY_DIVERGE_PERSIST.gb",
+            "path": "bench/roms/out/joy_diverge_persist.gb",
             **CPU_BRING_UP_PROFILES.as_manifest_fields(),
             "timeout_commits": 32,
             "action_gen": {"name": "striped", "seed": 3},
         }
         loaded = rom_loader(entry, repo_root=ROOT)
         self.assertEqual(loaded.rom_id, "JOY_DIVERGE_PERSIST")
-        self.assertTrue(str(loaded.rom_path).endswith("JOY_DIVERGE_PERSIST.gb"))
+        self.assertTrue(str(loaded.rom_path).endswith("joy_diverge_persist.gb"))
         self.assertEqual(encode_profiles(loaded.profiles), 0)
 
         script_a = event_script(11, entry)

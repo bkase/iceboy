@@ -77,6 +77,16 @@ class SimulationProfilesTest(unittest.TestCase):
         )
         self.assertEqual(roms["TIMER_IRQ_HALT"]["oracle_mode"], "mcycle_commit")
 
+    def test_joy_manifest_entry_uses_deterministic_action_script(self) -> None:
+        inventory = yaml.safe_load(ROM_INVENTORY_PATH.read_text(encoding="utf-8"))
+        roms = {rom["id"]: rom for rom in inventory["roms"]}
+
+        self.assertEqual(roms["JOY_DIVERGE_PERSIST"]["path"], "bench/roms/out/joy_diverge_persist.gb")
+        self.assertEqual(roms["JOY_DIVERGE_PERSIST"]["timeout_commits"], 4)
+        self.assertEqual(roms["JOY_DIVERGE_PERSIST"]["checkpoint_symbols"], ["__checkpoint_poll"])
+        self.assertEqual(roms["JOY_DIVERGE_PERSIST"]["action_script"], "bench/actions/joy_diverge_persist.yaml")
+        self.assertIsNone(roms["JOY_DIVERGE_PERSIST"]["action_gen"])
+
     def test_spade_types_define_same_profile_names(self) -> None:
         spade_types = SPADE_TYPES_PATH.read_text(encoding="utf-8")
 

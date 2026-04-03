@@ -6,15 +6,19 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+from bench.actions.generators import JoypadButtons, JoypadButtonsEvent
 from test.harness import rom_runner
+from test.harness.dut_driver import JoypadState, SimStimulus
 from test.harness.rom_runner import (
     ABI_LOG_SIZE,
     ABI_RESULT_PASS,
     ABI_RESULT_RUNNING,
     ABI_SIGNATURE_SIZE,
+    JOYPAD_IF_BIT,
     AbiSnapshot,
     DutTerminalState,
     ExternalMemoryBus,
+    _ScriptedJoypadOracleState,
     load_manifest_entry,
 )
 
@@ -32,6 +36,54 @@ class RomRunnerTest(unittest.TestCase):
         self.assertEqual(bus.read(0xC123), 0x5A)
         self.assertEqual(bus.read(0xFF80), 0xC3)
         self.assertEqual(bus.read(0x0150), 0x50)
+
+    def test_external_memory_bus_models_joyp_selection_and_press_edges(self) -> None:
+        bus = ExternalMemoryBus(bytes(0x8000))
+        self.assertEqual(bus.read(0xFF00), 0xFF)
+
+        bus.write(0xFF00, 0x20)
+        joyp_irq = bus.apply_stimulus(SimStimulus(joyp_buttons=JoypadState(left=True)))
+        self.assertEqual(joyp_irq, 0x10)
+        self.assertEqual(bus.read(0xFF00), 0xED)
+
+        joyp_irq = bus.apply_stimulus(SimStimulus(joyp_buttons=JoypadState()))
+        self.assertEqual(joyp_irq, 0x00)
+        self.assertEqual(bus.read(0xFF00), 0xEF)
+
+        bus.write(0xFF00, 0x10)
+        bus.apply_stimulus(SimStimulus(joyp_buttons=JoypadState(start=True)))
+        self.assertEqual(bus.read(0xFF00), 0xD7)
+
+    def test_scripted_joypad_oracle_state_tracks_persistent_buttons_and_fresh_press_if(self) -> None:
+        state = _ScriptedJoypadOracleState()
+
+        class _Schedule:
+            def __init__(self) -> None:
+                self._events = {
+                    0: (JoypadButtonsEvent(JoypadButtons.from_pressed(["left"])),),
+                    1: (JoypadButtonsEvent(JoypadButtons.from_pressed(["start"])),),
+                    2: (JoypadButtonsEvent(JoypadButtons()),),
+                }
+
+            def events_for_commit(self, commit_index: int):
+                return self._events.get(commit_index, ())
+
+        schedule = _Schedule()
+
+        state.advance(schedule)
+        self.assertEqual(state.joyp_read(directions_selected=True), 0xED)
+        self.assertEqual(state.joyp_read(directions_selected=False), 0xDF)
+        self.assertEqual(state.if_bits, JOYPAD_IF_BIT)
+
+        state.advance(schedule)
+        self.assertEqual(state.joyp_read(directions_selected=True), 0xEF)
+        self.assertEqual(state.joyp_read(directions_selected=False), 0xD7)
+        self.assertEqual(state.if_bits, JOYPAD_IF_BIT)
+
+        state.advance(schedule)
+        self.assertEqual(state.joyp_read(directions_selected=True), 0xEF)
+        self.assertEqual(state.joyp_read(directions_selected=False), 0xDF)
+        self.assertEqual(state.if_bits, 0x00)
 
     def test_external_memory_bus_tracks_ie_if_mirrors(self) -> None:
         bus = ExternalMemoryBus(bytes(0x8000))
@@ -118,6 +170,15 @@ class RomRunnerTest(unittest.TestCase):
         self.assertEqual(entry.sym_path.name, "timer_div_basic.sym")
         self.assertIn("__checkpoint_div_count", entry.checkpoint_symbols)
 
+    def test_load_manifest_entry_resolves_joy_rom(self) -> None:
+        entry = load_manifest_entry("JOY_DIVERGE_PERSIST")
+        self.assertEqual(entry.rom_path.name, "joy_diverge_persist.gb")
+        self.assertEqual(entry.sym_path.name, "joy_diverge_persist.sym")
+        self.assertEqual(entry.timeout_commits, 4)
+        self.assertEqual(entry.checkpoint_symbols, ("__checkpoint_poll",))
+        self.assertEqual(entry.manifest_entry["action_script"], "bench/actions/joy_diverge_persist.yaml")
+        self.assertIsNone(entry.manifest_entry["action_gen"])
+
     def test_assert_rom_matches_pyboy_signature_uses_manifest_timeout(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             rom_path = Path(tmpdir) / "alu_flags.gb"
@@ -127,8 +188,16 @@ class RomRunnerTest(unittest.TestCase):
                 rom_id="ALU_FLAGS",
                 rom_path=rom_path,
                 sym_path=rom_path.with_suffix(".sym"),
+                profiles=rom_runner.SimulationProfiles.from_mapping(
+                    {
+                        "model_profile": "DMG",
+                        "reset_profile": "SkipBoot",
+                        "memory_behavior_profile": "DmgConservative",
+                    }
+                ),
                 timeout_commits=17,
                 checkpoint_symbols=("__checkpoint_add",),
+                manifest_entry={"id": "ALU_FLAGS", "timeout_commits": 17, "action_script": None, "action_gen": None},
             )
             abi = AbiSnapshot(signature=bytes([0x00, ABI_RESULT_PASS]) + bytes(ABI_SIGNATURE_SIZE - 2), log=bytes(ABI_LOG_SIZE))
             actual = DutTerminalState(abi=abi, cycles=11)
@@ -153,6 +222,8 @@ class RomRunnerTest(unittest.TestCase):
             unittest.mock.ANY,
             rom_bytes=rom_bytes,
             max_mcycles=17,
+            checkpoint_addr=None,
+            event_schedule=unittest.mock.ANY,
         )
 
 

@@ -9,7 +9,7 @@ import warnings
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, Sequence
+from typing import Any, Protocol, Sequence
 
 warnings.filterwarnings("ignore", message="Using SDL2 binaries from pysdl2-dll.*")
 
@@ -136,6 +136,16 @@ class _ResolvedCommitPoint:
     label: str
     opcode: int
 
+    @property
+    def key(self) -> tuple[int, int]:
+        return (self.bank, self.addr)
+
+
+@dataclass(frozen=True)
+class _RuntimeHookSpec:
+    point: CommitPoint
+    callback: Any
+
 
 class Oracle(Protocol):
     def reset(self, model_profile: ModelProfile | str, reset_profile: ResetProfile | str) -> None:
@@ -223,6 +233,7 @@ class PyBoyOracle:
         self._commit_queue: deque[OracleCommit] = deque()
         self._seq = 0
         self._pressed_buttons: set[str] = set()
+        self._runtime_hooks: list[_RuntimeHookSpec] = []
 
     def __enter__(self) -> "PyBoyOracle":
         return self
@@ -314,6 +325,18 @@ class PyBoyOracle:
             return
         raise NotImplementedError(f"PyBoy oracle does not support sideband event {type(ev).__name__}")
 
+    def register_runtime_hook(
+        self,
+        *,
+        bank: int | None = None,
+        addr: int | str,
+        callback: Any,
+        label: str | None = None,
+    ) -> None:
+        self._runtime_hooks.append(
+            _RuntimeHookSpec(point=CommitPoint(bank=bank, addr=addr, label=label), callback=callback)
+        )
+
     def snapshot(self) -> bytes:
         pyboy = self._require_pyboy()
         state = io.BytesIO()
@@ -365,36 +388,58 @@ class PyBoyOracle:
 
     def _install_hooks(self) -> None:
         pyboy = self._require_pyboy()
-        for point in self._resolve_commit_points():
-            def callback(resolved: _ResolvedCommitPoint, self: "PyBoyOracle" = self) -> None:
-                self._capture_commit(resolved)
+        commit_points = {point.key: point for point in self._resolve_commit_points()}
+        runtime_points: dict[tuple[int, int], list[tuple[_ResolvedCommitPoint, Any]]] = {}
+        for spec in self._runtime_hooks:
+            resolved = self._resolve_point(spec.point)
+            runtime_points.setdefault(resolved.key, []).append((resolved, spec.callback))
 
-            pyboy.hook_register(point.bank, point.addr, callback, point)
+        for key in sorted(set(commit_points) | set(runtime_points)):
+            commit_point = commit_points.get(key)
+            callbacks = runtime_points.get(key, ())
+            resolved = commit_point if commit_point is not None else callbacks[0][0]
+
+            def callback(
+                callback_resolved: _ResolvedCommitPoint,
+                hook_callbacks: tuple[tuple[_ResolvedCommitPoint, Any], ...] = tuple(callbacks),
+                commit_resolved: _ResolvedCommitPoint | None = commit_point,
+                self: "PyBoyOracle" = self,
+            ) -> None:
+                for runtime_resolved, runtime_callback in hook_callbacks:
+                    runtime_callback(runtime_resolved)
+                if commit_resolved is not None:
+                    self._capture_commit(commit_resolved)
+
+            pyboy.hook_register(resolved.bank, resolved.addr, callback, resolved)
 
     def _resolve_commit_points(self) -> tuple[_ResolvedCommitPoint, ...]:
+        return tuple(self._resolve_point(spec) for spec in self._iter_commit_specs())
+
+    def _iter_commit_specs(self) -> tuple[CommitPoint, ...]:
         pyboy = self._require_pyboy()
         specs = self.commit_points
         if not specs:
             if self.sym_path is None:
                 raise ValueError("commit_points or a .sym file with reserved hook labels is required")
             specs = _load_default_commit_points(self.sym_path)
-        grouped: dict[tuple[int, int], list[str]] = {}
-        for spec in specs:
-            if isinstance(spec.addr, str):
-                bank, addr = pyboy.symbol_lookup(spec.addr)
-                label = spec.label or spec.addr
-            else:
-                bank = 0 if spec.bank is None else int(spec.bank)
-                addr = int(spec.addr)
-                label = spec.label or f"{bank:02X}:{addr:04X}"
-            grouped.setdefault((bank, addr), []).append(label)
+        return tuple(specs)
 
+    def _resolve_point(self, spec: CommitPoint) -> _ResolvedCommitPoint:
+        pyboy = self._require_pyboy()
+        if isinstance(spec.addr, str):
+            bank, addr = pyboy.symbol_lookup(spec.addr)
+            label = spec.label or spec.addr
+        else:
+            bank = 0 if spec.bank is None else int(spec.bank)
+            addr = int(spec.addr)
+            label = spec.label or f"{bank:02X}:{addr:04X}"
+        grouped: dict[tuple[int, int], list[str]] = {(bank, addr): [label]}
         resolved = []
         for (bank, addr), labels in sorted(grouped.items()):
             opcode = int(pyboy.memory[bank, addr]) & 0xFF
             label = "|".join(dict.fromkeys(labels))
             resolved.append(_ResolvedCommitPoint(bank=bank, addr=addr, label=label, opcode=opcode))
-        return tuple(resolved)
+        return resolved[0]
 
     def _resolve_bootrom(self, model: ModelProfile) -> Path:
         if model is not ModelProfile.DMG:

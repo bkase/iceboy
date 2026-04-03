@@ -10,11 +10,21 @@ from pyboy import PyBoy
 import yaml
 
 from bench.pyboy.hooks import HookManifest, build_hook_manifest
+from bench.pyboy.oracle import PyBoyOracle
 from bench.pyboy.symbols import SymbolTable
 try:
     from dut_driver import SimStimulus
 except ModuleNotFoundError:
     from test.harness.dut_driver import SimStimulus
+try:
+    from event_script_support import stimulus_from_events
+except ModuleNotFoundError:
+    from test.harness.event_script_support import stimulus_from_events
+try:
+    from fixtures import event_script
+except ModuleNotFoundError:
+    from test.harness.fixtures import event_script
+from spec.profiles import SimulationProfiles
 
 ROOT = Path(__file__).resolve().parents[2]
 ROM_MANIFEST_PATH = ROOT / "bench" / "manifests" / "rom_inventory.yaml"
@@ -32,6 +42,8 @@ BUS_REQ_READ = 1
 BUS_REQ_WRITE = 2
 PYBOY_BATCH_TICKS = 40
 TIMER_IF_BIT = 0x04
+JOYPAD_IF_BIT = 0x10
+JOYP_ADDR = 0xFF00
 DIV_ADDR = 0xFF04
 TIMA_ADDR = 0xFF05
 TMA_ADDR = 0xFF06
@@ -62,8 +74,10 @@ class RomManifestEntry:
     rom_id: str
     rom_path: Path
     sym_path: Path
+    profiles: SimulationProfiles
     timeout_commits: int
     checkpoint_symbols: tuple[str, ...]
+    manifest_entry: dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -89,6 +103,8 @@ class ExternalMemoryBus:
         self.hram = bytearray(0x7F)
         self.ie_reg = 0
         self.if_reg = 0
+        self.joyp_select = 0x3
+        self.joyp_buttons = 0
         self.sys_counter = 0
         self.tima = 0
         self.tma = 0
@@ -97,12 +113,49 @@ class ExternalMemoryBus:
         self.sampled_timer_bit = False
         self.overflow_delay = 0
 
+    def _joyp_low_nibble(self) -> int:
+        low_nibble = 0x0F
+        if (self.joyp_select & 0x1) == 0:
+            if self.joyp_buttons & (1 << 4):
+                low_nibble &= ~0x01
+            if self.joyp_buttons & (1 << 5):
+                low_nibble &= ~0x02
+            if self.joyp_buttons & (1 << 7):
+                low_nibble &= ~0x04
+            if self.joyp_buttons & (1 << 6):
+                low_nibble &= ~0x08
+        if (self.joyp_select & 0x2) == 0:
+            if self.joyp_buttons & (1 << 3):
+                low_nibble &= ~0x01
+            if self.joyp_buttons & (1 << 2):
+                low_nibble &= ~0x02
+            if self.joyp_buttons & (1 << 0):
+                low_nibble &= ~0x04
+            if self.joyp_buttons & (1 << 1):
+                low_nibble &= ~0x08
+        return low_nibble
+
+    def _joyp_visible(self) -> int:
+        return 0xC0 | ((self.joyp_select & 0x3) << 4) | self._joyp_low_nibble()
+
+    def apply_stimulus(self, stimulus: SimStimulus) -> int:
+        if stimulus.joyp_buttons is None:
+            return 0
+        next_buttons = 0
+        for bit, name in enumerate(reversed(("up", "down", "left", "right", "a", "b", "start", "select"))):
+            next_buttons |= int(bool(getattr(stimulus.joyp_buttons, name))) << bit
+        fresh_press = next_buttons & ~self.joyp_buttons
+        self.joyp_buttons = next_buttons & 0xFF
+        return JOYPAD_IF_BIT if fresh_press else 0
+
     def read(self, addr: int) -> int:
         addr &= 0xFFFF
         if addr < 0x8000:
             return self.rom[addr] if addr < len(self.rom) else 0xFF
         if 0xC000 <= addr <= 0xDFFF:
             return self.wram[addr - 0xC000]
+        if addr == JOYP_ADDR:
+            return self._joyp_visible()
         if addr == DIV_ADDR:
             return (self.sys_counter >> 8) & 0xFF
         if addr == TIMA_ADDR:
@@ -124,6 +177,8 @@ class ExternalMemoryBus:
         value &= 0xFF
         if 0xC000 <= addr <= 0xDFFF:
             self.wram[addr - 0xC000] = value
+        elif addr == JOYP_ADDR:
+            self.joyp_select = (value >> 4) & 0x3
         elif 0xFF80 <= addr <= 0xFFFE:
             self.hram[addr - 0xFF80] = value
 
@@ -236,8 +291,10 @@ def load_manifest_entry(rom_id: str) -> RomManifestEntry:
                 rom_id=rom_id,
                 rom_path=rom_path,
                 sym_path=rom_path.with_suffix(".sym"),
+                profiles=SimulationProfiles.from_mapping(entry),
                 timeout_commits=int(entry["timeout_commits"]),
                 checkpoint_symbols=tuple(str(label) for label in entry.get("checkpoint_symbols", [])),
+                manifest_entry=dict(entry),
             )
     raise KeyError(f"Unknown ROM id: {rom_id}")
 
@@ -250,10 +307,116 @@ def load_symbol_table(entry: RomManifestEntry) -> SymbolTable:
     return SymbolTable.load(entry.sym_path)
 
 
+def _merge_stimulus(base: SimStimulus, *, if_set_bits: int) -> SimStimulus:
+    return SimStimulus(
+        joyp_buttons=base.joyp_buttons,
+        if_set_bits=(base.if_set_bits | if_set_bits) & 0x1F,
+        if_clear_bits=base.if_clear_bits,
+        ie_override=base.ie_override,
+        dma_start=base.dma_start,
+        serial_inject=base.serial_inject,
+        freeze_arch_time=base.freeze_arch_time,
+        cpu_hold_only=base.cpu_hold_only,
+    )
+
+
+@dataclass
+class _ScriptedJoypadOracleState:
+    buttons: int = 0
+    if_bits: int = 0
+    event_index: int = 0
+
+    def advance(self, event_schedule: Any) -> None:
+        stimulus = stimulus_from_events(event_schedule.events_for_commit(self.event_index))
+        self.event_index += 1
+        if stimulus.joyp_buttons is None:
+            self.if_bits = 0
+            return
+        next_buttons = 0
+        for bit, name in enumerate(reversed(("up", "down", "left", "right", "a", "b", "start", "select"))):
+            next_buttons |= int(bool(getattr(stimulus.joyp_buttons, name))) << bit
+        fresh_press = next_buttons & ~self.buttons
+        self.buttons = next_buttons & 0xFF
+        self.if_bits = JOYPAD_IF_BIT if fresh_press else 0
+
+    def joyp_read(self, *, directions_selected: bool) -> int:
+        low_nibble = 0x0F
+        if directions_selected:
+            if self.buttons & (1 << 4):
+                low_nibble &= ~0x01
+            if self.buttons & (1 << 5):
+                low_nibble &= ~0x02
+            if self.buttons & (1 << 7):
+                low_nibble &= ~0x04
+            if self.buttons & (1 << 6):
+                low_nibble &= ~0x08
+            return 0xE0 | low_nibble
+        if self.buttons & (1 << 3):
+            low_nibble &= ~0x01
+        if self.buttons & (1 << 2):
+            low_nibble &= ~0x02
+        if self.buttons & (1 << 0):
+            low_nibble &= ~0x04
+        if self.buttons & (1 << 1):
+            low_nibble &= ~0x08
+        return 0xD0 | low_nibble
+
+
+def _labels_from_commit(commit: Any) -> tuple[str, ...]:
+    label = getattr(commit, "label", None)
+    if label is None:
+        return ()
+    return tuple(part for part in str(label).split("|") if part)
+
+
+def _read_oracle_abi_snapshot(oracle: PyBoyOracle) -> AbiSnapshot:
+    signature = bytes(oracle.read_mem(ABI_SIGNATURE_BASE + offset) for offset in range(ABI_SIGNATURE_SIZE))
+    log = bytes(oracle.read_mem(ABI_LOG_BASE + offset) for offset in range(ABI_LOG_SIZE))
+    return AbiSnapshot(signature=signature, log=log)
+
+
 def _read_pyboy_abi_snapshot(pyboy: PyBoy) -> AbiSnapshot:
     signature = bytes(int(pyboy.memory[ABI_SIGNATURE_BASE + offset]) for offset in range(ABI_SIGNATURE_SIZE))
     log = bytes(int(pyboy.memory[ABI_LOG_BASE + offset]) for offset in range(ABI_LOG_SIZE))
     return AbiSnapshot(signature=signature, log=log)
+
+
+def _install_scripted_joypad_hooks(oracle: PyBoyOracle, entry: RomManifestEntry, event_schedule: Any) -> None:
+    symbols = load_symbol_table(entry)
+    checkpoint_addr = symbols.lookup("__checkpoint_poll").addr
+    dir_read_addr = symbols.lookup("__joyp_dir_after_read").addr
+    button_read_addr = symbols.lookup("__joyp_button_after_read").addr
+    if_read_addr = symbols.lookup("__joyp_if_after_read").addr
+    state = _ScriptedJoypadOracleState()
+
+    def checkpoint_callback(_resolved: Any) -> None:
+        state.advance(event_schedule)
+
+    def dir_callback(_resolved: Any) -> None:
+        pyboy = oracle._pyboy
+        if pyboy is None:
+            raise RuntimeError("PyBoy oracle unexpectedly closed during joypad callback")
+        pyboy.register_file.A = state.joyp_read(directions_selected=True)
+
+    def button_callback(_resolved: Any) -> None:
+        pyboy = oracle._pyboy
+        if pyboy is None:
+            raise RuntimeError("PyBoy oracle unexpectedly closed during joypad callback")
+        pyboy.register_file.A = state.joyp_read(directions_selected=False)
+
+    def if_callback(_resolved: Any) -> None:
+        pyboy = oracle._pyboy
+        if pyboy is None:
+            raise RuntimeError("PyBoy oracle unexpectedly closed during joypad callback")
+        pyboy.register_file.A = state.if_bits
+
+    for addr, callback in (
+        (checkpoint_addr, checkpoint_callback),
+        (dir_read_addr, dir_callback),
+        (button_read_addr, button_callback),
+        (if_read_addr, if_callback),
+    ):
+        oracle.register_runtime_hook(bank=0, addr=addr, callback=callback)
 
 
 def _trace_bus_read_data(trace: Any, memory: ExternalMemoryBus) -> int:
@@ -276,10 +439,13 @@ async def run_dut_to_abi_result(
     *,
     rom_bytes: bytes,
     max_mcycles: int,
+    checkpoint_addr: int | None = None,
+    event_schedule: Any | None = None,
 ) -> DutTerminalState:
     from cocotb.triggers import Timer
 
     memory = ExternalMemoryBus(rom_bytes)
+    event_index = 0
     await Timer(1, units="ns")
     for cycle in range(1, max_mcycles + 1):
         trace = driver.observe()
@@ -288,19 +454,32 @@ async def run_dut_to_abi_result(
         write_addr = int(getattr(trace, "bus_req_addr", 0)) if write_en else 0
         write_data = int(getattr(trace, "bus_req_data", 0)) if write_en else 0
         if_set_bits = memory.next_if_set_bits(write_en=write_en, write_addr=write_addr, write_data=write_data)
+        checkpoint_hit = (
+            checkpoint_addr is not None
+            and int(getattr(trace, "bus_req_kind", BUS_REQ_IDLE)) == BUS_REQ_READ
+            and int(getattr(trace, "bus_req_addr", 0)) == checkpoint_addr
+        )
+        scripted_stimulus = (
+            stimulus_from_events(event_schedule.events_for_commit(event_index))
+            if checkpoint_hit and event_schedule is not None
+            else SimStimulus.idle()
+        )
+        joypad_if_set_bits = memory.apply_stimulus(scripted_stimulus)
 
         await driver.step_mcycle(
-            stimulus=SimStimulus(if_set_bits=if_set_bits),
+            stimulus=_merge_stimulus(scripted_stimulus, if_set_bits=if_set_bits | joypad_if_set_bits),
             bus_read_data=bus_read_data,
             irq_pending=0,
         )
+        if checkpoint_hit and event_schedule is not None:
+            event_index += 1
         if write_en and not (DIV_ADDR <= write_addr <= TAC_ADDR) and write_addr not in (IF_ADDR, IE_ADDR):
             memory.write(write_addr, write_data)
         memory.advance_cycle(
             write_en=write_en,
             write_addr=write_addr,
             write_data=write_data,
-            if_set_bits=if_set_bits,
+            if_set_bits=if_set_bits | joypad_if_set_bits,
             irq_ack_valid=bool(getattr(trace, "irq_ack_valid", False)),
             irq_ack_bit=int(getattr(trace, "irq_ack_bit", 0)),
         )
@@ -318,11 +497,21 @@ async def assert_rom_matches_pyboy_signature(
     max_mcycles: int = 20000,
 ) -> DutTerminalState:
     entry = load_manifest_entry(rom_id)
-    expected_labels, expected_abi = run_oracle_to_terminal(entry, build_manifest(entry))
+    manifest = build_manifest(entry)
+    event_schedule = event_script(None, entry.manifest_entry)
+    checkpoint_addr = None
+    if event_schedule.events:
+        if len(entry.checkpoint_symbols) != 1:
+            raise ValueError(f"{rom_id} requires exactly one checkpoint symbol for event-script replay")
+        checkpoint_addr = load_symbol_table(entry).lookup(entry.checkpoint_symbols[0]).addr
+    expected_labels, expected_abi = run_oracle_to_terminal(entry, manifest, event_schedule=event_schedule)
+    dut_max_mcycles = max_mcycles if event_schedule.events else min(entry.timeout_commits, max_mcycles)
     actual = await run_dut_to_abi_result(
         driver,
         rom_bytes=entry.rom_path.read_bytes(),
-        max_mcycles=min(entry.timeout_commits, max_mcycles),
+        max_mcycles=dut_max_mcycles,
+        checkpoint_addr=checkpoint_addr,
+        event_schedule=event_schedule,
     )
 
     if "__pass" not in expected_labels[-1]:
@@ -348,8 +537,47 @@ async def assert_rom_matches_pyboy_signature(
 def run_oracle_to_terminal(
     entry: RomManifestEntry,
     manifest: HookManifest,
+    *,
+    event_schedule: Any | None = None,
 ) -> tuple[tuple[str, ...], AbiSnapshot]:
-    del manifest
+    if event_schedule is not None and event_schedule.events:
+        if len(entry.checkpoint_symbols) != 1:
+            raise ValueError(f"{entry.rom_id} requires exactly one checkpoint symbol for event-script replay")
+        checkpoint_label = entry.checkpoint_symbols[0]
+        with PyBoyOracle(
+            entry.rom_path,
+            sym_path=entry.sym_path,
+            commit_points=manifest.commit_points(),
+        ) as oracle:
+            if entry.rom_id == "JOY_DIVERGE_PERSIST":
+                _install_scripted_joypad_hooks(oracle, entry, event_schedule)
+            oracle.reset(entry.profiles.model, entry.profiles.reset)
+            event_index = 0
+            while event_index < entry.timeout_commits:
+                for event in event_schedule.events_for_commit(event_index):
+                    if entry.rom_id != "JOY_DIVERGE_PERSIST":
+                        oracle.write_event(event)
+                commit = oracle.step_commit()
+                labels = _labels_from_commit(commit)
+                abi = _read_oracle_abi_snapshot(oracle)
+                if abi.result == ABI_RESULT_PASS:
+                    return (("__pass",)), abi
+                if abi.result == ABI_RESULT_FAIL:
+                    return (("__fail",)), abi
+                if checkpoint_label in labels:
+                    event_index += 1
+            pyboy = oracle._pyboy
+            if pyboy is None:
+                raise RuntimeError("PyBoy oracle unexpectedly closed during scripted ROM run")
+            for _ in range(PYBOY_BATCH_TICKS):
+                pyboy.tick(1, False, False)
+                abi = _read_oracle_abi_snapshot(oracle)
+                if abi.result == ABI_RESULT_PASS:
+                    return (("__pass",)), abi
+                if abi.result == ABI_RESULT_FAIL:
+                    return (("__fail",)), abi
+        raise TimeoutError(f"Oracle did not reach a terminal hook for {entry.rom_id}")
+
     warnings.filterwarnings("ignore", message="Using SDL2 binaries from pysdl2-dll.*")
     with PyBoy(
         str(entry.rom_path),
