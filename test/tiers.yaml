@@ -2,6 +2,7 @@ presets:
   smoke:
     tier_keys: [meta]
     suite_labels:
+      - test_e2e_smoke.py
       - test_spade_cocotb_pipeline.py
       - test_pyboy_oracle.py
       - test_lockstep_driver.py
