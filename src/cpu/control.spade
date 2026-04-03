@@ -1,5 +1,5 @@
 use std::option::Option;
-use lib::cpu::decode_types::{AddressingMode, BitOpKind, ControlTarget, DecodedOp, MiscKind, Operand16, Operand8, StackOpKind, WordAluKind};
+use lib::cpu::decode_types::{AddressingMode, BitOpKind, ControlTarget, DecodedOp, MiscKind, Operand16, Operand8, PrefixKind, StackOpKind, WordAluKind};
 use lib::cpu::regs::{Registers, get_r16, get_r8};
 use lib::cpu::types::{Imm16Cont, Imm16HiCont, Imm8Cont, Phase, ReadCont, WriteCont};
 
@@ -536,5 +536,27 @@ pub fn control_flow_fetch_pc_write(op: DecodedOp, regs: Registers) -> Option<uin
             }
         },
         _ => Option::None,
+    }
+}
+
+pub fn cb_prefixed_fetch_phase(op: DecodedOp, regs: Registers) -> Phase {
+    match op {
+        DecodedOp::BitOp$(kind, prefix, target, bit_index, zero_on_result, addressing) => {
+            let _ = addressing;
+            match prefix {
+                Option::Some(value) => {
+                    match value {
+                        PrefixKind::Cb => {
+                            match target {
+                                Operand8::AddrHl => Phase::ReadMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), k: ReadCont::BitOpFromMem$(kind: kind, bit_index: bit_index, zero_on_result: zero_on_result)),
+                                _ => Phase::Fetch,
+                            }
+                        },
+                    }
+                },
+                Option::None => Phase::Fetch,
+            }
+        },
+        _ => Phase::Fetch,
     }
 }

@@ -9,6 +9,7 @@ CPU_MAIN_PATH = ROOT / "src" / "cpu" / "main.spade"
 CPU_CONTROL_PATH = ROOT / "src" / "cpu" / "control.spade"
 CPU_SEMANTICS_PATH = ROOT / "src" / "cpu" / "semantics.spade"
 CPU_SEMANTICS_ALU_TOP_PATH = ROOT / "src" / "cpu" / "semantics_alu_test_top.spade"
+CPU_SEMANTICS_CB_TOP_PATH = ROOT / "src" / "cpu" / "semantics_cb_test_top.spade"
 CPU_SEMANTICS_FLOW_TOP_PATH = ROOT / "src" / "cpu" / "semantics_flow_test_top.spade"
 CPU_SEMANTICS_LOAD_TOP_PATH = ROOT / "src" / "cpu" / "semantics_load_test_top.spade"
 CPU_SEMANTICS_TOP_PATH = ROOT / "src" / "cpu" / "semantics_test_top.spade"
@@ -22,6 +23,7 @@ class CpuSemanticsContractTest(unittest.TestCase):
         self.assertIn("pub mod control;", text)
         self.assertIn("pub mod semantics;", text)
         self.assertIn("pub mod semantics_alu_test_top;", text)
+        self.assertIn("pub mod semantics_cb_test_top;", text)
         self.assertIn("pub mod semantics_flow_test_top;", text)
         self.assertIn("pub mod semantics_load_test_top;", text)
         self.assertIn("pub mod semantics_test_top;", text)
@@ -35,6 +37,7 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "pub fn aluish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase",
             "pub fn control_flow_fetch_phase(op: DecodedOp, regs: Registers) -> Phase",
             "pub fn control_flow_fetch_pc_write(op: DecodedOp, regs: Registers) -> Option<uint<16>>",
+            "pub fn cb_prefixed_fetch_phase(op: DecodedOp, regs: Registers) -> Phase",
             "pub fn word_alu_fetch_phase(op: DecodedOp) -> Phase",
             "Imm8Cont::AluImm8",
             "Imm8Cont::RelativeJump",
@@ -42,6 +45,7 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "Imm16Cont::JumpAbs",
             "Imm16Cont::CallTarget",
             "ReadCont::AluFromMem",
+            "ReadCont::BitOpFromMem",
             "ReadCont::PopLo",
             "Imm8Cont::StoreToHl",
             "Imm16Cont::StoreSpToAddr",
@@ -54,6 +58,7 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "pub fn apply_delta(state: CpuState, delta: CpuDelta) -> CpuState",
             "pub fn step_mcycle(state: CpuState, input: MicroInput) -> MicroOutput",
             "fn handle_fetch(state: CpuState, input: MicroInput) -> MicroOutput",
+            "fn handle_fetch_prefix(state: CpuState, input: MicroInput, prefix: PrefixKind) -> MicroOutput",
             "fn handle_read_imm8(state: CpuState, input: MicroInput, k: Imm8Cont) -> MicroOutput",
             "fn handle_read_imm16_lo(state: CpuState, input: MicroInput, k: Imm16Cont) -> MicroOutput",
             "fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm16HiCont) -> MicroOutput",
@@ -64,12 +69,15 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "fn execute_alu_delta(state: CpuState, kind: AluKind, dst: Operand8, src: Operand8, addressing: AddressingMode) -> CpuDelta",
             "fn execute_misc_delta(state: CpuState, kind: MiscKind) -> CpuDelta",
             "fn execute_bitop_delta(",
+            "fn execute_bitop_result(",
+            "fn bit_res_set_kind(kind: BitOpKind) -> BitResSetKind",
             "fn execute_control_flow_delta(",
             "fn execute_stack_delta(",
             "fn condition_matches(regs: Registers, condition: Option<ConditionCode>) -> bool",
             "fn fetch_imm_hi_seed(decoded: DecodedOp, phase_write: Option<Phase>) -> Option<uint<8>>",
             "fn execute_word_alu_delta(",
             "ReadCont::AluFromMem$(kind)",
+            "ReadCont::BitOpFromMem$(kind, bit_index, zero_on_result) =>",
             "Imm8Cont::AluImm8$(kind)",
             "Imm8Cont::RelativeJump =>",
             "Imm8Cont::AddSpDisp =>",
@@ -80,9 +88,11 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "WriteCont::PushHi$(next_pc) =>",
             "ControlTarget::Return$(enable_interrupts)",
             "aluish_fetch_phase(decoded, state.arch.regs)",
+            "cb_prefixed_fetch_phase(decoded, state.arch.regs)",
             "control_flow_fetch_pc_write(decoded, state.arch.regs)",
             "control_flow_fetch_phase(decoded, state.arch.regs)",
             "word_alu_fetch_phase(decoded)",
+            "Phase::FetchPrefix$(prefix) => handle_fetch_prefix(state, input, prefix)",
             "BusReq::Read$(addr: state.arch.regs.pc)",
             "some_u16(trunc(state.arch.regs.pc + 1u16))",
             "mask_f(select_u8(writes.f, regs.f))",
@@ -109,6 +119,18 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "fn ime_code(ime: ImeState) -> uint<2>",
             "zext(ime_code(next_state.arch.ime_state)) << 152",
             "zext(next_state.micro.imm_hi) << 128",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_semantics_cb_test_top_exposes_prefix_and_bitop_projection_surface(self) -> None:
+        text = CPU_SEMANTICS_CB_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "entity semantics_cb_test_top(",
+            "Phase::FetchPrefix$(prefix: prefix_from_code(cont_code))",
+            "ReadCont::BitOpFromMem$(kind: bitop_kind_from_code(trunc(cont_data)), bit_index: bit_index_from_code(data), zero_on_result: true)",
+            "Phase::FetchPrefix$(prefix) => (1u4, prefix_code(prefix), 0u16, 0u8, 0u8, 0u16)",
+            "ReadCont::BitOpFromMem$(kind, bit_index, zero_on_result) =>",
+            "let decoded = decode_for_state(state_opcode_i, state_phase_kind_i);",
         ]:
             self.assertIn(symbol, text)
 

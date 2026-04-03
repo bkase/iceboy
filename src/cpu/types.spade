@@ -1,7 +1,7 @@
 use std::option::Option;
 use lib::bus::types::{BusReq, BusResp, idle_bus_resp};
 use lib::cpu::alu::AluKind;
-use lib::cpu::decode_types::{DecodedOp, PrefixKind, invalid_decoded_op};
+use lib::cpu::decode_types::{BitOpKind, DecodedOp, PrefixKind, invalid_decoded_op};
 use lib::cpu::regs::{R8, RegPair, Registers, zero_registers};
 
 pub enum ModelProfile {
@@ -47,6 +47,7 @@ pub enum ReadCont {
     LoadReg8 { dst: R8 },
     LoadAFromAddr,
     AluFromMem { kind: AluKind },
+    BitOpFromMem { kind: BitOpKind, bit_index: Option<uint<3>>, zero_on_result: bool },
     PopLo { pair: RegPair },
     PopHi { pair: RegPair, lo: uint<8> },
 }

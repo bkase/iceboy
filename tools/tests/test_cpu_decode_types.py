@@ -75,7 +75,7 @@ class CpuDecodeTypesContractTest(unittest.TestCase):
     def test_cpu_types_import_decoded_op_from_decode_types_module(self) -> None:
         text = CPU_TYPES_PATH.read_text(encoding="utf-8")
         self.assertIn(
-            "use lib::cpu::decode_types::{DecodedOp, PrefixKind, invalid_decoded_op};",
+            "use lib::cpu::decode_types::{BitOpKind, DecodedOp, PrefixKind, invalid_decoded_op};",
             text,
         )
         self.assertNotIn("pub enum DecodedOp", text)

@@ -1,0 +1,266 @@
+use lib::bus::types::BusResp;
+use lib::cpu::alu::RotShiftKind;
+use lib::cpu::decode::{decode, decode_cb};
+use lib::cpu::decode_types::{BitOpKind, DecodedOp, PrefixKind};
+use lib::cpu::regs::{R8, RegPair, Registers};
+use lib::cpu::semantics::{apply_delta, step_mcycle};
+use lib::cpu::types::{
+    CpuArchState,
+    CpuMicroState,
+    CpuState,
+    HaltState,
+    Imm16Cont,
+    Imm16HiCont,
+    Imm8Cont,
+    ImeState,
+    IrqPending,
+    MicroInput,
+    Phase,
+    ReadCont,
+    WriteCont,
+};
+
+fn prefix_from_code(code: uint<4>) -> PrefixKind {
+    let _ = code;
+    PrefixKind::Cb
+}
+
+fn prefix_code(prefix: PrefixKind) -> uint<4> {
+    match prefix {
+        PrefixKind::Cb => 1u4,
+    }
+}
+
+fn rot_shift_kind_from_code(code: uint<4>) -> RotShiftKind {
+    match code {
+        0u4 => RotShiftKind::Rlc,
+        1u4 => RotShiftKind::Rrc,
+        2u4 => RotShiftKind::Rl,
+        3u4 => RotShiftKind::Rr,
+        4u4 => RotShiftKind::Sla,
+        5u4 => RotShiftKind::Sra,
+        6u4 => RotShiftKind::Swap,
+        _ => RotShiftKind::Srl,
+    }
+}
+
+fn bitop_kind_from_code(code: uint<4>) -> BitOpKind {
+    match code {
+        12u4 => BitOpKind::Bit,
+        13u4 => BitOpKind::Res,
+        14u4 => BitOpKind::Set,
+        _ => BitOpKind::RotateShift$(kind: rot_shift_kind_from_code(code)),
+    }
+}
+
+fn bitop_kind_code(kind: BitOpKind) -> uint<4> {
+    match kind {
+        BitOpKind::RotateShift$(kind) => {
+            match kind {
+                RotShiftKind::Rlc => 0u4,
+                RotShiftKind::Rrc => 1u4,
+                RotShiftKind::Rl => 2u4,
+                RotShiftKind::Rr => 3u4,
+                RotShiftKind::Sla => 4u4,
+                RotShiftKind::Sra => 5u4,
+                RotShiftKind::Swap => 6u4,
+                RotShiftKind::Srl => 7u4,
+                _ => 15u4,
+            }
+        },
+        BitOpKind::Bit => 12u4,
+        BitOpKind::Res => 13u4,
+        BitOpKind::Set => 14u4,
+    }
+}
+
+fn bit_index_from_code(code: uint<8>) -> std::option::Option<uint<3>> {
+    if code > 7u8 {
+        std::option::Option::None
+    } else {
+        std::option::Option::Some(trunc(code))
+    }
+}
+
+fn bit_index_code(index: std::option::Option<uint<3>>) -> uint<8> {
+    match index {
+        std::option::Option::Some(value) => zext(value),
+        std::option::Option::None => 0xffu8,
+    }
+}
+
+fn read_cont_from_inputs(code: uint<4>, data: uint<8>, cont_data: uint<8>) -> ReadCont {
+    let _ = data;
+    match code {
+        5u4 => ReadCont::BitOpFromMem$(kind: bitop_kind_from_code(trunc(cont_data)), bit_index: bit_index_from_code(data), zero_on_result: true),
+        _ => ReadCont::LoadAFromAddr,
+    }
+}
+
+fn read_cont_code(cont: ReadCont) -> (uint<4>, uint<8>, uint<8>) {
+    match cont {
+        ReadCont::BitOpFromMem$(kind, bit_index, zero_on_result) => {
+            let _ = zero_on_result;
+            (5u4, zext(bitop_kind_code(kind)), bit_index_code(bit_index))
+        },
+        _ => (15u4, 0u8, 0u8),
+    }
+}
+
+fn write_cont_from_inputs(code: uint<4>, cont_data: uint<8>, aux: uint<16>) -> WriteCont {
+    let _ = (code, cont_data, aux);
+    WriteCont::StoreDone
+}
+
+fn write_cont_code(cont: WriteCont) -> (uint<4>, uint<8>, uint<16>) {
+    match cont {
+        WriteCont::StoreDone => (0u4, 0u8, 0u16),
+        _ => (15u4, 0u8, 0u16),
+    }
+}
+
+fn decode_for_state(opcode: uint<8>, phase_kind: uint<4>) -> DecodedOp {
+    match phase_kind {
+        0u4 => decode(opcode),
+        1u4 => decode(opcode),
+        _ => decode_cb(opcode),
+    }
+}
+
+fn phase_from_inputs(
+    kind: uint<4>,
+    addr: uint<16>,
+    data: uint<8>,
+    cont_code: uint<4>,
+    cont_data: uint<8>,
+    aux: uint<16>,
+    decoded: DecodedOp,
+) -> Phase {
+    let _ = aux;
+    match kind {
+        1u4 => Phase::FetchPrefix$(prefix: prefix_from_code(cont_code)),
+        2u4 => Phase::Execute$(op: decoded),
+        6u4 => Phase::ReadMem$(addr: addr, k: read_cont_from_inputs(cont_code, data, cont_data)),
+        7u4 => Phase::WriteMem$(addr: addr, data: data, k: write_cont_from_inputs(cont_code, cont_data, aux)),
+        _ => Phase::Fetch,
+    }
+}
+
+fn phase_projection(phase: Phase) -> (uint<4>, uint<4>, uint<16>, uint<8>, uint<8>, uint<16>) {
+    match phase {
+        Phase::Fetch => (0u4, 0u4, 0u16, 0u8, 0u8, 0u16),
+        Phase::FetchPrefix$(prefix) => (1u4, prefix_code(prefix), 0u16, 0u8, 0u8, 0u16),
+        Phase::Execute$(op) => { let _ = op; (2u4, 0u4, 0u16, 0u8, 0u8, 0u16) },
+        Phase::ReadMem$(addr, k) => {
+            let (cont_code, cont_data, data) = read_cont_code(k);
+            (6u4, cont_code, addr, data, cont_data, 0u16)
+        },
+        Phase::WriteMem$(addr, data, k) => {
+            let (cont_code, cont_data, aux) = write_cont_code(k);
+            (7u4, cont_code, addr, data, cont_data, aux)
+        },
+        _ => (15u4, 0u4, 0u16, 0u8, 0u8, 0u16),
+    }
+}
+
+fn bus_req_kind(req: lib::bus::types::BusReq) -> uint<2> {
+    match req {
+        lib::bus::types::BusReq::Idle => 0u2,
+        lib::bus::types::BusReq::Read$(addr) => { let _ = addr; 1u2 },
+        lib::bus::types::BusReq::Write$(addr, data) => { let _ = (addr, data); 2u2 },
+    }
+}
+
+fn bus_req_addr(req: lib::bus::types::BusReq) -> uint<16> {
+    match req {
+        lib::bus::types::BusReq::Idle => 0u16,
+        lib::bus::types::BusReq::Read$(addr) => addr,
+        lib::bus::types::BusReq::Write$(addr, data) => { let _ = data; addr },
+    }
+}
+
+fn bus_req_data(req: lib::bus::types::BusReq) -> uint<8> {
+    match req {
+        lib::bus::types::BusReq::Idle => 0u8,
+        lib::bus::types::BusReq::Read$(addr) => { let _ = addr; 0u8 },
+        lib::bus::types::BusReq::Write$(addr, data) => { let _ = addr; data },
+    }
+}
+
+entity semantics_cb_test_top(
+    state_pc_i: uint<16>,
+    state_sp_i: uint<16>,
+    state_a_i: uint<8>,
+    state_f_i: uint<8>,
+    state_b_i: uint<8>,
+    state_c_i: uint<8>,
+    state_d_i: uint<8>,
+    state_e_i: uint<8>,
+    state_h_i: uint<8>,
+    state_l_i: uint<8>,
+    state_opcode_i: uint<8>,
+    state_phase_kind_i: uint<4>,
+    state_phase_cont_i: uint<4>,
+    state_phase_addr_i: uint<16>,
+    state_phase_data_i: uint<8>,
+    state_phase_cont_data_i: uint<8>,
+    state_phase_aux_i: uint<16>,
+    bus_resp_i: uint<8>,
+    irq_pending_i: uint<5>,
+) -> uint<224> {
+    let regs = Registers(
+        state_a_i,
+        state_f_i,
+        state_b_i,
+        state_c_i,
+        state_d_i,
+        state_e_i,
+        state_h_i,
+        state_l_i,
+        state_sp_i,
+        state_pc_i,
+    );
+    let decoded = decode_for_state(state_opcode_i, state_phase_kind_i);
+    let phase = phase_from_inputs(
+        state_phase_kind_i,
+        state_phase_addr_i,
+        state_phase_data_i,
+        state_phase_cont_i,
+        state_phase_cont_data_i,
+        state_phase_aux_i,
+        decoded,
+    );
+    let arch = CpuArchState(regs, ImeState::Disabled, HaltState::Running);
+    let micro = CpuMicroState(phase, state_opcode_i, 0u8, 0u8, decoded, 0u16);
+    let state = CpuState(arch, micro);
+    let step = step_mcycle(state, MicroInput(BusResp$(data: bus_resp_i), IrqPending$(pending: irq_pending_i)));
+    let next_state = apply_delta(state, step.delta);
+    let (next_phase_kind, next_phase_cont, next_phase_addr, next_phase_data, next_phase_cont_data, next_phase_aux) =
+        phase_projection(next_state.micro.phase);
+    let commit_present = match step.commit {
+        std::option::Option::Some(commit) => { let _ = commit; true },
+        std::option::Option::None => false,
+    };
+
+    (zext(next_state.arch.regs.pc) << 208)
+    | (zext(next_state.arch.regs.sp) << 192)
+    | (zext(next_state.arch.regs.a) << 184)
+    | (zext(next_state.arch.regs.f) << 176)
+    | (zext(next_state.arch.regs.b) << 168)
+    | (zext(next_state.arch.regs.c) << 160)
+    | (zext(next_state.arch.regs.d) << 152)
+    | (zext(next_state.arch.regs.e) << 144)
+    | (zext(next_state.arch.regs.h) << 136)
+    | (zext(next_state.arch.regs.l) << 128)
+    | (zext(next_state.micro.opcode_latch) << 120)
+    | (zext(bus_req_kind(step.bus_req)) << 110)
+    | (zext(bus_req_addr(step.bus_req)) << 94)
+    | (zext(bus_req_data(step.bus_req)) << 86)
+    | (zext(next_phase_kind) << 82)
+    | (zext(next_phase_cont) << 78)
+    | (zext(next_phase_addr) << 62)
+    | (zext(next_phase_data) << 54)
+    | (zext(next_phase_cont_data) << 46)
+    | (zext(next_phase_aux) << 30)
+    | ((if commit_present { 1u224 } else { 0u224 }) << 29)
+}
