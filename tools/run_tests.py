@@ -151,6 +151,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("unit", "test_membus.py", "swim", "test_membus"),
     SuiteDefinition("unit", "test_regs.py", "swim", "test_regs"),
     SuiteDefinition("unit", "test_semantics.py", "swim", "test_semantics"),
+    SuiteDefinition("unit", "test_semantics_loads.py", "swim", "test_semantics_loads"),
     SuiteDefinition("unit", "test_timebase.py", "swim", "test_timebase"),
     SuiteDefinition("lockstep", "test_cpu_lockstep.py", "swim", "test_cpu_lockstep"),
 )

@@ -53,12 +53,14 @@ pub enum ReadCont {
 
 pub enum WriteCont {
     StoreDone,
+    StoreSpHi { data: uint<8>, addr: uint<16> },
     PushHi { next_pc: uint<16> },
     PushLo { low: uint<8>, target: uint<16> },
 }
 
 pub enum Imm8Cont {
     LoadReg8 { dst: R8 },
+    StoreToHl,
     AluImm8 { kind: AluKind },
     RelativeJump,
     IoOffsetReadA,
@@ -73,6 +75,7 @@ pub enum Imm16Cont {
     CallTarget,
     ReadAddrToA,
     WriteAToAddr,
+    StoreSpToAddr,
 }
 
 pub enum Imm16HiCont {
@@ -81,6 +84,7 @@ pub enum Imm16HiCont {
     CallTarget { lo: uint<8> },
     ReadAddrToA { lo: uint<8> },
     WriteAToAddr { lo: uint<8> },
+    StoreSpToAddr { lo: uint<8> },
 }
 
 pub enum IrqSel {

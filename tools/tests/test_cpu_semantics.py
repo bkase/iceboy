@@ -6,7 +6,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CPU_MAIN_PATH = ROOT / "src" / "cpu" / "main.spade"
+CPU_CONTROL_PATH = ROOT / "src" / "cpu" / "control.spade"
 CPU_SEMANTICS_PATH = ROOT / "src" / "cpu" / "semantics.spade"
+CPU_SEMANTICS_LOAD_TOP_PATH = ROOT / "src" / "cpu" / "semantics_load_test_top.spade"
 CPU_SEMANTICS_TOP_PATH = ROOT / "src" / "cpu" / "semantics_test_top.spade"
 SWIM_LOCK_PATH = ROOT / "swim.lock"
 
@@ -14,8 +16,21 @@ SWIM_LOCK_PATH = ROOT / "swim.lock"
 class CpuSemanticsContractTest(unittest.TestCase):
     def test_cpu_module_exports_semantics_modules(self) -> None:
         text = CPU_MAIN_PATH.read_text(encoding="utf-8")
+        self.assertIn("pub mod control;", text)
         self.assertIn("pub mod semantics;", text)
+        self.assertIn("pub mod semantics_load_test_top;", text)
         self.assertIn("pub mod semantics_test_top;", text)
+
+    def test_control_module_exposes_load_phase_helpers(self) -> None:
+        text = CPU_CONTROL_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub fn hl_post_adjust(regs: Registers, addressing: AddressingMode) -> uint<16>",
+            "pub fn loadish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase",
+            "Imm8Cont::StoreToHl",
+            "Imm16Cont::StoreSpToAddr",
+            "WriteCont::PushLo",
+        ]:
+            self.assertIn(symbol, text)
 
     def test_semantics_module_exposes_delta_and_phase_dispatch(self) -> None:
         text = CPU_SEMANTICS_PATH.read_text(encoding="utf-8")
@@ -23,13 +38,35 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "pub fn apply_delta(state: CpuState, delta: CpuDelta) -> CpuState",
             "pub fn step_mcycle(state: CpuState, input: MicroInput) -> MicroOutput",
             "fn handle_fetch(state: CpuState, input: MicroInput) -> MicroOutput",
+            "fn handle_read_imm8(state: CpuState, input: MicroInput, k: Imm8Cont) -> MicroOutput",
+            "fn handle_read_imm16_lo(state: CpuState, input: MicroInput, k: Imm16Cont) -> MicroOutput",
+            "fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm16HiCont) -> MicroOutput",
+            "fn handle_read_mem(state: CpuState, input: MicroInput, addr: uint<16>, k: ReadCont) -> MicroOutput",
+            "fn handle_write_mem(state: CpuState, input: MicroInput, addr: uint<16>, data: uint<8>, k: WriteCont) -> MicroOutput",
+            "fn handle_execute(state: CpuState, input: MicroInput, op: DecodedOp) -> MicroOutput",
             "fn handle_halted(state: CpuState, input: MicroInput) -> MicroOutput",
             "BusReq::Read$(addr: state.arch.regs.pc)",
-            "Option::Some(trunc(state.arch.regs.pc + 1u16))",
+            "some_u16(trunc(state.arch.regs.pc + 1u16))",
             "mask_f(select_u8(writes.f, regs.f))",
             "CpuState(next_arch, next_micro)",
             "Phase::Fetch => handle_fetch(state, input)",
             "Phase::Halted => handle_halted(state, input)",
+            "Phase::ReadImm8$(k) => handle_read_imm8(state, input, k)",
+            "Phase::ReadImm16Lo$(k) => handle_read_imm16_lo(state, input, k)",
+            "Phase::ReadMem$(addr, k) => handle_read_mem(state, input, addr, k)",
+            "Phase::WriteMem$(addr, data, k) => handle_write_mem(state, input, addr, data, k)",
+            "Phase::Execute$(op) => handle_execute(state, input, op)",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_semantics_load_test_top_exposes_phase_projection_surface(self) -> None:
+        text = CPU_SEMANTICS_LOAD_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "entity semantics_load_test_top(",
+            "let step = step_mcycle(state, MicroInput(BusResp$(data: bus_resp_i), IrqPending$(pending: irq_pending_i)));",
+            "let next_state = apply_delta(state, step.delta);",
+            "fn phase_projection(phase: Phase) -> (uint<4>, uint<4>, uint<16>, uint<8>, uint<8>, uint<16>)",
+            "fn write_cont_from_inputs(code: uint<4>, cont_data: uint<8>, aux: uint<16>) -> WriteCont",
         ]:
             self.assertIn(symbol, text)
 
