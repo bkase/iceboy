@@ -33,6 +33,63 @@ class RomRunnerTest(unittest.TestCase):
         self.assertEqual(bus.read(0xFF80), 0xC3)
         self.assertEqual(bus.read(0x0150), 0x50)
 
+    def test_external_memory_bus_tracks_ie_if_mirrors(self) -> None:
+        bus = ExternalMemoryBus(bytes(0x8000))
+
+        bus.advance_cycle(
+            write_en=True,
+            write_addr=0xFFFF,
+            write_data=0x04,
+            if_set_bits=0,
+            irq_ack_valid=False,
+            irq_ack_bit=0,
+        )
+        bus.advance_cycle(
+            write_en=True,
+            write_addr=0xFF0F,
+            write_data=0x04,
+            if_set_bits=0,
+            irq_ack_valid=False,
+            irq_ack_bit=0,
+        )
+        self.assertEqual(bus.read(0xFFFF), 0x04)
+        self.assertEqual(bus.read(0xFF0F), 0x04)
+
+        bus.advance_cycle(
+            write_en=False,
+            write_addr=0,
+            write_data=0,
+            if_set_bits=0,
+            irq_ack_valid=True,
+            irq_ack_bit=2,
+        )
+        self.assertEqual(bus.read(0xFF0F), 0x00)
+
+    def test_external_memory_bus_emulates_timer_register_progress(self) -> None:
+        bus = ExternalMemoryBus(bytes(0x8000))
+        bus.advance_cycle(
+            write_en=True,
+            write_addr=0xFF07,
+            write_data=0x05,
+            if_set_bits=0,
+            irq_ack_valid=False,
+            irq_ack_bit=0,
+        )
+
+        for _ in range(6):
+            if_set_bits = bus.next_if_set_bits(write_en=False, write_addr=0, write_data=0)
+            bus.advance_cycle(
+                write_en=False,
+                write_addr=0,
+                write_data=0,
+                if_set_bits=if_set_bits,
+                irq_ack_valid=False,
+                irq_ack_bit=0,
+            )
+
+        self.assertEqual(bus.read(0xFF07), 0x05)
+        self.assertGreater(bus.read(0xFF05), 0x00)
+
     def test_abi_snapshot_tracks_result_and_log_bytes(self) -> None:
         bus = ExternalMemoryBus(bytes(0x8000))
         snapshot = bus.abi_snapshot()
