@@ -34,6 +34,7 @@ IME_ENABLED = 2
 
 HALT_RUNNING = 0
 HALT_HALTED = 1
+HALT_BUG_PENDING = 2
 
 PHASE_FETCH = 0
 PHASE_HALTED = 1
@@ -81,6 +82,7 @@ def halt_name(value: int) -> str:
     return {
         HALT_RUNNING: "Running",
         HALT_HALTED: "Halted",
+        HALT_BUG_PENDING: "HaltBugPending",
     }.get(value, f"halt<{value}>")
 
 
@@ -261,7 +263,7 @@ async def test_ei_nop_halt_enables_before_halt_and_services_one_cycle_later(dut)
 
 
 @cocotb.test()
-async def test_di_halt_with_pending_interrupt_wakes_without_service(dut):
+async def test_di_halt_with_pending_interrupt_triggers_halt_bug_without_service(dut):
     trace = await collect_case_trace(
         dut,
         build_case_rom("DIHALT", bytes([0xF3, 0x76, 0x00, 0x18, 0xFE])),
@@ -275,13 +277,15 @@ async def test_di_halt_with_pending_interrupt_wakes_without_service(dut):
 
     require(trace[1].pre.irq_pending == IRQ_TIMER, trace, "pending interrupt should already be visible by HALT fetch")
     require(trace[2].pre.phase_kind == PHASE_EXECUTE, trace, "HALT should still execute once before wake")
-    require(trace[3].pre.phase_kind == PHASE_HALTED, trace, "HALT should reach the halted phase")
-    require(trace[3].pre.ime_state == IME_DISABLED, trace, "DI should keep IME disabled")
-    require(not trace[3].pre.irq_ack_valid, trace, "waking with IME disabled must not acknowledge the interrupt")
-    require(trace[4].pre.phase_kind == PHASE_FETCH, trace, "pending interrupt should wake back into fetch")
-    require(trace[4].pre.halt_state == HALT_RUNNING, trace, "wake should clear halted state")
+    require(trace[2].pre.ime_state == IME_DISABLED, trace, "DI should keep IME disabled")
+    require(trace[3].pre.phase_kind == PHASE_FETCH, trace, "halt bug should replay the following fetch without entering halted")
+    require(trace[3].pre.halt_state == HALT_BUG_PENDING, trace, "halt bug state should be visible on the replayed fetch")
+    require(trace[3].pre.bus_req_kind == BUS_REQ_READ and trace[3].pre.bus_req_addr == ROM_BASE + 2, trace, "halt bug should fetch the next opcode once without incrementing PC")
+    require(trace[4].pre.phase_kind == PHASE_FETCH, trace, "normal fetch should resume after the replayed opcode")
+    require(trace[4].pre.halt_state == HALT_RUNNING, trace, "halt bug should clear after the replayed fetch")
+    require(trace[4].pre.bus_req_kind == BUS_REQ_READ and trace[4].pre.bus_req_addr == ROM_BASE + 2, trace, "normal fetch should then refetch the same byte and advance PC")
     require(first_index(trace, lambda obs: obs.pre.irq_ack_valid) is None, trace, "no interrupt service should start while IME is disabled")
-    require(any(obs.pre.bus_req_kind == BUS_REQ_READ and obs.pre.bus_req_addr == ROM_BASE + 2 for obs in trace[4:]), trace, "execution should resume at the instruction after HALT")
+    require(any(obs.pre.bus_req_kind == BUS_REQ_READ and obs.pre.bus_req_addr == ROM_BASE + 3 for obs in trace[5:]), trace, "execution should resume past the duplicated opcode after the halt bug replay")
 
 
 @cocotb.test()

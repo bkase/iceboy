@@ -60,8 +60,8 @@ def assert_fields(name: str, actual: dict[str, int | bool], **expected: int | bo
 
 
 @cocotb.test()
-async def test_halt_execute_sets_halt_bug_pending_when_ime_disabled_and_no_irq_pending(dut):
-    actual = await sample(dut, state_pc=0x0701, state_phase=PHASE_EXECUTE, bus_resp=0x76)
+async def test_halt_execute_sets_halt_bug_pending_when_ime_disabled_and_irq_is_already_pending(dut):
+    actual = await sample(dut, state_pc=0x0701, state_phase=PHASE_EXECUTE, bus_resp=0x76, irq_pending=0x04)
     assert_fields(
         "halt_bug_enter",
         actual,
@@ -144,16 +144,16 @@ async def test_halt_bug_does_not_trigger_when_ime_enabled(dut):
 
 
 @cocotb.test()
-async def test_halt_bug_does_not_trigger_when_irq_is_already_pending(dut):
+async def test_halt_bug_does_not_trigger_when_irq_is_not_pending(dut):
     actual = await sample(
         dut,
         state_pc=0x0704,
         state_phase=PHASE_EXECUTE,
         bus_resp=0x76,
-        irq_pending=0x04,
+        irq_pending=0x00,
     )
     assert_fields(
-        "halt_normal_pending_irq",
+        "halt_normal_no_pending_irq",
         actual,
         next_pc=0x0704,
         next_ime=IME_DISABLED,

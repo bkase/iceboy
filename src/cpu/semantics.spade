@@ -341,7 +341,7 @@ fn execute_alu_delta(state: CpuState, kind: AluKind, dst: Operand8, src: Operand
 fn halt_enter_delta(state: CpuState, irq_pending: IrqPending) -> CpuDelta {
     match state.arch.ime_state {
         ImeState::Disabled => {
-            if !any_irq_pending(irq_pending) {
+            if any_irq_pending(irq_pending) {
                 CpuDelta(
                     idle_reg_write_set(),
                     Option::None,
