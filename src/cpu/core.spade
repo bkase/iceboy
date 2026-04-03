@@ -1,11 +1,12 @@
 use lib::bus::types::{BusReq, BusResp};
-use lib::cpu::regs::Registers;
+use lib::cpu::regs::{Registers, mask_f};
 use lib::cpu::semantics::{apply_delta, step_mcycle};
 use lib::cpu::types::{CpuArchState, CpuMicroState, CpuState, HaltState, ImeState, IrqPending, MicroInput, initial_cpu_micro_state};
 
 pub struct CpuCoreOut {
     commit_seq: uint<64>,
     pc: uint<16>,
+    f_low_nibble_zero: bool,
     bus_req_kind: uint<2>,
     bus_req_addr: uint<16>,
     bus_req_data: uint<8>,
@@ -67,10 +68,12 @@ pub entity cpu_core(
     reg(clk) commit_seq: uint<64> reset(rst: 0u64) =
         if m_ce { trunc(commit_seq + 1u64) } else { commit_seq };
     let visible_bus_req = if m_ce { step.bus_req } else { BusReq::Idle };
+    let visible_f = if m_ce { next_state.arch.regs.f } else { arch_state.regs.f };
 
     CpuCoreOut$(
         commit_seq: if m_ce { trunc(commit_seq + 1u64) } else { commit_seq },
         pc: if m_ce { next_state.arch.regs.pc } else { arch_state.regs.pc },
+        f_low_nibble_zero: mask_f(visible_f) == visible_f,
         bus_req_kind: bus_req_kind(visible_bus_req),
         bus_req_addr: bus_req_addr(visible_bus_req),
         bus_req_data: bus_req_data(visible_bus_req),

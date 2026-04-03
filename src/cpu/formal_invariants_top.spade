@@ -1,0 +1,14 @@
+use lib::bus::types::BusResp;
+use lib::cpu::core::cpu_core;
+use lib::cpu::types::IrqPending;
+
+pub entity cpu_f_low_nibble_top(
+    clk: clock,
+    rst: bool,
+    m_ce: bool,
+    bus_resp: BusResp,
+    irq_pending: IrqPending,
+) -> bool {
+    let cpu = inst cpu_core(clk, rst, m_ce, bus_resp, irq_pending);
+    cpu.f_low_nibble_zero
+}

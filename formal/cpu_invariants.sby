@@ -1,0 +1,15 @@
+[options]
+mode prove
+depth 12
+
+[engines]
+smtbmc bitwuzla
+
+[script]
+read -formal -sv spade.sv cpu_f_low_nibble_formal.sv
+clk2fflogic
+prep -top cpu_f_low_nibble_formal
+
+[files]
+build/spade.sv
+formal/cpu_f_low_nibble_formal.sv

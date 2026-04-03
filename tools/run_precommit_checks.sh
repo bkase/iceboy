@@ -106,6 +106,15 @@ else
     exit 1
 fi
 
+echo -n "Running formal checks... "
+if formal_output=$("$UV_BIN" run --with-requirements toolchain/python.lock python tools/run_tests.py --tier formal 2>&1); then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAILED${NC}"
+    echo "$formal_output"
+    exit 1
+fi
+
 patch_cocotb_config_wrapper
 
 if find test -type f -name 'test_*.py' -print -quit | grep -q .; then

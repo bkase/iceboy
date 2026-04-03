@@ -157,6 +157,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("unit", "test_semantics_loads.py", "swim", "test_semantics_loads"),
     SuiteDefinition("unit", "test_semantics_wordalu.py", "swim", "test_semantics_wordalu"),
     SuiteDefinition("unit", "test_timebase.py", "swim", "test_timebase"),
+    SuiteDefinition("formal", "cpu_invariants.sby", "shell", "tools/run_formal_cpu_invariants.sh"),
     SuiteDefinition("lockstep", "test_cpu_lockstep.py", "swim", "test_cpu_lockstep"),
 )
 
@@ -256,6 +257,8 @@ def suite_command(definition: SuiteDefinition) -> list[str]:
         return [UV, "run", "--with-requirements", PYTHON_LOCK, "python", "-m", "unittest", definition.target]
     if definition.runner == "swim":
         return [SWIM, "test", definition.target]
+    if definition.runner == "shell":
+        return ["bash", definition.target]
     raise ValueError(f"Unsupported runner: {definition.runner}")
 
 
@@ -266,6 +269,8 @@ def parse_suite_counts(definition: SuiteDefinition, output: str, exit_code: int)
             failed = int(match.group(1))
             total = int(match.group(2))
             return total - failed, failed
+        return (1, 0) if exit_code == 0 else (0, 1)
+    if definition.runner == "shell":
         return (1, 0) if exit_code == 0 else (0, 1)
 
     ran_match = UNITTEST_RAN_RE.search(output)

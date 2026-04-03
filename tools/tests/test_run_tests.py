@@ -44,9 +44,10 @@ class RunTestsTest(unittest.TestCase):
         self.assertEqual(parse_requested_tiers(smoke_args, config), ["meta"])
         self.assertTrue(include_nightly(nightly_args, config))
 
-    def test_parse_suite_counts_for_python_and_swim(self) -> None:
+    def test_parse_suite_counts_for_python_swim_and_shell(self) -> None:
         python_output = "Ran 3 tests in 0.001s\n\nOK\n"
         swim_output = "ok  test/test_main.py 0/2 failed\n"
+        shell_output = "SBY PASS\n"
         self.assertEqual(
             parse_suite_counts(SuiteDefinition("meta", "py", "python", "mod"), python_output, 0),
             (3, 0),
@@ -55,13 +56,17 @@ class RunTestsTest(unittest.TestCase):
             parse_suite_counts(SuiteDefinition("unit", "swim", "swim", "test_main"), swim_output, 0),
             (2, 0),
         )
+        self.assertEqual(
+            parse_suite_counts(SuiteDefinition("formal", "cpu_invariants.sby", "shell", "tools/run_formal_cpu_invariants.sh"), shell_output, 0),
+            (1, 0),
+        )
 
     def test_coverage_lines_report_implemented_tiers(self) -> None:
         lines = coverage_lines(selected_tiers(["meta", "unit", "formal", "lockstep"]), nightly=False)
-        self.assertEqual(lines[0], "Implemented tiers: 3/4")
+        self.assertEqual(lines[0], "Implemented tiers: 4/4")
         self.assertIn("Meta/Infrastructure: 27 suite(s)", lines)
         self.assertIn("Unit Tests: 22 suite(s)", lines)
-        self.assertIn("Formal Verification: 0 suite(s)", lines)
+        self.assertIn("Formal Verification: 1 suite(s)", lines)
         self.assertIn("Lockstep: 1 suite(s)", lines)
 
     def test_command_env_propagates_requested_simulator(self) -> None:
