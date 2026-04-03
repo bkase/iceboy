@@ -195,6 +195,12 @@ SUITE_COVERAGE: dict[str, SuiteCoverage] = {
         rom_suites=frozenset({"ALU_LOOP"}),
         profile_triples=_profiles(CPU_BRING_UP_PROFILE),
     ),
+    "test_cpu_single_op.py": SuiteCoverage(
+        opcode_families=_families("load", "memory_load", "stack", "bitops", "alu16", "alu8", "control_flow"),
+        phase_constructors=frozenset({"instr_commit"}),
+        bus_regions=frozenset({"rom", "wram"}),
+        profile_triples=_profiles(CPU_BRING_UP_PROFILE),
+    ),
     "test_loads_basic.py": SuiteCoverage(
         phase_constructors=frozenset({"checkpoint_hook"}),
         bus_regions=frozenset({"rom", "wram", "hram"}),

@@ -67,7 +67,7 @@ class RunTestsTest(unittest.TestCase):
         self.assertIn("Meta/Infrastructure: 29 suite(s)", lines)
         self.assertIn("Unit Tests: 23 suite(s)", lines)
         self.assertIn("Formal Verification: 3 suite(s)", lines)
-        self.assertIn("Lockstep: 1 suite(s)", lines)
+        self.assertIn("Lockstep: 2 suite(s)", lines)
 
     def test_command_env_propagates_requested_simulator(self) -> None:
         env = command_env(sim="verilator")
