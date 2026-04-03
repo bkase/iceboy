@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 
 from spec.sm83_opcodes import ALL_OPCODES, PrefixClass
+from tools.sm83_decode_reference import projection_for_opcode, render_decode_snapshot
+
+
+ROOT = Path(__file__).resolve().parents[2]
+DECODE_SNAPSHOT_PATH = ROOT / "tools" / "fixtures" / "decode_snapshot.jsonl"
 
 
 ILLEGAL_SM83_UNPREFIXED = {
@@ -20,12 +26,6 @@ ILLEGAL_SM83_UNPREFIXED = {
 }
 
 
-def _decode_opcode(prefix: PrefixClass, opcode: int) -> object:
-    raise NotImplementedError(
-        "Decoder surface is not implemented yet; see bd-30s for the green completeness bead."
-    )
-
-
 class DecodeCompletenessScaffoldTest(unittest.TestCase):
     def test_metadata_covers_all_decode_slots(self) -> None:
         self.assertEqual(len(ALL_OPCODES), 0x200)
@@ -36,16 +36,19 @@ class DecodeCompletenessScaffoldTest(unittest.TestCase):
         }
         self.assertEqual(illegal, ILLEGAL_SM83_UNPREFIXED)
 
-    @unittest.expectedFailure
     def test_decoder_completeness_matches_canonical_opcode_metadata(self) -> None:
         for entry in ALL_OPCODES:
             with self.subTest(prefix=entry.prefix.value, opcode=f"0x{entry.opcode:02X}"):
-                decoded = _decode_opcode(entry.prefix, entry.opcode)
+                decoded = projection_for_opcode(entry.prefix, entry.opcode)
                 self.assertIsNotNone(decoded)
                 if entry.prefix is PrefixClass.NONE and entry.opcode in ILLEGAL_SM83_UNPREFIXED:
-                    self.assertTrue(getattr(decoded, "is_illegal", False))
+                    self.assertEqual(decoded["invalid"], 1)
                 else:
-                    self.assertFalse(getattr(decoded, "is_illegal", False))
+                    self.assertEqual(decoded["invalid"], 0)
+
+    def test_decode_snapshot_matches_known_good_projection(self) -> None:
+        expected = DECODE_SNAPSHOT_PATH.read_text(encoding="utf-8").strip()
+        self.assertEqual(render_decode_snapshot(), expected)
 
 
 if __name__ == "__main__":

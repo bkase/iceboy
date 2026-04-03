@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from spec.sm83_opcodes import UNPREFIXED_BY_OPCODE
+import json
+
+from spec.sm83_opcodes import ALL_OPCODES, CB_PREFIXED_BY_OPCODE, PrefixClass, UNPREFIXED_BY_OPCODE
 
 
 GENERATED_TABLE_BEGIN = "// BEGIN GENERATED UNPREFIXED TABLE"
@@ -853,6 +855,32 @@ def render_unprefixed_decode_cases() -> str:
         f"        0x{opcode:02X}u8 => {render_projection_spade(projection_for_unprefixed_opcode(opcode))},"
         for opcode in range(0x100)
     )
+
+
+def projection_for_opcode(prefix: PrefixClass, opcode: int) -> dict[str, int]:
+    if prefix is PrefixClass.CB:
+        return projection_for_cb_opcode(opcode)
+    return projection_for_unprefixed_opcode(opcode)
+
+
+def render_decode_snapshot() -> str:
+    lines: list[str] = []
+    for entry in ALL_OPCODES:
+        lines.append(
+            json.dumps(
+                {
+                    "prefix": entry.prefix.value,
+                    "opcode": f"0x{entry.opcode:02X}",
+                    "mnemonic": entry.mnemonic,
+                    "family": entry.family,
+                    "cycles_tstates": list(entry.cycles_tstates),
+                    "flag_policy": dict(entry.flag_policy),
+                    "decoded": projection_for_opcode(entry.prefix, entry.opcode),
+                },
+                sort_keys=True,
+            )
+        )
+    return "\n".join(lines)
 
 
 def extract_generated_table(text: str) -> str:
