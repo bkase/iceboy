@@ -25,6 +25,8 @@ def _load_tracker_module():
 coverage_tracker = _load_tracker_module()
 build_coverage_snapshot = coverage_tracker.build_coverage_snapshot
 report_lines = coverage_tracker.report_lines
+opcode_family_counts = coverage_tracker.opcode_family_counts
+opcode_family_count_lines = coverage_tracker.opcode_family_count_lines
 write_coverage_snapshot = coverage_tracker.write_coverage_snapshot
 
 
@@ -60,6 +62,13 @@ class CoverageTrackerTest(unittest.TestCase):
             self.assertEqual(payload["generated_at"], snapshot.generated_at)
             self.assertEqual(payload["passed_suites"], ["test_cpu_lockstep.py"])
             self.assertIn("dimensions", payload)
+
+    def test_opcode_family_counts_cover_milestone_b_gate_suites(self) -> None:
+        suites = ["test_alu.py", "test_decode.py", "test_decode_cb.py", "test_cpu_single_op.py"]
+        counts = opcode_family_counts(suites)
+        self.assertTrue(all(count > 0 for count in counts.values()), counts)
+        self.assertGreaterEqual(counts["bitops"], 3)
+        self.assertEqual(opcode_family_count_lines(suites)[0], "alu16: 3 suite(s)")
 
 
 if __name__ == "__main__":

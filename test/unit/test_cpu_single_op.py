@@ -337,6 +337,60 @@ ADD_SP_E8_NEGATIVE = unprefixed_case(
     expected_registers=RegisterState(a=0x01, f=0x30, b=0x00, c=0x13, d=0x00, e=0xD8, hl=0x014D, sp=0xFFF6, pc=0x0152),
 )
 
+DEC_B = unprefixed_case(
+    title="SOP_DECB",
+    scope="single_op.dec_b",
+    setup=bytes([0x06, 0x10]),
+    target=bytes([0x05]),
+    opcode=0x05,
+    expected_steps=2,
+)
+
+ADD_A_B = unprefixed_case(
+    title="SOP_ADDB",
+    scope="single_op.add_a_b",
+    setup=bytes([0x06, 0x01]),
+    target=bytes([0x80]),
+    opcode=0x80,
+    expected_steps=2,
+)
+
+AND_A_B = unprefixed_case(
+    title="SOP_ANDB",
+    scope="single_op.and_a_b",
+    setup=bytes([0x06, 0x0F, 0x3E, 0xF0]),
+    target=bytes([0xA0]),
+    opcode=0xA0,
+    expected_steps=2,
+)
+
+XOR_A_B = unprefixed_case(
+    title="SOP_XORB",
+    scope="single_op.xor_a_b",
+    setup=bytes([0x06, 0xFF]),
+    target=bytes([0xA8]),
+    opcode=0xA8,
+    expected_steps=2,
+)
+
+OR_A_B = unprefixed_case(
+    title="SOP_ORB",
+    scope="single_op.or_a_b",
+    setup=bytes([0x06, 0x80]),
+    target=bytes([0xB0]),
+    opcode=0xB0,
+    expected_steps=2,
+)
+
+CP_A_B = unprefixed_case(
+    title="SOP_CPB",
+    scope="single_op.cp_a_b",
+    setup=bytes([0x06, 0x01]),
+    target=bytes([0xB8]),
+    opcode=0xB8,
+    expected_steps=2,
+)
+
 DAA_AFTER_ADD = unprefixed_case(
     title="SOP_DAAADD",
     scope="single_op.daa_after_add",
@@ -423,6 +477,36 @@ async def test_cb_rlc_a_sets_z_for_zero_input(dut):
 @cocotb.test()
 async def test_add_sp_e8_negative_matches_pyboy_oracle(dut):
     await assert_case_matches_oracle(dut, ADD_SP_E8_NEGATIVE)
+
+
+@cocotb.test()
+async def test_dec_b_matches_pyboy_oracle(dut):
+    await assert_case_matches_oracle(dut, DEC_B)
+
+
+@cocotb.test()
+async def test_add_a_b_matches_pyboy_oracle(dut):
+    await assert_case_matches_oracle(dut, ADD_A_B)
+
+
+@cocotb.test()
+async def test_and_a_b_matches_pyboy_oracle(dut):
+    await assert_case_matches_oracle(dut, AND_A_B)
+
+
+@cocotb.test()
+async def test_xor_a_b_matches_pyboy_oracle(dut):
+    await assert_case_matches_oracle(dut, XOR_A_B)
+
+
+@cocotb.test()
+async def test_or_a_b_matches_pyboy_oracle(dut):
+    await assert_case_matches_oracle(dut, OR_A_B)
+
+
+@cocotb.test()
+async def test_cp_a_b_matches_pyboy_oracle(dut):
+    await assert_case_matches_oracle(dut, CP_A_B)
 
 
 @cocotb.test()

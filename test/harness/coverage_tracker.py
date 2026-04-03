@@ -9,7 +9,7 @@ from typing import Iterable
 import yaml
 
 from spec.profiles import MemoryBehaviorProfile, ModelProfile, ResetProfile
-from spec.sm83_opcodes import ALL_OPCODES
+from spec.sm83_opcodes import ALL_OPCODES, PrefixClass
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -94,6 +94,10 @@ def _all_opcode_families() -> tuple[str, ...]:
     return tuple(sorted({metadata.family for metadata in ALL_OPCODES}))
 
 
+def _families_for_prefix(prefix: PrefixClass) -> frozenset[str]:
+    return frozenset(metadata.family for metadata in ALL_OPCODES if metadata.prefix == prefix)
+
+
 def _manifest_rom_entries() -> tuple[dict[str, object], ...]:
     data = yaml.safe_load(ROM_MANIFEST_PATH.read_text(encoding="utf-8"))
     roms = data.get("roms", []) if isinstance(data, dict) else []
@@ -161,7 +165,10 @@ CPU_BRING_UP_PROFILE = format_profile_triple(
 SUITE_COVERAGE: dict[str, SuiteCoverage] = {
     "test_sm83_opcodes.py": SuiteCoverage(opcode_families=frozenset(ALL_FAMILIES)),
     "test_decode_completeness.py": SuiteCoverage(opcode_families=frozenset(ALL_FAMILIES)),
-    "test_alu_generated_vectors.py": SuiteCoverage(opcode_families=_families("ADD", "SUB", "AND", "OR", "XOR", "CP", "INC", "DEC")),
+    "test_alu_generated_vectors.py": SuiteCoverage(opcode_families=_families("alu8", "bitops")),
+    "test_alu.py": SuiteCoverage(opcode_families=_families("alu8", "alu16", "bitops", "control_misc")),
+    "test_decode.py": SuiteCoverage(opcode_families=_families_for_prefix(PrefixClass.NONE)),
+    "test_decode_cb.py": SuiteCoverage(opcode_families=_families_for_prefix(PrefixClass.CB)),
     "test_pyboy_oracle.py": SuiteCoverage(
         phase_constructors=frozenset({"checkpoint_hook"}),
         bus_regions=frozenset({"rom", "wram"}),
@@ -334,3 +341,18 @@ def report_lines(snapshot: CoverageSnapshot) -> list[str]:
         "profile_triples",
     )
     return [snapshot.dimensions[key].summary_line() for key in ordered_keys]
+
+
+def opcode_family_counts(passed_suite_labels: Iterable[str]) -> dict[str, int]:
+    counts = {family: 0 for family in ALL_FAMILIES}
+    for label in sorted(set(passed_suite_labels)):
+        coverage = SUITE_COVERAGE.get(label, SuiteCoverage())
+        for family in coverage.opcode_families:
+            if family in counts:
+                counts[family] += 1
+    return counts
+
+
+def opcode_family_count_lines(passed_suite_labels: Iterable[str]) -> list[str]:
+    counts = opcode_family_counts(passed_suite_labels)
+    return [f"{family}: {counts[family]} suite(s)" for family in ALL_FAMILIES]
