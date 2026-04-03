@@ -101,6 +101,17 @@ def assert_flag_only(snapshot: dict[str, int | bool], *, value: int, flags: Flag
     }, (snapshot, value, flags)
 
 
+def assert_idle(snapshot: dict[str, int | bool]) -> None:
+    assert snapshot == {
+        "val16": 0,
+        "val8": 0,
+        "z": False,
+        "n": False,
+        "h": False,
+        "c": False,
+    }, snapshot
+
+
 @cocotb.test()
 async def test_curated_arithmetic_flag_edges(dut):
     cases = [
@@ -187,3 +198,26 @@ async def test_generated_alu_vectors_match_spec_flag_policies(dut):
             value=0,
             flags=ccf(flags.z, flags.c),
         )
+
+
+@cocotb.test()
+async def test_idle_request_isolates_operands_and_holds_zero_output(dut):
+    seeds = (
+        (0x0000, 0x0000, Flags(False, False, False, False)),
+        (0x00FF, 0x0001, Flags(True, False, True, False)),
+        (0x1234, 0xABCD, Flags(False, True, False, True)),
+        (0xFFFF, 0x00F8, Flags(True, True, True, True)),
+    )
+
+    for a, b, flags in seeds:
+        snapshot = await sample(
+            dut,
+            op=31,
+            a=a,
+            b=b,
+            z_in=flags.z,
+            n_in=flags.n,
+            h_in=flags.h,
+            c_in=flags.c,
+        )
+        assert_idle(snapshot)
