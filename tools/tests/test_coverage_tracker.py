@@ -38,12 +38,14 @@ class CoverageTrackerTest(unittest.TestCase):
                 "test_event_script_determinism.py",
                 "test_reset_profile.py",
                 "test_cpu_lockstep.py",
+                "test_interrupt_injection.py",
             ]
         )
         opcode_dimension = snapshot.dimensions["opcode_families"]
         self.assertGreater(opcode_dimension.covered_count, 0)
         self.assertEqual(opcode_dimension.covered_count, opcode_dimension.total_count)
         self.assertIn("joypad", snapshot.dimensions["interrupt_causes"].covered)
+        self.assertIn("vblank", snapshot.dimensions["interrupt_causes"].covered)
         self.assertIn("ALU_LOOP", snapshot.dimensions["rom_suites"].covered)
         self.assertIn("DMG/SkipBoot/DmgConservative", snapshot.dimensions["profile_triples"].covered)
 

@@ -39,6 +39,10 @@ class SimScaffoldTest(unittest.TestCase):
             "bus_blocked: bool",
             "let cpu = inst cpu_core(",
             "let bus_obs = observe_req(",
+            "let periph_m_ce = peripheral_arch_time_enable(stimulus);",
+            "stimulus.if_set_bits",
+            "stimulus.if_clear_bits",
+            "cpu.irq_ack_valid",
         ]:
             self.assertIn(symbol, text)
         soc_text = SOC_TOP_PATH.read_text(encoding="utf-8")

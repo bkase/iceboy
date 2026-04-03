@@ -16,7 +16,15 @@ warnings.filterwarnings("ignore", message="Using SDL2 binaries from pysdl2-dll.*
 from pyboy import PyBoy
 from pyboy.utils import WindowEvent
 
-from bench.actions.generators import JoypadButtonsEvent, MemoryWriteEvent, RawInputEvent, SimEvent
+from bench.actions.generators import (
+    IeOverrideEvent,
+    IfClearBitsEvent,
+    IfSetBitsEvent,
+    JoypadButtonsEvent,
+    MemoryWriteEvent,
+    RawInputEvent,
+    SimEvent,
+)
 from spec.profiles import ModelProfile, ResetProfile
 
 
@@ -288,6 +296,18 @@ class PyBoyOracle:
                 pyboy.memory[ev.addr] = ev.value & 0xFF
             else:
                 pyboy.memory[ev.bank, ev.addr] = ev.value & 0xFF
+            return
+        if isinstance(ev, IfSetBitsEvent):
+            current = int(pyboy.memory[0xFF0F]) & 0xFF
+            pyboy.memory[0xFF0F] = (current & 0xE0) | ((current | ev.bits) & 0x1F)
+            return
+        if isinstance(ev, IfClearBitsEvent):
+            current = int(pyboy.memory[0xFF0F]) & 0xFF
+            pyboy.memory[0xFF0F] = (current & 0xE0) | ((current & ~ev.bits) & 0x1F)
+            return
+        if isinstance(ev, IeOverrideEvent):
+            current = int(pyboy.memory[0xFFFF]) & 0xFF
+            pyboy.memory[0xFFFF] = (current & 0xE0) | (ev.value & 0x1F)
             return
         if isinstance(ev, RawInputEvent):
             pyboy.send_input(WindowEvent(ev.event), ev.delay)

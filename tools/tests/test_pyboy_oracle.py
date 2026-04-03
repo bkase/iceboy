@@ -5,7 +5,7 @@ import unittest
 import warnings
 from pathlib import Path
 
-from bench.actions.generators import MemoryWriteEvent
+from bench.actions.generators import IeOverrideEvent, IfClearBitsEvent, IfSetBitsEvent, MemoryWriteEvent
 from bench.pyboy.oracle import CommitPoint, PyBoyOracle
 from roms.build_micro_rom import build_alu_loop
 from spec.profiles import ModelProfile, ResetProfile
@@ -62,6 +62,22 @@ class PyBoyOracleTest(unittest.TestCase):
 
             oracle.restore(snapshot)
             self.assertEqual(oracle.read_mem(0xC100), 0x34)
+
+    def test_interrupt_sideband_events_update_if_and_ie(self) -> None:
+        with self.make_oracle() as oracle:
+            oracle.reset(ModelProfile.DMG, ResetProfile.SkipBoot)
+
+            oracle.write_event(IeOverrideEvent(value=0x1B))
+            self.assertEqual(oracle.read_mem(0xFFFF) & 0x1F, 0x1B)
+
+            oracle.write_event(IfSetBitsEvent(bits=0x05))
+            self.assertEqual(oracle.read_mem(0xFF0F) & 0x1F, 0x05)
+
+            oracle.write_event(IfSetBitsEvent(bits=0x08))
+            self.assertEqual(oracle.read_mem(0xFF0F) & 0x1F, 0x0D)
+
+            oracle.write_event(IfClearBitsEvent(bits=0x09))
+            self.assertEqual(oracle.read_mem(0xFF0F) & 0x1F, 0x04)
 
     def test_skipboot_reset_applies_dmg_post_boot_register_state(self) -> None:
         with self.make_oracle() as oracle:

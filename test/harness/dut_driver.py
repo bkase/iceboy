@@ -101,11 +101,15 @@ class CpuCommitTrace:
     bus_region: int = 0
     bus_owner: int = 0
     bus_blocked: bool = False
+    irq_ack_valid: bool = False
+    irq_ack_bit: int = 0
 
     @classmethod
     def from_output(cls, output_value: int, *, seq: int) -> "CpuCommitTrace":
         return cls(
             seq=seq,
+            irq_ack_valid=bool((output_value >> 132) & 0x1),
+            irq_ack_bit=(output_value >> 129) & 0x7,
             commit_seq=(output_value >> 65) & 0xFFFF_FFFF_FFFF_FFFF,
             pc=(output_value >> 49) & 0xFFFF,
             bus_req_kind=(output_value >> 47) & 0x3,
