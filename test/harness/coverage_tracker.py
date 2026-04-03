@@ -207,6 +207,12 @@ SUITE_COVERAGE: dict[str, SuiteCoverage] = {
         rom_suites=frozenset({"ALU_FLAGS"}),
         profile_triples=_profiles(CPU_BRING_UP_PROFILE),
     ),
+    "test_alu16_sp.py": SuiteCoverage(
+        phase_constructors=frozenset({"checkpoint_hook"}),
+        bus_regions=frozenset({"rom", "wram", "hram"}),
+        rom_suites=frozenset({"ALU16_SP"}),
+        profile_triples=_profiles(CPU_BRING_UP_PROFILE),
+    ),
 }
 
 
