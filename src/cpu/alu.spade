@@ -393,6 +393,49 @@ fn rot_shift_result(kind: RotShiftKind, x: uint<8>, f_prev: Flags, zero_on_resul
     }
 }
 
+fn bit_index_mask(bit_index: uint<3>) -> uint<8> {
+    match bit_index {
+        0u3 => 0x01u8,
+        1u3 => 0x02u8,
+        2u3 => 0x04u8,
+        3u3 => 0x08u8,
+        4u3 => 0x10u8,
+        5u3 => 0x20u8,
+        6u3 => 0x40u8,
+        7u3 => 0x80u8,
+    }
+}
+
+fn bit_test_result(bit_index: uint<3>, x: uint<8>, f_prev: Flags) -> AluResult {
+    let bit_set = (x & bit_index_mask(bit_index)) != 0u8;
+
+    alu_result8(
+        x,
+        Flags$(
+            z: !bit_set,
+            n: false,
+            h: true,
+            c: f_prev.c,
+        ),
+    )
+}
+
+fn res_bit_result(bit_index: uint<3>, x: uint<8>, f_prev: Flags) -> AluResult {
+    alu_result8(x & ~bit_index_mask(bit_index), f_prev)
+}
+
+fn set_bit_result(bit_index: uint<3>, x: uint<8>, f_prev: Flags) -> AluResult {
+    alu_result8(x | bit_index_mask(bit_index), f_prev)
+}
+
+fn bit_res_set_result(kind: BitResSetKind, bit_index: uint<3>, x: uint<8>, f_prev: Flags) -> AluResult {
+    match kind {
+        BitResSetKind::Bit => bit_test_result(bit_index, x, f_prev),
+        BitResSetKind::Res => res_bit_result(bit_index, x, f_prev),
+        BitResSetKind::Set => set_bit_result(bit_index, x, f_prev),
+    }
+}
+
 pub fn idle_alu_result() -> AluResult {
     AluResult$(val8: 0, val16: 0, flags: zero_flags())
 }
@@ -414,6 +457,7 @@ pub fn alu(req: AluReq) -> AluResult {
         AluReq::Scf$(f_prev) => scf_result(f_prev),
         AluReq::Ccf$(f_prev) => ccf_result(f_prev),
         AluReq::RotShift$(kind, x, f_prev, zero_on_result) => rot_shift_result(kind, x, f_prev, zero_on_result),
+        AluReq::BitResSet$(kind, bit_index, x, f_prev) => bit_res_set_result(kind, bit_index, x, f_prev),
         _ => idle_alu_result(),
     }
 }

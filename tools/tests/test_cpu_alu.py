@@ -70,6 +70,10 @@ class CpuAluContractTest(unittest.TestCase):
             "fn srl8_result(x: uint<8>) -> AluResult",
             "fn swap8_result(x: uint<8>) -> AluResult",
             "fn rot_shift_result(kind: RotShiftKind, x: uint<8>, f_prev: Flags, zero_on_result: bool) -> AluResult",
+            "fn bit_test_result(bit_index: uint<3>, x: uint<8>, f_prev: Flags) -> AluResult",
+            "fn res_bit_result(bit_index: uint<3>, x: uint<8>, f_prev: Flags) -> AluResult",
+            "fn set_bit_result(bit_index: uint<3>, x: uint<8>, f_prev: Flags) -> AluResult",
+            "fn bit_res_set_result(kind: BitResSetKind, bit_index: uint<3>, x: uint<8>, f_prev: Flags) -> AluResult",
             "AluReq::Add8$(a, b, carry_in) => if carry_in { adc8_result(a, b, true) } else { add8_result(a, b) }",
             "AluReq::Sub8$(a, b, carry_in) => if carry_in { sbc8_result(a, b, true) } else { sub8_result(a, b) }",
             "AluReq::And8$(a, b) => and8_result(a, b)",
@@ -85,6 +89,7 @@ class CpuAluContractTest(unittest.TestCase):
             "AluReq::Scf$(f_prev) => scf_result(f_prev)",
             "AluReq::Ccf$(f_prev) => ccf_result(f_prev)",
             "AluReq::RotShift$(kind, x, f_prev, zero_on_result) => rot_shift_result(kind, x, f_prev, zero_on_result)",
+            "AluReq::BitResSet$(kind, bit_index, x, f_prev) => bit_res_set_result(kind, bit_index, x, f_prev)",
             "_ => idle_alu_result()",
         ]:
             self.assertIn(symbol, text)

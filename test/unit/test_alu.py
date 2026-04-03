@@ -52,9 +52,13 @@ OP_SLA = 24
 OP_SRA = 25
 OP_SRL = 26
 OP_SWAP = 27
+OP_BIT = 28
+OP_RES = 29
+OP_SET = 30
 VALUES = (0x00, 0x01, 0x0F, 0x10, 0x7F, 0x80, 0xFE, 0xFF)
 VALUES16 = (0x0000, 0x0001, 0x0FFF, 0x1000, 0x7FFF, 0x8000, 0xFFFE, 0xFFFF)
 OFFSETS8 = (0x00, 0x01, 0x08, 0x0F, 0x10, 0x7F, 0x80, 0xF8, 0xFF)
+BIT_INDICES = tuple(range(8))
 FLAG_COMBOS = tuple(Flags(z=z, n=n, h=h, c=c) for z in (False, True) for n in (False, True) for h in (False, True) for c in (False, True))
 
 
@@ -113,6 +117,17 @@ def assert_flag_only(snapshot: dict[str, int | bool], *, value: int, flags: Flag
     }, (snapshot, value, flags)
 
 
+def assert_val_flags(snapshot: dict[str, int | bool], *, value: int, flags: Flags) -> None:
+    assert snapshot == {
+        "val16": value & 0xFFFF,
+        "val8": value & 0xFF,
+        "z": flags.z,
+        "n": flags.n,
+        "h": flags.h,
+        "c": flags.c,
+    }, (snapshot, value, flags)
+
+
 def assert_idle(snapshot: dict[str, int | bool]) -> None:
     assert snapshot == {
         "val16": 0,
@@ -122,6 +137,19 @@ def assert_idle(snapshot: dict[str, int | bool]) -> None:
         "h": False,
         "c": False,
     }, snapshot
+
+
+def bit_result(value: int, bit_index: int, carry_in: bool) -> tuple[int, Flags]:
+    bit_set = ((value >> bit_index) & 0x1) == 1
+    return value & 0xFF, Flags(z=not bit_set, n=False, h=True, c=carry_in)
+
+
+def res_result(value: int, bit_index: int, flags: Flags) -> tuple[int, Flags]:
+    return ((value & ~(1 << bit_index)) & 0xFF, flags)
+
+
+def set_result(value: int, bit_index: int, flags: Flags) -> tuple[int, Flags]:
+    return ((value | (1 << bit_index)) & 0xFF, flags)
 
 
 @cocotb.test()
@@ -176,6 +204,12 @@ async def test_curated_arithmetic_flag_edges(dut):
     assert_flag_only(await sample(dut, op=OP_SCF, a=0, b=0, z_in=True, c_in=False), value=0, flags=scf(True))
     assert_flag_only(await sample(dut, op=OP_CCF, a=0, b=0, z_in=False, c_in=False), value=0, flags=ccf(False, False))
     assert_flag_only(await sample(dut, op=OP_CCF, a=0, b=0, z_in=True, c_in=True), value=0, flags=ccf(True, True))
+    value, flags = bit_result(0x80, 7, True)
+    assert_val_flags(await sample(dut, op=OP_BIT, a=0x80, b=7, c_in=True), value=value, flags=flags)
+    value, flags = res_result(0xFF, 3, Flags(True, True, False, True))
+    assert_val_flags(await sample(dut, op=OP_RES, a=0xFF, b=3, z_in=True, n_in=True, h_in=False, c_in=True), value=value, flags=flags)
+    value, flags = set_result(0x00, 5, Flags(False, True, True, False))
+    assert_val_flags(await sample(dut, op=OP_SET, a=0x00, b=5, z_in=False, n_in=True, h_in=True, c_in=False), value=value, flags=flags)
 
 
 @cocotb.test()
@@ -196,6 +230,9 @@ async def test_generated_alu_vectors_match_spec_flag_policies(dut):
             assert_matches(await sample(dut, op=OP_SRA, a=a, b=0), sra8(a))
             assert_matches(await sample(dut, op=OP_SRL, a=a, b=0), srl8(a))
             assert_matches(await sample(dut, op=OP_SWAP, a=a, b=0), swap8(a))
+            for bit_index in BIT_INDICES:
+                value, flags = bit_result(a, bit_index, False)
+                assert_val_flags(await sample(dut, op=OP_BIT, a=a, b=bit_index), value=value, flags=flags)
             for c_in in (False, True):
                 assert_matches(await sample(dut, op=OP_ADC, a=a, b=b, c_in=c_in), adc8(a, b, c_in))
                 assert_matches(await sample(dut, op=OP_SBC, a=a, b=b, c_in=c_in), sbc8(a, b, c_in))
@@ -205,6 +242,23 @@ async def test_generated_alu_vectors_match_spec_flag_policies(dut):
                 assert_matches(await sample(dut, op=OP_RRA, a=a, b=0, c_in=c_in), rr8(a, c_in, zero_affects=False))
                 assert_matches(await sample(dut, op=OP_RL, a=a, b=0, c_in=c_in), rl8(a, c_in))
                 assert_matches(await sample(dut, op=OP_RR, a=a, b=0, c_in=c_in), rr8(a, c_in))
+                for bit_index in BIT_INDICES:
+                    value, flags = bit_result(a, bit_index, c_in)
+                    assert_val_flags(await sample(dut, op=OP_BIT, a=a, b=bit_index, c_in=c_in), value=value, flags=flags)
+        for flags in FLAG_COMBOS:
+            for bit_index in BIT_INDICES:
+                value, next_flags = res_result(a, bit_index, flags)
+                assert_val_flags(
+                    await sample(dut, op=OP_RES, a=a, b=bit_index, z_in=flags.z, n_in=flags.n, h_in=flags.h, c_in=flags.c),
+                    value=value,
+                    flags=next_flags,
+                )
+                value, next_flags = set_result(a, bit_index, flags)
+                assert_val_flags(
+                    await sample(dut, op=OP_SET, a=a, b=bit_index, z_in=flags.z, n_in=flags.n, h_in=flags.h, c_in=flags.c),
+                    value=value,
+                    flags=next_flags,
+                )
     for a in VALUES16:
         for b in VALUES16:
             for z_in in (False, True):

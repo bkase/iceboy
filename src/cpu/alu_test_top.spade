@@ -1,4 +1,4 @@
-use lib::cpu::alu::{AluReq, RotShiftKind};
+use lib::cpu::alu::{AluReq, BitResSetKind, RotShiftKind};
 use lib::cpu::regs::Flags;
 
 pub struct ArithmeticAluOut {
@@ -42,6 +42,9 @@ fn selected_req(op: uint<5>, a: uint<16>, b: uint<16>, z_in: bool, n_in: bool, h
         25u5 => AluReq::RotShift$(kind: RotShiftKind::Sra, x: trunc(a), f_prev: f_prev, zero_on_result: true),
         26u5 => AluReq::RotShift$(kind: RotShiftKind::Srl, x: trunc(a), f_prev: f_prev, zero_on_result: true),
         27u5 => AluReq::RotShift$(kind: RotShiftKind::Swap, x: trunc(a), f_prev: f_prev, zero_on_result: true),
+        28u5 => AluReq::BitResSet$(kind: BitResSetKind::Bit, bit_index: trunc(b), x: trunc(a), f_prev: f_prev),
+        29u5 => AluReq::BitResSet$(kind: BitResSetKind::Res, bit_index: trunc(b), x: trunc(a), f_prev: f_prev),
+        30u5 => AluReq::BitResSet$(kind: BitResSetKind::Set, bit_index: trunc(b), x: trunc(a), f_prev: f_prev),
         _ => AluReq::Idle,
     }
 }
