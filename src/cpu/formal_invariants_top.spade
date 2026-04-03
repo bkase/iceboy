@@ -70,3 +70,24 @@ pub entity cpu_reset_top(
     && (cpu.bus_req_kind == 1u2)
     && (cpu.bus_req_addr == 0x0100u16)
 }
+
+pub entity cpu_hold_top(
+    clk: clock,
+    rst: bool,
+    bus_resp: BusResp,
+    irq_pending: IrqPending,
+) -> uint<100> {
+    let cpu = inst cpu_core(clk, rst, false, bus_resp, irq_pending);
+
+    (zext(cpu.regs.a) << 92)
+    | (zext(cpu.regs.f) << 84)
+    | (zext(cpu.regs.b) << 76)
+    | (zext(cpu.regs.c) << 68)
+    | (zext(cpu.regs.d) << 60)
+    | (zext(cpu.regs.e) << 52)
+    | (zext(cpu.regs.h) << 44)
+    | (zext(cpu.regs.l) << 36)
+    | (zext(cpu.regs.sp) << 20)
+    | (zext(cpu.regs.pc) << 4)
+    | zext(cpu.bus_req_kind)
+}

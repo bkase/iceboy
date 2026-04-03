@@ -77,6 +77,7 @@ class CpuCoreStubContractTest(unittest.TestCase):
         for symbol in [
             "pub entity cpu_f_low_nibble_top(",
             "pub entity cpu_reset_top(",
+            "pub entity cpu_hold_top(",
             "fn ime_code(ime: ImeState) -> uint<2>",
             "fn halt_code(halt: HaltState) -> uint<2>",
             "fn phase_code(phase: Phase) -> uint<4>",
@@ -91,6 +92,9 @@ class CpuCoreStubContractTest(unittest.TestCase):
             "phase_code(cpu.phase) == 0u4",
             "cpu.bus_req_kind == 1u2",
             "cpu.bus_req_addr == 0x0100u16",
+            "let cpu = inst cpu_core(clk, rst, false, bus_resp, irq_pending);",
+            "(zext(cpu.regs.a) << 92)",
+            "| zext(cpu.bus_req_kind)",
         ]:
             self.assertIn(symbol, text)
 

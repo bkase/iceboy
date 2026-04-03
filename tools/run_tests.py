@@ -160,6 +160,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("unit", "test_timebase.py", "swim", "test_timebase"),
     SuiteDefinition("formal", "cpu_invariants.sby", "shell", "tools/run_formal_cpu_invariants.sh"),
     SuiteDefinition("formal", "cpu_reset.sby", "shell", "tools/run_formal_cpu_reset.sh"),
+    SuiteDefinition("formal", "cpu_hold.sby", "shell", "tools/run_formal_cpu_hold.sh"),
     SuiteDefinition("lockstep", "test_cpu_lockstep.py", "swim", "test_cpu_lockstep"),
 )
 

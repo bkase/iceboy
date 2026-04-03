@@ -1,0 +1,15 @@
+[options]
+mode prove
+depth 8
+
+[engines]
+smtbmc bitwuzla
+
+[script]
+read -formal -sv spade.sv cpu_hold_formal.sv
+clk2fflogic
+prep -top cpu_hold_formal
+
+[files]
+build/spade.sv
+formal/cpu_hold_formal.sv
