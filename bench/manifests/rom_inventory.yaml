@@ -17,14 +17,14 @@ abi_contract:
 roms:
   # Wave A: pure CPU core bring-up
   - id: LOADS_BASIC
-    path: bench/roms/out/LOADS_BASIC.gb
+    path: bench/roms/out/loads_basic.gb
     model_profile: DMG
     reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
     timeout_commits: 250000
-    checkpoint_symbols: []
+    checkpoint_symbols: [__checkpoint_ld_r_r, __checkpoint_ld_r_n8, __checkpoint_ld_mem, __checkpoint_ld_r16]
     pass_condition:
       kind: label_or_wram_signature
       pass_label: __pass
@@ -36,14 +36,14 @@ roms:
     action_gen: null
 
   - id: ALU_FLAGS
-    path: bench/roms/out/ALU_FLAGS.gb
+    path: bench/roms/out/alu_flags.gb
     model_profile: DMG
     reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
     timeout_commits: 250000
-    checkpoint_symbols: []
+    checkpoint_symbols: [__checkpoint_add, __checkpoint_adc, __checkpoint_sub, __checkpoint_sbc, __checkpoint_logic]
     pass_condition:
       kind: label_or_wram_signature
       pass_label: __pass
@@ -55,14 +55,14 @@ roms:
     action_gen: null
 
   - id: ALU16_SP
-    path: bench/roms/out/ALU16_SP.gb
+    path: bench/roms/out/alu16_sp.gb
     model_profile: DMG
     reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
     timeout_commits: 250000
-    checkpoint_symbols: []
+    checkpoint_symbols: [__checkpoint_add_hl, __checkpoint_add_sp_e8, __checkpoint_ld_hl_sp_e8]
     pass_condition:
       kind: label_or_wram_signature
       pass_label: __pass
@@ -74,14 +74,14 @@ roms:
     action_gen: null
 
   - id: FLOW_STACK
-    path: bench/roms/out/FLOW_STACK.gb
+    path: bench/roms/out/flow_stack.gb
     model_profile: DMG
     reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
     timeout_commits: 250000
-    checkpoint_symbols: []
+    checkpoint_symbols: [__checkpoint_jp, __checkpoint_jr, __checkpoint_call_ret, __checkpoint_rst]
     pass_condition:
       kind: label_or_wram_signature
       pass_label: __pass
@@ -93,14 +93,14 @@ roms:
     action_gen: null
 
   - id: CB_BITOPS
-    path: bench/roms/out/CB_BITOPS.gb
+    path: bench/roms/out/cb_bitops.gb
     model_profile: DMG
     reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
     timeout_commits: 250000
-    checkpoint_symbols: []
+    checkpoint_symbols: [__checkpoint_rotate, __checkpoint_shift, __checkpoint_bit, __checkpoint_res_set]
     pass_condition:
       kind: label_or_wram_signature
       pass_label: __pass
@@ -112,14 +112,14 @@ roms:
     action_gen: null
 
   - id: MEM_RWB
-    path: bench/roms/out/MEM_RWB.gb
+    path: bench/roms/out/mem_rwb.gb
     model_profile: DMG
     reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
     timeout_commits: 300000
-    checkpoint_symbols: []
+    checkpoint_symbols: [__checkpoint_fill, __checkpoint_verify]
     pass_condition:
       kind: label_or_wram_signature
       pass_label: __pass
@@ -131,14 +131,14 @@ roms:
     action_gen: null
 
   - id: ALU_LOOP
-    path: bench/roms/out/ALU_LOOP.gb
+    path: bench/roms/out/alu_loop.gb
     model_profile: DMG
     reset_profile: SkipBoot
     requires: [cpu]
     oracle_mode: checkpoint
     memory_behavior_profile: DmgConservative
     timeout_commits: 300000
-    checkpoint_symbols: []
+    checkpoint_symbols: [__checkpoint_loop_setup, __checkpoint_loop_body, __checkpoint_loop_done]
     pass_condition:
       kind: label_or_wram_signature
       pass_label: __pass
