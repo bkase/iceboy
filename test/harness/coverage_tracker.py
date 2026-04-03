@@ -197,9 +197,10 @@ SUITE_COVERAGE: dict[str, SuiteCoverage] = {
         profile_triples=_profiles(CPU_BRING_UP_PROFILE),
     ),
     "test_cpu_lockstep.py": SuiteCoverage(
-        phase_constructors=frozenset({"instr_commit"}),
-        bus_regions=frozenset({"rom", "wram"}),
-        rom_suites=frozenset({"ALU_LOOP"}),
+        phase_constructors=frozenset({"mcycle_commit"}),
+        bus_regions=frozenset({"rom", "wram", "io"}),
+        interrupt_causes=frozenset({"timer"}),
+        rom_suites=frozenset({"EI_DELAY", "TIMER_IRQ_HALT"}),
         profile_triples=_profiles(CPU_BRING_UP_PROFILE),
     ),
     "test_interrupt_injection.py": SuiteCoverage(

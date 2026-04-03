@@ -134,6 +134,12 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"$SWIM" test "$test_file"', text)
         self.assertNotIn('label="$(basename "${test_file%.py}")"', text)
 
+    def test_cpu_lockstep_targeted_subset_is_not_marked_expect_fail(self) -> None:
+        text = (ROOT / "test" / "lockstep" / "test_cpu_lockstep.py").read_text(encoding="utf-8")
+        self.assertIn("test_cpu_lockstep_matches_ei_delay_checkpoints", text)
+        self.assertIn("test_cpu_lockstep_matches_timer_irq_halt_checkpoints", text)
+        self.assertNotIn("expect_fail=True", text)
+
     def test_precommit_skips_redundant_heavy_python_modules_and_formal_by_default(self) -> None:
         text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
         self.assertIn('tools.tests.test_spade_cocotb_pipeline', text)

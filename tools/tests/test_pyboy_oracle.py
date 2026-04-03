@@ -40,6 +40,10 @@ class PyBoyOracleTest(unittest.TestCase):
             self.assertEqual(first.label, "hook_0150")
             self.assertEqual(first.pc_before, 0x0150)
             self.assertEqual(first.opcode, 0x3E)
+            self.assertEqual(first.bus_request.kind, "read")
+            self.assertEqual(first.bus_request.addr, 0x0150)
+            self.assertEqual(first.bus_response.kind, "data")
+            self.assertEqual(first.bus_response.data, 0x3E)
 
             snapshot = oracle.snapshot()
             expected = [oracle.step_commit() for _ in range(3)]

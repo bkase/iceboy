@@ -380,8 +380,8 @@ class PyBoyOracle:
             opcode=point.opcode,
             registers_after=registers,
             phase_after=DEFAULT_PHASE_AFTER,
-            bus_request=BusRequest(),
-            bus_response=BusResponse(),
+            bus_request=BusRequest(kind="read", addr=point.addr, data=None),
+            bus_response=BusResponse(kind="data", data=point.opcode),
         )
         self._commit_queue.append(commit)
         self._seq += 1
