@@ -7,6 +7,7 @@ PHASE_FETCH = 0
 PHASE_EXECUTE = 2
 IME_DISABLED = 0
 IME_PENDING_ENABLE = 1
+IME_ENABLED = 2
 HALT_RUNNING = 0
 BUS_REQ_READ = 1
 
@@ -67,14 +68,14 @@ def assert_snapshot(name: str, expected: dict[str, int | bool], actual: dict[str
 
 
 @cocotb.test()
-async def test_nop_advances_pc_without_state_change(dut):
+async def test_nop_completes_pending_ei_enable(dut):
     actual = await sample(dut, state_pc=0x0100, state_a=0x34, state_f=0xB0, state_ime=IME_PENDING_ENABLE, bus_resp=0x00)
     expected = {
         "next_pc": 0x0101,
         "next_sp": 0xFFFE,
         "next_a": 0x34,
         "next_f": 0xB0,
-        "next_ime": IME_PENDING_ENABLE,
+        "next_ime": IME_ENABLED,
         "next_halt": HALT_RUNNING,
         "next_phase_kind": PHASE_FETCH,
         "next_opcode": 0x00,

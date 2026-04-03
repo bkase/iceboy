@@ -336,3 +336,30 @@ async def test_ret_nz_not_taken_uses_two_cycle_tuple(dut):
     assert execute["next_phase_kind"] == PHASE_FETCH
     assert execute["next_sp"] == 0xFFFE
     assert execute["next_pc"] == 0x0101
+
+
+@cocotb.test()
+async def test_pending_ei_enables_only_after_multicycle_call_completes(dut):
+    fetch = await sample(dut, initial_state(opcode=0xCD, ime=IME_PENDING), bus_resp=0xCD)
+    assert fetch["next_ime"] == IME_PENDING
+    assert fetch["next_phase_kind"] == PHASE_READ_IMM16_LO
+
+    lo = await sample(dut, follow_state(fetch), bus_resp=0x78)
+    assert lo["next_ime"] == IME_PENDING
+    assert lo["next_phase_kind"] == PHASE_READ_IMM16_HI
+
+    hi = await sample(dut, follow_state(lo), bus_resp=0x56)
+    assert hi["next_ime"] == IME_PENDING
+    assert hi["next_phase_kind"] == PHASE_EXECUTE
+
+    execute = await sample(dut, follow_state(hi), bus_resp=0x00)
+    assert execute["next_ime"] == IME_PENDING
+    assert execute["next_phase_kind"] == PHASE_WRITE_MEM
+
+    write_hi = await sample(dut, follow_state(execute), bus_resp=0x00)
+    assert write_hi["next_ime"] == IME_PENDING
+    assert write_hi["next_phase_kind"] == PHASE_WRITE_MEM
+
+    write_lo = await sample(dut, follow_state(write_hi), bus_resp=0x00)
+    assert write_lo["next_ime"] == IME_ENABLED
+    assert write_lo["next_phase_kind"] == PHASE_FETCH

@@ -78,6 +78,32 @@ fn select_ime(write: Option<ImeState>, current: ImeState) -> ImeState {
     }
 }
 
+fn ime_instruction_complete_phase(phase: Phase) -> bool {
+    match phase {
+        Phase::Fetch => true,
+        Phase::Halted => true,
+        _ => false,
+    }
+}
+
+fn resolve_ime(write: Option<ImeState>, current: ImeState, next_phase: Phase) -> ImeState {
+    match write {
+        Option::Some(value) => value,
+        Option::None => {
+            match current {
+                ImeState::PendingEnable => {
+                    if ime_instruction_complete_phase(next_phase) {
+                        ImeState::Enabled
+                    } else {
+                        ImeState::PendingEnable
+                    }
+                },
+                _ => current,
+            }
+        },
+    }
+}
+
 fn select_halt(write: Option<HaltState>, current: HaltState) -> HaltState {
     match write {
         Option::Some(value) => value,
@@ -759,12 +785,12 @@ pub fn apply_delta(state: CpuState, delta: CpuDelta) -> CpuState {
     let next_pc = select_u16(delta.pc_write, state.arch.regs.pc);
     let next_sp = select_u16(delta.sp_write, state.arch.regs.sp);
     let next_regs = apply_reg_writes(state.arch.regs, delta.regs_write, next_pc, next_sp);
+    let next_micro = apply_micro_writes(state.micro, delta.micro_write);
     let next_arch = CpuArchState(
         next_regs,
-        select_ime(delta.ime_write, state.arch.ime_state),
+        resolve_ime(delta.ime_write, state.arch.ime_state, next_micro.phase),
         select_halt(delta.halt_write, state.arch.halt_state),
     );
-    let next_micro = apply_micro_writes(state.micro, delta.micro_write);
 
     CpuState(next_arch, next_micro)
 }
