@@ -1,10 +1,10 @@
 use std::option::Option;
 use lib::bus::types::{BusReq, idle_bus_req};
 use lib::cpu::alu::{AluReq, AluKind, alu};
-use lib::cpu::control::{hl_post_adjust, loadish_fetch_phase};
+use lib::cpu::control::{aluish_fetch_phase, hl_post_adjust, loadish_fetch_phase};
 use lib::cpu::debug::{CommitKind, CommitTrace, MicroOutput};
 use lib::cpu::decode::decode;
-use lib::cpu::decode_types::{AddressingMode, DecodedOp, Operand16, Operand8, StackOpKind, WordAluKind};
+use lib::cpu::decode_types::{AddressingMode, BitOpKind, DecodedOp, MiscKind, Operand16, Operand8, StackOpKind, WordAluKind};
 use lib::cpu::regs::{Flags, R8, RegPair, Registers, flags_from_f, get_r16, get_r8, mask_f, pack_flags};
 use lib::cpu::types::{
     CpuArchState,
@@ -132,6 +132,17 @@ fn merge_reg_writes(a: RegWriteSet, b: RegWriteSet) -> RegWriteSet {
     )
 }
 
+fn reg_writes_for_operand8(dst: Operand8, value: uint<8>) -> RegWriteSet {
+    match dst {
+        Operand8::Register$(r8) => reg_writes_for_r8(r8, value),
+        _ => idle_reg_write_set(),
+    }
+}
+
+fn merge_value_and_flags(value_writes: RegWriteSet, flags: Flags) -> RegWriteSet {
+    merge_reg_writes(value_writes, reg_writes_for_flags(flags))
+}
+
 fn apply_reg_writes(regs: Registers, writes: RegWriteSet, pc: uint<16>, sp: uint<16>) -> Registers {
     Registers(
         select_u8(writes.a, regs.a),
@@ -155,6 +166,135 @@ fn apply_micro_writes(micro: CpuMicroState, writes: MicroWriteSet) -> CpuMicroSt
         select_u8(writes.imm_hi, micro.imm_hi),
         select_decoded(writes.decoded, micro.decoded),
         select_u16(writes.temp, micro.temp),
+    )
+}
+
+fn operand8_execute_value(state: CpuState, operand: Operand8) -> uint<8> {
+    match operand {
+        Operand8::Register$(r8) => get_r8(state.arch.regs, r8),
+        Operand8::Imm8 => state.micro.imm_lo,
+        Operand8::AddrHl => trunc(state.micro.temp),
+        Operand8::Literal$(value) => value,
+        _ => 0u8,
+    }
+}
+
+fn execute_alu_delta(state: CpuState, kind: AluKind, dst: Operand8, src: Operand8, addressing: AddressingMode) -> CpuDelta {
+    let _ = addressing;
+    let f_prev = flags_from_f(state.arch.regs.f);
+    let lhs = operand8_execute_value(state, dst);
+    let rhs = operand8_execute_value(state, src);
+    let req = match kind {
+        AluKind::Add => AluReq::Add8$(a: lhs, b: rhs, carry_in: false),
+        AluKind::Adc => AluReq::Add8$(a: lhs, b: rhs, carry_in: f_prev.c),
+        AluKind::Sub => AluReq::Sub8$(a: lhs, b: rhs, carry_in: false),
+        AluKind::Sbc => AluReq::Sub8$(a: lhs, b: rhs, carry_in: f_prev.c),
+        AluKind::And => AluReq::And8$(a: lhs, b: rhs),
+        AluKind::Or => AluReq::Or8$(a: lhs, b: rhs),
+        AluKind::Xor => AluReq::Xor8$(a: lhs, b: rhs),
+        AluKind::Cp => AluReq::Cp8$(a: lhs, b: rhs),
+        AluKind::Inc => AluReq::Inc8$(x: lhs, f_prev: f_prev),
+        AluKind::Dec => AluReq::Dec8$(x: lhs, f_prev: f_prev),
+    };
+    let result = alu(req);
+    let is_mem_rmw = match dst {
+        Operand8::AddrHl => {
+            match src {
+                Operand8::AddrHl => {
+                    match kind {
+                        AluKind::Inc => true,
+                        AluKind::Dec => true,
+                        _ => false,
+                    }
+                },
+                _ => false,
+            }
+        },
+        _ => false,
+    };
+    let reg_writes = match kind {
+        AluKind::Cp => reg_writes_for_flags(result.flags),
+        AluKind::Inc => {
+            if is_mem_rmw {
+                reg_writes_for_flags(result.flags)
+            } else {
+                merge_value_and_flags(reg_writes_for_operand8(dst, result.val8), result.flags)
+            }
+        },
+        AluKind::Dec => {
+            if is_mem_rmw {
+                reg_writes_for_flags(result.flags)
+            } else {
+                merge_value_and_flags(reg_writes_for_operand8(dst, result.val8), result.flags)
+            }
+        },
+        _ => merge_value_and_flags(reg_writes_for_operand8(dst, result.val8), result.flags),
+    };
+    let next_phase = if is_mem_rmw {
+        Phase::WriteMem$(addr: get_r16(state.arch.regs, RegPair::HL), data: result.val8, k: WriteCont::StoreDone)
+    } else {
+        Phase::Fetch
+    };
+
+    CpuDelta(
+        reg_writes,
+        Option::None,
+        Option::None,
+        Option::None,
+        Option::None,
+        MicroWriteSet(some_phase(next_phase), Option::None, Option::None, Option::None, Option::None, some_u16(result.val16)),
+    )
+}
+
+fn execute_misc_delta(state: CpuState, kind: MiscKind) -> CpuDelta {
+    let f_prev = flags_from_f(state.arch.regs.f);
+    let result = match kind {
+        MiscKind::Daa => alu(AluReq::Daa$(a: state.arch.regs.a, f_prev: f_prev)),
+        MiscKind::Cpl => alu(AluReq::Cpl$(a: state.arch.regs.a, f_prev: f_prev)),
+        MiscKind::Scf => alu(AluReq::Scf$(f_prev: f_prev)),
+        MiscKind::Ccf => alu(AluReq::Ccf$(f_prev: f_prev)),
+        _ => alu(AluReq::Idle),
+    };
+    let reg_writes = match kind {
+        MiscKind::Daa => merge_value_and_flags(reg_writes_for_r8(R8::A, result.val8), result.flags),
+        MiscKind::Cpl => merge_value_and_flags(reg_writes_for_r8(R8::A, result.val8), result.flags),
+        MiscKind::Scf => reg_writes_for_flags(result.flags),
+        MiscKind::Ccf => reg_writes_for_flags(result.flags),
+        _ => idle_reg_write_set(),
+    };
+
+    CpuDelta(
+        reg_writes,
+        Option::None,
+        Option::None,
+        Option::None,
+        Option::None,
+        MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, some_u16(result.val16)),
+    )
+}
+
+fn execute_bitop_delta(
+    state: CpuState,
+    kind: BitOpKind,
+    target: Operand8,
+    zero_on_result: bool,
+) -> CpuDelta {
+    let f_prev = flags_from_f(state.arch.regs.f);
+    let x = operand8_execute_value(state, target);
+    let req = match kind {
+        BitOpKind::RotateShift$(kind) => AluReq::RotShift$(kind: kind, x: x, f_prev: f_prev, zero_on_result: zero_on_result),
+        _ => AluReq::Idle,
+    };
+    let result = alu(req);
+    let reg_writes = merge_value_and_flags(reg_writes_for_operand8(target, result.val8), result.flags);
+
+    CpuDelta(
+        reg_writes,
+        Option::None,
+        Option::None,
+        Option::None,
+        Option::None,
+        MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, some_u16(result.val16)),
     )
 }
 
@@ -338,10 +478,20 @@ fn fetch_delta(state: CpuState, opcode: uint<8>) -> CpuDelta {
     let phase_write = match direct_load_phase(decoded) {
         Option::Some(value) => Option::Some(value),
         Option::None => {
-            let next_phase = loadish_fetch_phase(decoded, state.arch.regs);
-            match next_phase {
+            let load_phase = loadish_fetch_phase(decoded, state.arch.regs);
+            let next_phase = match load_phase {
                 Phase::Fetch => Option::None,
-                _ => Option::Some(next_phase),
+                _ => Option::Some(load_phase),
+            };
+            match next_phase {
+                Option::Some(value) => Option::Some(value),
+                Option::None => {
+                    let alu_phase = aluish_fetch_phase(decoded, state.arch.regs);
+                    match alu_phase {
+                        Phase::Fetch => Option::None,
+                        _ => Option::Some(alu_phase),
+                    }
+                },
             }
         },
     };
@@ -450,6 +600,17 @@ fn handle_read_imm8(state: CpuState, input: MicroInput, k: Imm8Cont) -> MicroOut
             )
         },
         Imm8Cont::LoadHlSpDisp => {
+            CpuDelta(
+                idle_reg_write_set(),
+                some_u16(trunc(state.arch.regs.pc + 1u16)),
+                Option::None,
+                Option::None,
+                Option::None,
+                MicroWriteSet(some_phase(Phase::Execute$(op: state.micro.decoded)), Option::None, some_u8(imm), Option::None, Option::None, Option::None),
+            )
+        },
+        Imm8Cont::AluImm8$(kind) => {
+            let _ = kind;
             CpuDelta(
                 idle_reg_write_set(),
                 some_u16(trunc(state.arch.regs.pc + 1u16)),
@@ -663,6 +824,17 @@ fn handle_read_mem(state: CpuState, input: MicroInput, addr: uint<16>, k: ReadCo
                 MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, some_u16(value16)),
             )
         },
+        ReadCont::AluFromMem$(kind) => {
+            let _ = kind;
+            CpuDelta(
+                idle_reg_write_set(),
+                Option::None,
+                Option::None,
+                Option::None,
+                Option::None,
+                MicroWriteSet(some_phase(Phase::Execute$(op: state.micro.decoded)), Option::None, Option::None, Option::None, Option::None, some_u16(zext(value))),
+            )
+        },
         _ => CpuDelta(
             idle_reg_write_set(),
             Option::None,
@@ -870,6 +1042,37 @@ fn handle_execute(state: CpuState, input: MicroInput, op: DecodedOp) -> MicroOut
                         Option::None,
                         MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, some_u16(alu_result.val16)),
                     )
+                },
+                _ => CpuDelta(
+                    idle_reg_write_set(),
+                    Option::None,
+                    Option::None,
+                    Option::None,
+                    Option::None,
+                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
+                ),
+            }
+        },
+        DecodedOp::Alu$(kind, dst, src, addressing) => execute_alu_delta(state, kind, dst, src, addressing),
+        DecodedOp::Misc$(kind, addressing) => {
+            let _ = addressing;
+            execute_misc_delta(state, kind)
+        },
+        DecodedOp::BitOp$(kind, prefix, target, bit_index, zero_on_result, addressing) => {
+            let _ = addressing;
+            match prefix {
+                Option::None => {
+                    match bit_index {
+                        Option::None => execute_bitop_delta(state, kind, target, zero_on_result),
+                        _ => CpuDelta(
+                            idle_reg_write_set(),
+                            Option::None,
+                            Option::None,
+                            Option::None,
+                            Option::None,
+                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
+                        ),
+                    }
                 },
                 _ => CpuDelta(
                     idle_reg_write_set(),

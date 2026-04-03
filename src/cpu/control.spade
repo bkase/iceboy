@@ -1,5 +1,5 @@
 use std::option::Option;
-use lib::cpu::decode_types::{AddressingMode, DecodedOp, Operand16, Operand8, StackOpKind, WordAluKind};
+use lib::cpu::decode_types::{AddressingMode, BitOpKind, DecodedOp, MiscKind, Operand16, Operand8, StackOpKind, WordAluKind};
 use lib::cpu::regs::{Registers, get_r16, get_r8};
 use lib::cpu::types::{Imm16Cont, Imm16HiCont, Imm8Cont, Phase, ReadCont, WriteCont};
 
@@ -391,6 +391,70 @@ pub fn loadish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase {
                     )
                 },
                 StackOpKind::Pop => Phase::ReadMem$(addr: regs.sp, k: ReadCont::PopLo$(pair: pair)),
+            }
+        },
+        _ => Phase::Fetch,
+    }
+}
+
+pub fn aluish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase {
+    match op {
+        DecodedOp::Alu$(kind, dst, src, addressing) => {
+            let _ = dst;
+            match addressing {
+                AddressingMode::Register8 => Phase::Execute$(op: op),
+                AddressingMode::Immediate8 => Phase::ReadImm8$(k: Imm8Cont::AluImm8$(kind: kind)),
+                AddressingMode::MemoryViaHl => {
+                    match src {
+                        Operand8::AddrHl => Phase::ReadMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), k: ReadCont::AluFromMem$(kind: kind)),
+                        _ => Phase::Fetch,
+                    }
+                },
+                _ => Phase::Fetch,
+            }
+        },
+        DecodedOp::Misc$(kind, addressing) => {
+            let _ = addressing;
+            match kind {
+                MiscKind::Daa => Phase::Execute$(op: op),
+                MiscKind::Cpl => Phase::Execute$(op: op),
+                MiscKind::Scf => Phase::Execute$(op: op),
+                MiscKind::Ccf => Phase::Execute$(op: op),
+                _ => Phase::Fetch,
+            }
+        },
+        DecodedOp::BitOp$(kind, prefix, target, bit_index, zero_on_result, addressing) => {
+            let _ = addressing;
+            match kind {
+                BitOpKind::RotateShift$(kind) => {
+                    let _ = kind;
+                    match prefix {
+                        Option::None => {
+                            match target {
+                                Operand8::Register$(r8) => {
+                                    match r8 {
+                                        lib::cpu::regs::R8::A => {
+                                            match bit_index {
+                                                Option::None => {
+                                                    if zero_on_result {
+                                                        Phase::Fetch
+                                                    } else {
+                                                        Phase::Execute$(op: op)
+                                                    }
+                                                },
+                                                _ => Phase::Fetch,
+                                            }
+                                        },
+                                        _ => Phase::Fetch,
+                                    }
+                                },
+                                _ => Phase::Fetch,
+                            }
+                        },
+                        _ => Phase::Fetch,
+                    }
+                },
+                _ => Phase::Fetch,
             }
         },
         _ => Phase::Fetch,

@@ -1,0 +1,352 @@
+use lib::bus::types::BusResp;
+use lib::cpu::alu::AluKind;
+use lib::cpu::decode::decode;
+use lib::cpu::debug::MicroOutput;
+use lib::cpu::regs::{R8, RegPair, Registers};
+use lib::cpu::semantics::{apply_delta, step_mcycle};
+use lib::cpu::types::{
+    CpuArchState,
+    CpuMicroState,
+    CpuState,
+    HaltState,
+    Imm16Cont,
+    Imm16HiCont,
+    Imm8Cont,
+    ImeState,
+    IrqPending,
+    MicroInput,
+    Phase,
+    ReadCont,
+    WriteCont,
+};
+
+fn r8_from_code(code: uint<3>) -> R8 {
+    match code {
+        0u3 => R8::B,
+        1u3 => R8::C,
+        2u3 => R8::D,
+        3u3 => R8::E,
+        4u3 => R8::H,
+        5u3 => R8::L,
+        _ => R8::A,
+    }
+}
+
+fn r8_code(r8: R8) -> uint<3> {
+    match r8 {
+        R8::B => 0u3,
+        R8::C => 1u3,
+        R8::D => 2u3,
+        R8::E => 3u3,
+        R8::H => 4u3,
+        R8::L => 5u3,
+        R8::A => 7u3,
+    }
+}
+
+fn pair_from_code(code: uint<3>) -> RegPair {
+    match code {
+        0u3 => RegPair::BC,
+        1u3 => RegPair::DE,
+        2u3 => RegPair::HL,
+        3u3 => RegPair::SP,
+        _ => RegPair::AF,
+    }
+}
+
+fn pair_code(pair: RegPair) -> uint<3> {
+    match pair {
+        RegPair::BC => 0u3,
+        RegPair::DE => 1u3,
+        RegPair::HL => 2u3,
+        RegPair::SP => 3u3,
+        RegPair::AF => 4u3,
+    }
+}
+
+fn alu_kind_from_code(code: uint<4>) -> AluKind {
+    match code {
+        0u4 => AluKind::Add,
+        1u4 => AluKind::Adc,
+        2u4 => AluKind::Sub,
+        3u4 => AluKind::Sbc,
+        4u4 => AluKind::And,
+        5u4 => AluKind::Or,
+        6u4 => AluKind::Xor,
+        7u4 => AluKind::Cp,
+        8u4 => AluKind::Inc,
+        _ => AluKind::Dec,
+    }
+}
+
+fn alu_kind_code(kind: AluKind) -> uint<4> {
+    match kind {
+        AluKind::Add => 0u4,
+        AluKind::Adc => 1u4,
+        AluKind::Sub => 2u4,
+        AluKind::Sbc => 3u4,
+        AluKind::And => 4u4,
+        AluKind::Or => 5u4,
+        AluKind::Xor => 6u4,
+        AluKind::Cp => 7u4,
+        AluKind::Inc => 8u4,
+        AluKind::Dec => 9u4,
+    }
+}
+
+fn imm8_cont_from_inputs(code: uint<4>, data: uint<8>) -> Imm8Cont {
+    match code {
+        0u4 => Imm8Cont::LoadReg8$(dst: r8_from_code(trunc(data))),
+        1u4 => Imm8Cont::StoreToHl,
+        2u4 => Imm8Cont::IoOffsetReadA,
+        3u4 => Imm8Cont::IoOffsetWriteA,
+        4u4 => Imm8Cont::LoadHlSpDisp,
+        _ => Imm8Cont::AluImm8$(kind: alu_kind_from_code(trunc(data))),
+    }
+}
+
+fn imm8_cont_code(cont: Imm8Cont) -> (uint<4>, uint<8>) {
+    match cont {
+        Imm8Cont::LoadReg8$(dst) => (0u4, zext(r8_code(dst))),
+        Imm8Cont::StoreToHl => (1u4, 0u8),
+        Imm8Cont::IoOffsetReadA => (2u4, 0u8),
+        Imm8Cont::IoOffsetWriteA => (3u4, 0u8),
+        Imm8Cont::LoadHlSpDisp => (4u4, 0u8),
+        Imm8Cont::AluImm8$(kind) => (5u4, zext(alu_kind_code(kind))),
+        _ => (15u4, 0u8),
+    }
+}
+
+fn imm16_cont_from_inputs(code: uint<4>, data: uint<8>) -> Imm16Cont {
+    match code {
+        0u4 => Imm16Cont::LoadRegPair$(pair: pair_from_code(trunc(data))),
+        1u4 => Imm16Cont::ReadAddrToA,
+        2u4 => Imm16Cont::WriteAToAddr,
+        _ => Imm16Cont::StoreSpToAddr,
+    }
+}
+
+fn imm16_cont_code(cont: Imm16Cont) -> (uint<4>, uint<8>) {
+    match cont {
+        Imm16Cont::LoadRegPair$(pair) => (0u4, zext(pair_code(pair))),
+        Imm16Cont::ReadAddrToA => (1u4, 0u8),
+        Imm16Cont::WriteAToAddr => (2u4, 0u8),
+        Imm16Cont::StoreSpToAddr => (3u4, 0u8),
+        _ => (15u4, 0u8),
+    }
+}
+
+fn imm16_hi_cont_from_inputs(code: uint<4>, data: uint<8>, aux: uint<16>) -> Imm16HiCont {
+    let lo = trunc(aux);
+
+    match code {
+        0u4 => Imm16HiCont::LoadRegPair$(pair: pair_from_code(trunc(data)), lo: lo),
+        1u4 => Imm16HiCont::ReadAddrToA$(lo: lo),
+        2u4 => Imm16HiCont::WriteAToAddr$(lo: lo),
+        _ => Imm16HiCont::StoreSpToAddr$(lo: lo),
+    }
+}
+
+fn imm16_hi_cont_code(cont: Imm16HiCont) -> (uint<4>, uint<8>, uint<16>) {
+    match cont {
+        Imm16HiCont::LoadRegPair$(pair, lo) => (0u4, zext(pair_code(pair)), zext(lo)),
+        Imm16HiCont::ReadAddrToA$(lo) => (1u4, 0u8, zext(lo)),
+        Imm16HiCont::WriteAToAddr$(lo) => (2u4, 0u8, zext(lo)),
+        Imm16HiCont::StoreSpToAddr$(lo) => (3u4, 0u8, zext(lo)),
+        _ => (15u4, 0u8, 0u16),
+    }
+}
+
+fn read_cont_from_inputs(code: uint<4>, data: uint<8>, cont_data: uint<8>) -> ReadCont {
+    match code {
+        0u4 => ReadCont::LoadReg8$(dst: r8_from_code(trunc(data))),
+        1u4 => ReadCont::LoadAFromAddr,
+        2u4 => ReadCont::PopLo$(pair: pair_from_code(trunc(data))),
+        3u4 => ReadCont::PopHi$(pair: pair_from_code(trunc(data)), lo: cont_data),
+        _ => ReadCont::AluFromMem$(kind: alu_kind_from_code(trunc(cont_data))),
+    }
+}
+
+fn read_cont_code(cont: ReadCont) -> (uint<4>, uint<8>, uint<8>) {
+    match cont {
+        ReadCont::LoadReg8$(dst) => (0u4, zext(r8_code(dst)), 0u8),
+        ReadCont::LoadAFromAddr => (1u4, 0u8, 0u8),
+        ReadCont::PopLo$(pair) => (2u4, zext(pair_code(pair)), 0u8),
+        ReadCont::PopHi$(pair, lo) => (3u4, zext(pair_code(pair)), lo),
+        ReadCont::AluFromMem$(kind) => (4u4, zext(alu_kind_code(kind)), 0u8),
+    }
+}
+
+fn write_cont_from_inputs(code: uint<4>, cont_data: uint<8>, aux: uint<16>) -> WriteCont {
+    match code {
+        0u4 => WriteCont::StoreDone,
+        1u4 => WriteCont::StoreSpHi$(data: cont_data, addr: aux),
+        _ => WriteCont::PushLo$(low: cont_data, target: aux),
+    }
+}
+
+fn write_cont_code(cont: WriteCont) -> (uint<4>, uint<8>, uint<16>) {
+    match cont {
+        WriteCont::StoreDone => (0u4, 0u8, 0u16),
+        WriteCont::StoreSpHi$(data, addr) => (1u4, data, addr),
+        WriteCont::PushLo$(low, target) => (2u4, low, target),
+        _ => (15u4, 0u8, 0u16),
+    }
+}
+
+fn phase_from_inputs(
+    kind: uint<4>,
+    addr: uint<16>,
+    data: uint<8>,
+    cont_code: uint<4>,
+    cont_data: uint<8>,
+    aux: uint<16>,
+    decoded: lib::cpu::decode_types::DecodedOp,
+) -> Phase {
+    match kind {
+        1u4 => Phase::Halted,
+        2u4 => Phase::Execute$(op: decoded),
+        3u4 => Phase::ReadImm8$(k: imm8_cont_from_inputs(cont_code, cont_data)),
+        4u4 => Phase::ReadImm16Lo$(k: imm16_cont_from_inputs(cont_code, cont_data)),
+        5u4 => Phase::ReadImm16Hi$(lo: trunc(aux), k: imm16_hi_cont_from_inputs(cont_code, cont_data, aux)),
+        6u4 => Phase::ReadMem$(addr: addr, k: read_cont_from_inputs(cont_code, cont_data, data)),
+        7u4 => Phase::WriteMem$(addr: addr, data: data, k: write_cont_from_inputs(cont_code, cont_data, aux)),
+        _ => Phase::Fetch,
+    }
+}
+
+fn phase_projection(phase: Phase) -> (uint<4>, uint<4>, uint<16>, uint<8>, uint<8>, uint<16>) {
+    match phase {
+        Phase::Fetch => (0u4, 0u4, 0u16, 0u8, 0u8, 0u16),
+        Phase::Halted => (1u4, 0u4, 0u16, 0u8, 0u8, 0u16),
+        Phase::Execute$(op) => { let _ = op; (2u4, 0u4, 0u16, 0u8, 0u8, 0u16) },
+        Phase::ReadImm8$(k) => {
+            let (cont_code, cont_data) = imm8_cont_code(k);
+            (3u4, cont_code, 0u16, 0u8, cont_data, 0u16)
+        },
+        Phase::ReadImm16Lo$(k) => {
+            let (cont_code, cont_data) = imm16_cont_code(k);
+            (4u4, cont_code, 0u16, 0u8, cont_data, 0u16)
+        },
+        Phase::ReadImm16Hi$(lo, k) => {
+            let _ = lo;
+            let (cont_code, cont_data, aux) = imm16_hi_cont_code(k);
+            (5u4, cont_code, 0u16, 0u8, cont_data, aux)
+        },
+        Phase::ReadMem$(addr, k) => {
+            let (cont_code, cont_data, data) = read_cont_code(k);
+            (6u4, cont_code, addr, data, cont_data, 0u16)
+        },
+        Phase::WriteMem$(addr, data, k) => {
+            let (cont_code, cont_data, aux) = write_cont_code(k);
+            (7u4, cont_code, addr, data, cont_data, aux)
+        },
+        _ => (15u4, 0u4, 0u16, 0u8, 0u8, 0u16),
+    }
+}
+
+fn bus_req_kind(req: lib::bus::types::BusReq) -> uint<2> {
+    match req {
+        lib::bus::types::BusReq::Idle => 0u2,
+        lib::bus::types::BusReq::Read$(addr) => { let _ = addr; 1u2 },
+        lib::bus::types::BusReq::Write$(addr, data) => { let _ = (addr, data); 2u2 },
+    }
+}
+
+fn bus_req_addr(req: lib::bus::types::BusReq) -> uint<16> {
+    match req {
+        lib::bus::types::BusReq::Idle => 0u16,
+        lib::bus::types::BusReq::Read$(addr) => addr,
+        lib::bus::types::BusReq::Write$(addr, data) => { let _ = data; addr },
+    }
+}
+
+fn bus_req_data(req: lib::bus::types::BusReq) -> uint<8> {
+    match req {
+        lib::bus::types::BusReq::Idle => 0u8,
+        lib::bus::types::BusReq::Read$(addr) => { let _ = addr; 0u8 },
+        lib::bus::types::BusReq::Write$(addr, data) => { let _ = addr; data },
+    }
+}
+
+entity semantics_alu_test_top(
+    state_pc_i: uint<16>,
+    state_sp_i: uint<16>,
+    state_a_i: uint<8>,
+    state_f_i: uint<8>,
+    state_b_i: uint<8>,
+    state_c_i: uint<8>,
+    state_d_i: uint<8>,
+    state_e_i: uint<8>,
+    state_h_i: uint<8>,
+    state_l_i: uint<8>,
+    state_opcode_i: uint<8>,
+    state_imm_lo_i: uint<8>,
+    state_temp_i: uint<16>,
+    state_phase_kind_i: uint<4>,
+    state_phase_cont_i: uint<4>,
+    state_phase_addr_i: uint<16>,
+    state_phase_data_i: uint<8>,
+    state_phase_cont_data_i: uint<8>,
+    state_phase_aux_i: uint<16>,
+    bus_resp_i: uint<8>,
+    irq_pending_i: uint<5>,
+) -> uint<240> {
+    let regs = Registers(
+        state_a_i,
+        state_f_i,
+        state_b_i,
+        state_c_i,
+        state_d_i,
+        state_e_i,
+        state_h_i,
+        state_l_i,
+        state_sp_i,
+        state_pc_i,
+    );
+    let decoded = decode(state_opcode_i);
+    let phase = phase_from_inputs(
+        state_phase_kind_i,
+        state_phase_addr_i,
+        state_phase_data_i,
+        state_phase_cont_i,
+        state_phase_cont_data_i,
+        state_phase_aux_i,
+        decoded,
+    );
+    let arch = CpuArchState(regs, ImeState::Disabled, HaltState::Running);
+    let micro = CpuMicroState(phase, state_opcode_i, state_imm_lo_i, 0u8, decoded, state_temp_i);
+    let state = CpuState(arch, micro);
+    let step = step_mcycle(state, MicroInput(BusResp$(data: bus_resp_i), IrqPending$(pending: irq_pending_i)));
+    let next_state = apply_delta(state, step.delta);
+    let (next_phase_kind, next_phase_cont, next_phase_addr, next_phase_data, next_phase_cont_data, next_phase_aux) =
+        phase_projection(next_state.micro.phase);
+    let commit_present = match step.commit {
+        Option::Some(commit) => { let _ = commit; true },
+        Option::None => false,
+    };
+
+    (zext(next_state.arch.regs.pc) << 224)
+    | (zext(next_state.arch.regs.sp) << 208)
+    | (zext(next_state.arch.regs.a) << 200)
+    | (zext(next_state.arch.regs.f) << 192)
+    | (zext(next_state.arch.regs.b) << 184)
+    | (zext(next_state.arch.regs.c) << 176)
+    | (zext(next_state.arch.regs.d) << 168)
+    | (zext(next_state.arch.regs.e) << 160)
+    | (zext(next_state.arch.regs.h) << 152)
+    | (zext(next_state.arch.regs.l) << 144)
+    | (zext(next_state.micro.opcode_latch) << 136)
+    | (zext(next_state.micro.imm_lo) << 128)
+    | (zext(next_state.micro.temp) << 112)
+    | (zext(bus_req_kind(step.bus_req)) << 110)
+    | (zext(bus_req_addr(step.bus_req)) << 94)
+    | (zext(bus_req_data(step.bus_req)) << 86)
+    | (zext(next_phase_kind) << 82)
+    | (zext(next_phase_cont) << 78)
+    | (zext(next_phase_addr) << 62)
+    | (zext(next_phase_data) << 54)
+    | (zext(next_phase_cont_data) << 46)
+    | (zext(next_phase_aux) << 30)
+    | ((if commit_present { 1u240 } else { 0u240 }) << 29)
+}

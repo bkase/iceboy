@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CPU_MAIN_PATH = ROOT / "src" / "cpu" / "main.spade"
 CPU_CONTROL_PATH = ROOT / "src" / "cpu" / "control.spade"
 CPU_SEMANTICS_PATH = ROOT / "src" / "cpu" / "semantics.spade"
+CPU_SEMANTICS_ALU_TOP_PATH = ROOT / "src" / "cpu" / "semantics_alu_test_top.spade"
 CPU_SEMANTICS_LOAD_TOP_PATH = ROOT / "src" / "cpu" / "semantics_load_test_top.spade"
 CPU_SEMANTICS_TOP_PATH = ROOT / "src" / "cpu" / "semantics_test_top.spade"
 SWIM_LOCK_PATH = ROOT / "swim.lock"
@@ -18,6 +19,7 @@ class CpuSemanticsContractTest(unittest.TestCase):
         text = CPU_MAIN_PATH.read_text(encoding="utf-8")
         self.assertIn("pub mod control;", text)
         self.assertIn("pub mod semantics;", text)
+        self.assertIn("pub mod semantics_alu_test_top;", text)
         self.assertIn("pub mod semantics_load_test_top;", text)
         self.assertIn("pub mod semantics_test_top;", text)
 
@@ -26,6 +28,9 @@ class CpuSemanticsContractTest(unittest.TestCase):
         for symbol in [
             "pub fn hl_post_adjust(regs: Registers, addressing: AddressingMode) -> uint<16>",
             "pub fn loadish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase",
+            "pub fn aluish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase",
+            "Imm8Cont::AluImm8",
+            "ReadCont::AluFromMem",
             "Imm8Cont::StoreToHl",
             "Imm16Cont::StoreSpToAddr",
             "WriteCont::PushLo",
@@ -45,6 +50,12 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "fn handle_write_mem(state: CpuState, input: MicroInput, addr: uint<16>, data: uint<8>, k: WriteCont) -> MicroOutput",
             "fn handle_execute(state: CpuState, input: MicroInput, op: DecodedOp) -> MicroOutput",
             "fn handle_halted(state: CpuState, input: MicroInput) -> MicroOutput",
+            "fn execute_alu_delta(state: CpuState, kind: AluKind, dst: Operand8, src: Operand8, addressing: AddressingMode) -> CpuDelta",
+            "fn execute_misc_delta(state: CpuState, kind: MiscKind) -> CpuDelta",
+            "fn execute_bitop_delta(",
+            "ReadCont::AluFromMem$(kind)",
+            "Imm8Cont::AluImm8$(kind)",
+            "aluish_fetch_phase(decoded, state.arch.regs)",
             "BusReq::Read$(addr: state.arch.regs.pc)",
             "some_u16(trunc(state.arch.regs.pc + 1u16))",
             "mask_f(select_u8(writes.f, regs.f))",
@@ -56,6 +67,18 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "Phase::ReadMem$(addr, k) => handle_read_mem(state, input, addr, k)",
             "Phase::WriteMem$(addr, data, k) => handle_write_mem(state, input, addr, data, k)",
             "Phase::Execute$(op) => handle_execute(state, input, op)",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_semantics_alu_test_top_exposes_temp_and_alu_continuations(self) -> None:
+        text = CPU_SEMANTICS_ALU_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "entity semantics_alu_test_top(",
+            "state_temp_i: uint<16>",
+            "Imm8Cont::AluImm8",
+            "ReadCont::AluFromMem",
+            "let micro = CpuMicroState(phase, state_opcode_i, state_imm_lo_i, 0u8, decoded, state_temp_i);",
+            "zext(next_state.micro.temp) << 112",
         ]:
             self.assertIn(symbol, text)
 

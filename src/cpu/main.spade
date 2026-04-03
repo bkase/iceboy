@@ -9,6 +9,7 @@ pub mod debug;
 pub mod regs;
 pub mod regs_test_top;
 pub mod semantics;
+pub mod semantics_alu_test_top;
 pub mod semantics_load_test_top;
 pub mod semantics_test_top;
 pub mod types;
