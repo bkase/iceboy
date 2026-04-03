@@ -460,3 +460,19 @@ pub fn aluish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase {
         _ => Phase::Fetch,
     }
 }
+
+pub fn word_alu_fetch_phase(op: DecodedOp) -> Phase {
+    match op {
+        DecodedOp::WordAlu$(kind, dst, src, addressing) => {
+            let _ = (dst, src, addressing);
+            match kind {
+                WordAluKind::AddHl => Phase::Execute$(op: op),
+                WordAluKind::Inc => Phase::Execute$(op: op),
+                WordAluKind::Dec => Phase::Execute$(op: op),
+                WordAluKind::AddSpE8 => Phase::ReadImm8$(k: Imm8Cont::AddSpDisp),
+                WordAluKind::LdHlSpPlusE8 => Phase::ReadImm8$(k: Imm8Cont::LoadHlSpDisp),
+            }
+        },
+        _ => Phase::Fetch,
+    }
+}

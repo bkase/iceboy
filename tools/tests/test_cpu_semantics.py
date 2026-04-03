@@ -11,6 +11,7 @@ CPU_SEMANTICS_PATH = ROOT / "src" / "cpu" / "semantics.spade"
 CPU_SEMANTICS_ALU_TOP_PATH = ROOT / "src" / "cpu" / "semantics_alu_test_top.spade"
 CPU_SEMANTICS_LOAD_TOP_PATH = ROOT / "src" / "cpu" / "semantics_load_test_top.spade"
 CPU_SEMANTICS_TOP_PATH = ROOT / "src" / "cpu" / "semantics_test_top.spade"
+CPU_SEMANTICS_WORDALU_TOP_PATH = ROOT / "src" / "cpu" / "semantics_wordalu_test_top.spade"
 SWIM_LOCK_PATH = ROOT / "swim.lock"
 
 
@@ -22,6 +23,7 @@ class CpuSemanticsContractTest(unittest.TestCase):
         self.assertIn("pub mod semantics_alu_test_top;", text)
         self.assertIn("pub mod semantics_load_test_top;", text)
         self.assertIn("pub mod semantics_test_top;", text)
+        self.assertIn("pub mod semantics_wordalu_test_top;", text)
 
     def test_control_module_exposes_load_phase_helpers(self) -> None:
         text = CPU_CONTROL_PATH.read_text(encoding="utf-8")
@@ -29,7 +31,9 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "pub fn hl_post_adjust(regs: Registers, addressing: AddressingMode) -> uint<16>",
             "pub fn loadish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase",
             "pub fn aluish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase",
+            "pub fn word_alu_fetch_phase(op: DecodedOp) -> Phase",
             "Imm8Cont::AluImm8",
+            "Imm8Cont::AddSpDisp",
             "ReadCont::AluFromMem",
             "Imm8Cont::StoreToHl",
             "Imm16Cont::StoreSpToAddr",
@@ -53,9 +57,12 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "fn execute_alu_delta(state: CpuState, kind: AluKind, dst: Operand8, src: Operand8, addressing: AddressingMode) -> CpuDelta",
             "fn execute_misc_delta(state: CpuState, kind: MiscKind) -> CpuDelta",
             "fn execute_bitop_delta(",
+            "fn execute_word_alu_delta(",
             "ReadCont::AluFromMem$(kind)",
             "Imm8Cont::AluImm8$(kind)",
+            "Imm8Cont::AddSpDisp =>",
             "aluish_fetch_phase(decoded, state.arch.regs)",
+            "word_alu_fetch_phase(decoded)",
             "BusReq::Read$(addr: state.arch.regs.pc)",
             "some_u16(trunc(state.arch.regs.pc + 1u16))",
             "mask_f(select_u8(writes.f, regs.f))",
@@ -78,6 +85,18 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "Imm8Cont::AluImm8",
             "ReadCont::AluFromMem",
             "let micro = CpuMicroState(phase, state_opcode_i, state_imm_lo_i, 0u8, decoded, state_temp_i);",
+            "zext(next_state.micro.temp) << 112",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_semantics_wordalu_test_top_exposes_word_alu_subphase_surface(self) -> None:
+        text = CPU_SEMANTICS_WORDALU_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "entity semantics_wordalu_test_top(",
+            "state_imm_hi_i: uint<8>",
+            "Imm8Cont::AddSpDisp",
+            "let micro = CpuMicroState(phase, state_opcode_i, state_imm_lo_i, state_imm_hi_i, decoded, state_temp_i);",
+            "zext(next_state.micro.imm_hi) << 128",
             "zext(next_state.micro.temp) << 112",
         ]:
             self.assertIn(symbol, text)
