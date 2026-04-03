@@ -142,6 +142,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     ),
     SuiteDefinition("unit", "test_main.py", "swim", "test_main"),
     SuiteDefinition("unit", "test_alu.py", "swim", "test_alu"),
+    SuiteDefinition("unit", "test_alu_nightly.py", "swim", "test_alu_nightly", nightly_only=True),
     SuiteDefinition("unit", "test_decode.py", "swim", "test_decode"),
     SuiteDefinition("unit", "test_decode_cb.py", "swim", "test_decode_cb"),
     SuiteDefinition("unit", "test_regs.py", "swim", "test_regs"),
@@ -230,11 +231,13 @@ def suites_for_tier(tier: str, *, nightly: bool) -> list[SuiteDefinition]:
     return suites
 
 
-def command_env(*, sim: str) -> dict[str, str]:
+def command_env(*, sim: str, nightly: bool = False) -> dict[str, str]:
     env = os.environ.copy()
     env["PATH"] = f"/opt/homebrew/bin:{env.get('PATH', '')}"
     env["SIM"] = sim
     env["ICEBOY_SMOKE_SIM"] = sim
+    if nightly:
+        env["ICEBOY_NIGHTLY"] = "1"
     return env
 
 
@@ -271,13 +274,14 @@ def parse_suite_counts(definition: SuiteDefinition, output: str, exit_code: int)
     return max(total - failed, 0), failed
 
 
-def run_suite(definition: SuiteDefinition, *, sim: str, logger: TestLogger) -> SuiteResult:
+def run_suite(definition: SuiteDefinition, *, sim: str, logger: TestLogger, nightly: bool) -> SuiteResult:
+    env = command_env(sim=sim, nightly=nightly and definition.nightly_only)
     if definition.runner == "swim":
         patch_cocotb_config_wrapper()
         provisioned = subprocess.run(
             [str(ENSURE_SWIM_PYTHON_DEPS)],
             cwd=ROOT,
-            env=command_env(sim=sim),
+            env=env,
             capture_output=True,
             text=True,
         )
@@ -294,7 +298,7 @@ def run_suite(definition: SuiteDefinition, *, sim: str, logger: TestLogger) -> S
     completed = subprocess.run(
         command,
         cwd=ROOT,
-        env=command_env(sim=sim),
+        env=env,
         capture_output=True,
         text=True,
     )
@@ -413,7 +417,7 @@ def main(argv: list[str] | None = None) -> int:
             logger.context(tier.label, "no suites implemented")
             continue
         for definition in tier_suites:
-            results.append(run_suite(definition, sim=args.sim, logger=logger))
+            results.append(run_suite(definition, sim=args.sim, logger=logger, nightly=nightly_enabled))
 
     total_duration = time.monotonic() - total_started
     total_passed = sum(result.passed for result in results)

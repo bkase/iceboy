@@ -24,6 +24,7 @@ from run_tests import (
     parse_suite_counts,
     requested_preset_names,
     selected_tiers,
+    suites_for_tier,
     write_junit_xml,
 )
 
@@ -67,6 +68,16 @@ class RunTestsTest(unittest.TestCase):
         env = command_env(sim="verilator")
         self.assertEqual(env["SIM"], "verilator")
         self.assertEqual(env["ICEBOY_SMOKE_SIM"], "verilator")
+        self.assertNotIn("ICEBOY_NIGHTLY", env)
+
+    def test_nightly_suite_selection_and_env_flag(self) -> None:
+        unit_labels = [suite.label for suite in suites_for_tier("unit", nightly=False)]
+        nightly_labels = [suite.label for suite in suites_for_tier("unit", nightly=True)]
+        self.assertNotIn("test_alu_nightly.py", unit_labels)
+        self.assertIn("test_alu_nightly.py", nightly_labels)
+
+        env = command_env(sim="icarus", nightly=True)
+        self.assertEqual(env["ICEBOY_NIGHTLY"], "1")
 
     def test_write_junit_xml_emits_parseable_report(self) -> None:
         results = [
