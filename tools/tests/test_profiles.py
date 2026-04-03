@@ -75,7 +75,7 @@ class SimulationProfilesTest(unittest.TestCase):
                 "__checkpoint_halt_wake",
             ],
         )
-        self.assertEqual(roms["TIMER_IRQ_HALT"]["oracle_mode"], "instr_commit")
+        self.assertEqual(roms["TIMER_IRQ_HALT"]["oracle_mode"], "mcycle_commit")
 
     def test_spade_types_define_same_profile_names(self) -> None:
         spade_types = SPADE_TYPES_PATH.read_text(encoding="utf-8")

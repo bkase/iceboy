@@ -18,6 +18,9 @@ __checkpoint_isr_execute:
     ld [wDebugCounters + 0], a
     ld a, $42
     ld [wDebugCounters + 3], a
+    xor a
+    ld [rTAC], a
+    ld [rIF], a
     reti
 
 SECTION "Entry", ROM0[$0150]
@@ -35,7 +38,7 @@ __checkpoint_irq_fire:
     ld [rDIV], a
     ld a, $3C
     ld [rTMA], a
-    ld a, $FE
+    ld a, $FC
     ld [rTIMA], a
     ld a, $05
     ld [rTAC], a
