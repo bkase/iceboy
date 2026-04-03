@@ -42,6 +42,10 @@ pub fn idle_bus_resp() -> BusResp {
     BusResp$(data: 0xff)
 }
 
+pub fn idle_bus_obs() -> BusObs {
+    BusObs$(region: BusRegion::Hram, blocked: false, owner: BusOwner::Idle)
+}
+
 pub fn default_bus_obs() -> BusObs {
-    BusObs$(region: BusRegion::Rom, blocked: false, owner: BusOwner::Cpu)
+    idle_bus_obs()
 }

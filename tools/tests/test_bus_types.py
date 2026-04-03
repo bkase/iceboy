@@ -45,7 +45,9 @@ class BusTypesContractTest(unittest.TestCase):
             "owner: BusOwner",
             "pub fn idle_bus_req() -> BusReq",
             "pub fn idle_bus_resp() -> BusResp",
+            "pub fn idle_bus_obs() -> BusObs",
             "pub fn default_bus_obs() -> BusObs",
+            "BusObs$(region: BusRegion::Hram, blocked: false, owner: BusOwner::Idle)",
         ]:
             self.assertIn(symbol, text)
 

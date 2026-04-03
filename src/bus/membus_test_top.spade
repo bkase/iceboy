@@ -1,0 +1,51 @@
+use lib::bus::membus::membus;
+use lib::bus::types::{BusObs, BusOwner, BusRegion, BusReq, BusResp};
+
+fn encode_region(region: BusRegion) -> uint<4> {
+    match region {
+        BusRegion::Rom => 0u4,
+        BusRegion::Vram => 1u4,
+        BusRegion::CartRam => 2u4,
+        BusRegion::Wram => 3u4,
+        BusRegion::Echo => 4u4,
+        BusRegion::Oam => 5u4,
+        BusRegion::NotUsable => 6u4,
+        BusRegion::Io => 7u4,
+        BusRegion::Hram => 8u4,
+        BusRegion::Ie => 9u4,
+    }
+}
+
+fn encode_owner(owner: BusOwner) -> uint<2> {
+    match owner {
+        BusOwner::Cpu => 0u2,
+        BusOwner::OamDma => 1u2,
+        BusOwner::Ppu => 2u2,
+        BusOwner::Idle => 3u2,
+    }
+}
+
+fn encode_output(resp: BusResp, obs: BusObs) -> uint<15> {
+    (zext(resp.data) << 7)
+        | (zext(encode_region(obs.region)) << 3)
+        | (zext(encode_owner(obs.owner)) << 1)
+        | zext(if obs.blocked { 1u1 } else { 0u1 })
+}
+
+pub entity membus_test_top(
+    clk: clock,
+    rst: bool,
+    m_ce_i: bool,
+    req_kind_i: uint<2>,
+    addr_i: uint<16>,
+    data_i: uint<8>,
+) -> uint<15> {
+    let req = match req_kind_i {
+        1u2 => BusReq::Read$(addr: addr_i),
+        2u2 => BusReq::Write$(addr: addr_i, data: data_i),
+        _ => BusReq::Idle,
+    };
+    let (resp, obs) = inst membus(clk, rst, m_ce_i, req);
+
+    encode_output(resp, obs)
+}

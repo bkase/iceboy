@@ -1,1 +1,3 @@
+pub mod membus;
+pub mod membus_test_top;
 pub mod types;

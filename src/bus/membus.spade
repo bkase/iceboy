@@ -1,0 +1,143 @@
+use std::mem::{clocked_memory_init, read_memory};
+use lib::bus::types::{BusObs, BusOwner, BusRegion, BusReq, BusResp, idle_bus_obs, idle_bus_resp};
+
+fn decode_region(addr: uint<16>) -> BusRegion {
+    if addr <= 0x7fffu16 {
+        BusRegion::Rom
+    } else if addr <= 0x9fffu16 {
+        BusRegion::Vram
+    } else if addr <= 0xbfffu16 {
+        BusRegion::CartRam
+    } else if addr <= 0xdfffu16 {
+        BusRegion::Wram
+    } else if addr <= 0xfdffu16 {
+        BusRegion::Echo
+    } else if addr <= 0xfe9fu16 {
+        BusRegion::Oam
+    } else if addr <= 0xfeffu16 {
+        BusRegion::NotUsable
+    } else if addr <= 0xff7fu16 {
+        BusRegion::Io
+    } else if addr <= 0xfffeu16 {
+        BusRegion::Hram
+    } else {
+        BusRegion::Ie
+    }
+}
+
+fn active_req(rst: bool, m_ce: bool, req: BusReq) -> BusReq {
+    if rst || !m_ce { BusReq::Idle } else { req }
+}
+
+fn req_addr(req: BusReq) -> uint<16> {
+    match req {
+        BusReq::Idle => 0u16,
+        BusReq::Read$(addr: addr) => addr,
+        BusReq::Write$(addr: addr, data: _) => addr,
+    }
+}
+
+fn req_region(req: BusReq) -> BusRegion {
+    match req {
+        BusReq::Idle => BusRegion::Hram,
+        BusReq::Read$(addr: addr) => decode_region(addr),
+        BusReq::Write$(addr: addr, data: _) => decode_region(addr),
+    }
+}
+
+fn req_owner(req: BusReq) -> BusOwner {
+    match req {
+        BusReq::Idle => BusOwner::Idle,
+        _ => BusOwner::Cpu,
+    }
+}
+
+fn rom_addr(region: BusRegion, addr: uint<16>) -> uint<15> {
+    match region {
+        BusRegion::Rom => trunc(addr),
+        _ => 0u15,
+    }
+}
+
+fn wram_addr(region: BusRegion, addr: uint<16>) -> uint<13> {
+    match region {
+        BusRegion::Wram => trunc(addr - 0xc000u16),
+        _ => 0u13,
+    }
+}
+
+fn hram_addr(region: BusRegion, addr: uint<16>) -> uint<7> {
+    match region {
+        BusRegion::Hram => trunc(addr - 0xff80u16),
+        _ => 0u7,
+    }
+}
+
+fn wram_write(req: BusReq) -> (bool, uint<13>, uint<8>) {
+    match req {
+        BusReq::Write$(addr: addr, data: data) => match decode_region(addr) {
+            BusRegion::Wram => (true, trunc(addr - 0xc000u16), data),
+            _ => (false, 0u13, 0u8),
+        },
+        _ => (false, 0u13, 0u8),
+    }
+}
+
+fn hram_write(req: BusReq) -> (bool, uint<7>, uint<8>) {
+    match req {
+        BusReq::Write$(addr: addr, data: data) => match decode_region(addr) {
+            BusRegion::Hram => (true, trunc(addr - 0xff80u16), data),
+            _ => (false, 0u7, 0u8),
+        },
+        _ => (false, 0u7, 0u8),
+    }
+}
+
+fn read_data(region: BusRegion, rom_data: uint<8>, wram_data: uint<8>, hram_data: uint<8>) -> uint<8> {
+    match region {
+        BusRegion::Rom => rom_data,
+        BusRegion::Wram => wram_data,
+        BusRegion::Hram => hram_data,
+        _ => 0xffu8,
+    }
+}
+
+pub entity membus(
+    clk: clock,
+    rst: bool,
+    m_ce: bool,
+    req: BusReq,
+) -> (BusResp, BusObs) {
+    let req = active_req(rst, m_ce, req);
+    let region = req_region(req);
+    let addr = req_addr(req);
+    let obs = match req {
+        BusReq::Idle => idle_bus_obs(),
+        _ => BusObs$(region: region, blocked: false, owner: req_owner(req)),
+    };
+
+    let rom_mem = inst clocked_memory_init::<32768, 1, 15, uint<8>>(clk, [(false, 0u15, 0u8)], [0u8; 32768]);
+    let (wram_we, wram_waddr, wram_wdata) = wram_write(req);
+    let wram_mem = inst clocked_memory_init::<8192, 1, 13, uint<8>>(
+        clk,
+        [(wram_we, wram_waddr, wram_wdata)],
+        [0u8; 8192],
+    );
+    let (hram_we, hram_waddr, hram_wdata) = hram_write(req);
+    let hram_mem = inst clocked_memory_init::<127, 1, 7, uint<8>>(
+        clk,
+        [(hram_we, hram_waddr, hram_wdata)],
+        [0u8; 127],
+    );
+
+    let rom_data = inst read_memory(rom_mem, rom_addr(region, addr));
+    let wram_data = inst read_memory(wram_mem, wram_addr(region, addr));
+    let hram_data = inst read_memory(hram_mem, hram_addr(region, addr));
+
+    let resp = match req {
+        BusReq::Read$(addr: _) => BusResp$(data: read_data(region, rom_data, wram_data, hram_data)),
+        _ => idle_bus_resp(),
+    };
+
+    (resp, obs)
+}
