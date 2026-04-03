@@ -1,6 +1,6 @@
-use lib::cpu::regs::{Flags, flags_from_f, mask_f, pack_flags};
+use lib::cpu::regs::{Flags, R8, RegPair, Registers, flags_from_f, get_r16, get_r8, mask_f, pack_flags, set_r16, set_r8, zero_registers};
 
-pub struct FlagHelpersOut {
+pub struct RegsTestOut {
     masked_f: uint<8>,
     decoded_z: bool,
     decoded_n: bool,
@@ -8,25 +8,193 @@ pub struct FlagHelpersOut {
     decoded_c: bool,
     packed_f: uint<8>,
     roundtrip_f: uint<8>,
+    r8_selected: uint<8>,
+    r8_a: uint<8>,
+    r8_b: uint<8>,
+    r8_c: uint<8>,
+    r8_d: uint<8>,
+    r8_e: uint<8>,
+    r8_h: uint<8>,
+    r8_l: uint<8>,
+    r8_bc: uint<16>,
+    r8_de: uint<16>,
+    r8_hl: uint<16>,
+    r8_af: uint<16>,
+    r16_selected: uint<16>,
+    r16_a: uint<8>,
+    r16_f: uint<8>,
+    r16_b: uint<8>,
+    r16_c: uint<8>,
+    r16_d: uint<8>,
+    r16_e: uint<8>,
+    r16_h: uint<8>,
+    r16_l: uint<8>,
+    r16_bc: uint<16>,
+    r16_de: uint<16>,
+    r16_hl: uint<16>,
+    r16_sp: uint<16>,
+    r16_af: uint<16>,
 }
 
-pub entity flag_helpers_test_top(
+fn decode_r8(sel: uint<3>) -> R8 {
+    match sel {
+        0u3 => R8::A,
+        1u3 => R8::B,
+        2u3 => R8::C,
+        3u3 => R8::D,
+        4u3 => R8::E,
+        5u3 => R8::H,
+        6u3 => R8::L,
+        _ => R8::A,
+    }
+}
+
+fn decode_reg_pair(sel: uint<3>) -> RegPair {
+    match sel {
+        0u3 => RegPair::BC,
+        1u3 => RegPair::DE,
+        2u3 => RegPair::HL,
+        3u3 => RegPair::SP,
+        4u3 => RegPair::AF,
+        _ => RegPair::BC,
+    }
+}
+
+fn pack_flag_inputs(z: bool, n: bool, h: bool, c: bool) -> Flags {
+    Flags$(z: z, n: n, h: h, c: c)
+}
+
+fn r8_projection(regs: Registers, sel: R8) -> RegsTestOut {
+    RegsTestOut$(
+        masked_f: 0,
+        decoded_z: false,
+        decoded_n: false,
+        decoded_h: false,
+        decoded_c: false,
+        packed_f: 0,
+        roundtrip_f: 0,
+        r8_selected: get_r8(regs, sel),
+        r8_a: get_r8(regs, R8::A),
+        r8_b: get_r8(regs, R8::B),
+        r8_c: get_r8(regs, R8::C),
+        r8_d: get_r8(regs, R8::D),
+        r8_e: get_r8(regs, R8::E),
+        r8_h: get_r8(regs, R8::H),
+        r8_l: get_r8(regs, R8::L),
+        r8_bc: get_r16(regs, RegPair::BC),
+        r8_de: get_r16(regs, RegPair::DE),
+        r8_hl: get_r16(regs, RegPair::HL),
+        r8_af: get_r16(regs, RegPair::AF),
+        r16_selected: 0,
+        r16_a: 0,
+        r16_f: 0,
+        r16_b: 0,
+        r16_c: 0,
+        r16_d: 0,
+        r16_e: 0,
+        r16_h: 0,
+        r16_l: 0,
+        r16_bc: 0,
+        r16_de: 0,
+        r16_hl: 0,
+        r16_sp: 0,
+        r16_af: 0,
+    )
+}
+
+fn merge_flag_projection(base: RegsTestOut, masked_f: uint<8>, decoded: Flags, packed_f: uint<8>, roundtrip_f: uint<8>) -> RegsTestOut {
+    RegsTestOut$(
+        masked_f: masked_f,
+        decoded_z: decoded.z,
+        decoded_n: decoded.n,
+        decoded_h: decoded.h,
+        decoded_c: decoded.c,
+        packed_f: packed_f,
+        roundtrip_f: roundtrip_f,
+        r8_selected: base.r8_selected,
+        r8_a: base.r8_a,
+        r8_b: base.r8_b,
+        r8_c: base.r8_c,
+        r8_d: base.r8_d,
+        r8_e: base.r8_e,
+        r8_h: base.r8_h,
+        r8_l: base.r8_l,
+        r8_bc: base.r8_bc,
+        r8_de: base.r8_de,
+        r8_hl: base.r8_hl,
+        r8_af: base.r8_af,
+        r16_selected: base.r16_selected,
+        r16_a: base.r16_a,
+        r16_f: base.r16_f,
+        r16_b: base.r16_b,
+        r16_c: base.r16_c,
+        r16_d: base.r16_d,
+        r16_e: base.r16_e,
+        r16_h: base.r16_h,
+        r16_l: base.r16_l,
+        r16_bc: base.r16_bc,
+        r16_de: base.r16_de,
+        r16_hl: base.r16_hl,
+        r16_sp: base.r16_sp,
+        r16_af: base.r16_af,
+    )
+}
+
+fn merge_r16_projection(base: RegsTestOut, regs: Registers, sel: RegPair) -> RegsTestOut {
+    RegsTestOut$(
+        masked_f: base.masked_f,
+        decoded_z: base.decoded_z,
+        decoded_n: base.decoded_n,
+        decoded_h: base.decoded_h,
+        decoded_c: base.decoded_c,
+        packed_f: base.packed_f,
+        roundtrip_f: base.roundtrip_f,
+        r8_selected: base.r8_selected,
+        r8_a: base.r8_a,
+        r8_b: base.r8_b,
+        r8_c: base.r8_c,
+        r8_d: base.r8_d,
+        r8_e: base.r8_e,
+        r8_h: base.r8_h,
+        r8_l: base.r8_l,
+        r8_bc: base.r8_bc,
+        r8_de: base.r8_de,
+        r8_hl: base.r8_hl,
+        r8_af: base.r8_af,
+        r16_selected: get_r16(regs, sel),
+        r16_a: regs.a,
+        r16_f: regs.f,
+        r16_b: regs.b,
+        r16_c: regs.c,
+        r16_d: regs.d,
+        r16_e: regs.e,
+        r16_h: regs.h,
+        r16_l: regs.l,
+        r16_bc: get_r16(regs, RegPair::BC),
+        r16_de: get_r16(regs, RegPair::DE),
+        r16_hl: get_r16(regs, RegPair::HL),
+        r16_sp: get_r16(regs, RegPair::SP),
+        r16_af: get_r16(regs, RegPair::AF),
+    )
+}
+
+pub entity regs_test_top(
     f: uint<8>,
     z: bool,
     n: bool,
     h: bool,
     c: bool,
-) -> FlagHelpersOut {
+    r8_sel: uint<3>,
+    r8_val: uint<8>,
+    pair_sel: uint<3>,
+    pair_val: uint<16>,
+) -> RegsTestOut {
     let decoded = flags_from_f(f);
-    let packed = pack_flags(Flags$(z: z, n: n, h: h, c: c));
+    let packed = pack_flags(pack_flag_inputs(z, n, h, c));
+    let r8_written = set_r8(zero_registers(), decode_r8(r8_sel), r8_val);
+    let r16_written = set_r16(zero_registers(), decode_reg_pair(pair_sel), pair_val);
+    let r8_view = r8_projection(r8_written, decode_r8(r8_sel));
+    let with_flags = merge_flag_projection(r8_view, mask_f(f), decoded, packed, pack_flags(decoded));
 
-    FlagHelpersOut$(
-        masked_f: mask_f(f),
-        decoded_z: decoded.z,
-        decoded_n: decoded.n,
-        decoded_h: decoded.h,
-        decoded_c: decoded.c,
-        packed_f: packed,
-        roundtrip_f: pack_flags(decoded),
-    )
+    merge_r16_projection(with_flags, r16_written, decode_reg_pair(pair_sel))
 }
