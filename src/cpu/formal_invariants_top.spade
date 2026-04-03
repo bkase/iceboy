@@ -1,6 +1,38 @@
 use lib::bus::types::BusResp;
 use lib::cpu::core::cpu_core;
-use lib::cpu::types::IrqPending;
+use lib::cpu::types::{HaltState, ImeState, IrqPending, Phase};
+
+fn ime_code(ime: ImeState) -> uint<2> {
+    match ime {
+        ImeState::Disabled => 0u2,
+        ImeState::PendingEnable => 1u2,
+        ImeState::Enabled => 2u2,
+    }
+}
+
+fn halt_code(halt: HaltState) -> uint<2> {
+    match halt {
+        HaltState::Running => 0u2,
+        HaltState::Halted => 1u2,
+        HaltState::HaltBugPending => 2u2,
+    }
+}
+
+fn phase_code(phase: Phase) -> uint<4> {
+    match phase {
+        Phase::Fetch => 0u4,
+        Phase::FetchPrefix$(prefix: _) => 1u4,
+        Phase::ReadImm8$(k: _) => 2u4,
+        Phase::ReadImm16Lo$(k: _) => 3u4,
+        Phase::ReadImm16Hi$(lo: _, k: _) => 4u4,
+        Phase::ReadMem$(addr: _, k: _) => 5u4,
+        Phase::WriteMem$(addr: _, data: _, k: _) => 6u4,
+        Phase::Execute$(op: _) => 7u4,
+        Phase::ServiceInterrupt$(irq: _, subphase: _) => 8u4,
+        Phase::Halted => 9u4,
+        _ => 15u4,
+    }
+}
 
 pub entity cpu_f_low_nibble_top(
     clk: clock,
@@ -11,4 +43,30 @@ pub entity cpu_f_low_nibble_top(
 ) -> bool {
     let cpu = inst cpu_core(clk, rst, m_ce, bus_resp, irq_pending);
     cpu.f_low_nibble_zero
+}
+
+pub entity cpu_reset_top(
+    clk: clock,
+    rst: bool,
+    m_ce: bool,
+    bus_resp: BusResp,
+    irq_pending: IrqPending,
+) -> bool {
+    let cpu = inst cpu_core(clk, rst, m_ce, bus_resp, irq_pending);
+
+    (cpu.regs.a == 0x01u8)
+    && (cpu.regs.f == 0xb0u8)
+    && (cpu.regs.b == 0x00u8)
+    && (cpu.regs.c == 0x13u8)
+    && (cpu.regs.d == 0x00u8)
+    && (cpu.regs.e == 0xd8u8)
+    && (cpu.regs.h == 0x01u8)
+    && (cpu.regs.l == 0x4du8)
+    && (cpu.regs.sp == 0xfffeu16)
+    && (cpu.regs.pc == 0x0100u16)
+    && (ime_code(cpu.ime_state) == 0u2)
+    && (halt_code(cpu.halt_state) == 0u2)
+    && (phase_code(cpu.phase) == 0u4)
+    && (cpu.bus_req_kind == 1u2)
+    && (cpu.bus_req_addr == 0x0100u16)
 }

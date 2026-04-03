@@ -1,0 +1,15 @@
+[options]
+mode prove
+depth 8
+
+[engines]
+smtbmc bitwuzla
+
+[script]
+read -formal -sv spade.sv cpu_reset_formal.sv
+clk2fflogic
+prep -top cpu_reset_formal
+
+[files]
+build/spade.sv
+formal/cpu_reset_formal.sv

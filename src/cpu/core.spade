@@ -1,10 +1,14 @@
 use lib::bus::types::{BusReq, BusResp};
 use lib::cpu::regs::{Registers, mask_f};
 use lib::cpu::semantics::{apply_delta, step_mcycle};
-use lib::cpu::types::{CpuArchState, CpuMicroState, CpuState, HaltState, ImeState, IrqPending, MicroInput, initial_cpu_micro_state};
+use lib::cpu::types::{CpuArchState, CpuMicroState, CpuState, HaltState, ImeState, IrqPending, MicroInput, Phase, initial_cpu_micro_state};
 
 pub struct CpuCoreOut {
     commit_seq: uint<64>,
+    regs: Registers,
+    ime_state: ImeState,
+    halt_state: HaltState,
+    phase: Phase,
     pc: uint<16>,
     f_low_nibble_zero: bool,
     bus_req_kind: uint<2>,
@@ -20,8 +24,23 @@ fn skipboot_sp() -> uint<16> {
     0xfffeu16
 }
 
+fn skipboot_regs() -> Registers {
+    Registers(
+        0x01u8,
+        0xb0u8,
+        0x00u8,
+        0x13u8,
+        0x00u8,
+        0xd8u8,
+        0x01u8,
+        0x4du8,
+        skipboot_sp(),
+        skipboot_pc(),
+    )
+}
+
 fn skipboot_arch_state() -> CpuArchState {
-    let regs = Registers(0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, skipboot_sp(), skipboot_pc());
+    let regs = skipboot_regs();
     CpuArchState(regs, ImeState::Disabled, HaltState::Running)
 }
 
@@ -67,11 +86,17 @@ pub entity cpu_core(
         if m_ce { next_state.micro } else { micro_state };
     reg(clk) commit_seq: uint<64> reset(rst: 0u64) =
         if m_ce { trunc(commit_seq + 1u64) } else { commit_seq };
+    let visible_arch = arch_state;
+    let visible_phase = micro_state.phase;
     let visible_bus_req = if m_ce { step.bus_req } else { BusReq::Idle };
-    let visible_f = if m_ce { next_state.arch.regs.f } else { arch_state.regs.f };
+    let visible_f = visible_arch.regs.f;
 
     CpuCoreOut$(
         commit_seq: if m_ce { trunc(commit_seq + 1u64) } else { commit_seq },
+        regs: visible_arch.regs,
+        ime_state: visible_arch.ime_state,
+        halt_state: visible_arch.halt_state,
+        phase: visible_phase,
         pc: if m_ce { next_state.arch.regs.pc } else { arch_state.regs.pc },
         f_low_nibble_zero: mask_f(visible_f) == visible_f,
         bus_req_kind: bus_req_kind(visible_bus_req),
