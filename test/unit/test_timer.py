@@ -24,6 +24,21 @@ def decode_timer(output_value: int) -> dict[str, int | bool]:
     }
 
 
+def log_cycle(sys_counter: int, snapshot: dict[str, int | bool], *, note: str = "") -> None:
+    suffix = f" {note}" if note else ""
+    cocotb.log.info(
+        "[CYCLE %d] DIV=0x%02X TIMA=0x%02X TMA=0x%02X TAC=0x%02X IRQ=%d delay=%d%s",
+        sys_counter,
+        int(snapshot["div"]),
+        int(snapshot["tima"]),
+        int(snapshot["tma"]),
+        int(snapshot["tac"]),
+        int(bool(snapshot["timer_irq"])),
+        int(snapshot["overflow_delay"]),
+        suffix,
+    )
+
+
 async def reset_dut(dut) -> None:
     cocotb.start_soon(Clock(dut.clk_i, 10, units="ns").start())
     dut.sys_counter_i.value = 0
@@ -176,3 +191,83 @@ async def test_writing_tima_during_overflow_delay_cancels_reload_and_interrupt(d
     assert snapshot["tima"] == 0x44
     assert snapshot["timer_irq"] is False
     assert snapshot["overflow_delay"] == 0
+
+
+@cocotb.test()
+async def test_tac_enable_disable_edges_do_not_spuriously_increment_tima(dut):
+    await reset_dut(dut)
+    await step(dut, sys_counter=0, write_addr=TIMA_ADDR, write_data=0x10)
+    await step(dut, sys_counter=0, write_addr=TAC_ADDR, write_data=0x00)
+
+    snapshot = await step(dut, sys_counter=8)
+    log_cycle(8, snapshot, note="timer disabled, selected fast bit would be high")
+    assert snapshot["tima"] == 0x10, snapshot
+
+    snapshot = await step(dut, sys_counter=9, write_addr=TAC_ADDR, write_data=0x05)
+    log_cycle(9, snapshot, note="enable fast timer while selected bit is high")
+    assert snapshot["tima"] == 0x10, snapshot
+    assert snapshot["tac"] == 0x05, snapshot
+
+    snapshot = await step(dut, sys_counter=10, write_addr=TAC_ADDR, write_data=0x00)
+    log_cycle(10, snapshot, note="disable timer while previously sampled bit was high")
+    assert snapshot["tima"] == 0x10, snapshot
+    assert snapshot["tac"] == 0x00, snapshot
+
+    snapshot = await step(dut, sys_counter=11)
+    log_cycle(11, snapshot, note="remain stopped after disable edge")
+    assert snapshot["tima"] == 0x10, snapshot
+    assert snapshot["timer_irq"] is False
+
+
+@cocotb.test()
+async def test_tac_clock_select_change_can_trigger_falling_edge_increment(dut):
+    await reset_dut(dut)
+    await configure_fast_timer(dut, tima=0x20)
+
+    snapshot = await step(dut, sys_counter=8)
+    log_cycle(8, snapshot, note="fast-rate selected bit sampled high")
+    assert snapshot["tima"] == 0x20, snapshot
+
+    snapshot = await step(dut, sys_counter=9, write_addr=TAC_ADDR, write_data=0x07)
+    log_cycle(9, snapshot, note="switch to /256 source, selected bit falls 1->0")
+    assert snapshot["tac"] == 0x07, snapshot
+    assert snapshot["tima"] == 0x21, snapshot
+    assert snapshot["timer_irq"] is False
+
+
+@cocotb.test()
+async def test_tma_write_on_final_delay_cycle_sets_reload_value(dut):
+    await reset_dut(dut)
+    await configure_fast_timer(dut, tma=0x33, tima=0xFF)
+
+    snapshot = await advance_to(dut, start=1, end=16)
+    log_cycle(16, snapshot, note="overflow scheduled")
+    assert snapshot["overflow_delay"] == 4
+
+    for sys_counter, expected_delay in ((17, 3), (18, 2), (19, 1)):
+        snapshot = await step(dut, sys_counter=sys_counter)
+        log_cycle(sys_counter, snapshot)
+        assert snapshot["overflow_delay"] == expected_delay, (sys_counter, snapshot)
+
+    snapshot = await step(dut, sys_counter=20, write_addr=TMA_ADDR, write_data=0x99)
+    log_cycle(20, snapshot, note="write TMA on final reload cycle")
+    assert snapshot["tma"] == 0x99, snapshot
+    assert snapshot["tima"] == 0x99, snapshot
+    assert snapshot["timer_irq"] is True
+    assert snapshot["overflow_delay"] == 0
+
+
+@cocotb.test()
+async def test_div_and_tima_stay_aligned_with_shared_timebase(dut):
+    await reset_dut(dut)
+    await configure_fast_timer(dut)
+
+    snapshot = decode_timer(int(dut.output__.value))
+    for sys_counter in range(1, 513):
+        snapshot = await step(dut, sys_counter=sys_counter)
+        expected_div = (sys_counter >> 8) & 0xFF
+        expected_tima = (sys_counter // 16) & 0xFF
+        if sys_counter in (15, 16, 255, 256, 511, 512):
+            log_cycle(sys_counter, snapshot, note="shared-timebase boundary")
+        assert snapshot["div"] == expected_div, (sys_counter, expected_div, snapshot)
+        assert snapshot["tima"] == expected_tima, (sys_counter, expected_tima, snapshot)
