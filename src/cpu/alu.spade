@@ -249,6 +249,69 @@ fn add_sp_e8_result(sp: uint<16>, off: uint<8>) -> AluResult {
     )
 }
 
+fn daa_result(a: uint<8>, f_prev: Flags) -> AluResult {
+    let low_adjust = if f_prev.n {
+        if f_prev.h { 0x06u8 } else { 0u8 }
+    } else {
+        if f_prev.h || ((a & 0x0fu8) > 0x09u8) { 0x06u8 } else { 0u8 }
+    };
+    let high_adjust = if f_prev.n {
+        if f_prev.c { 0x60u8 } else { 0u8 }
+    } else {
+        if f_prev.c || (a > 0x99u8) { 0x60u8 } else { 0u8 }
+    };
+    let adjustment = trunc(low_adjust + high_adjust);
+    let result = if f_prev.n { trunc(a - adjustment) } else { trunc(a + adjustment) };
+
+    alu_result8(
+        result,
+        Flags$(
+            z: result == 0u8,
+            n: f_prev.n,
+            h: false,
+            c: if f_prev.n { f_prev.c } else { f_prev.c || (a > 0x99u8) },
+        ),
+    )
+}
+
+fn cpl_result(a: uint<8>, f_prev: Flags) -> AluResult {
+    let result = ~a;
+
+    alu_result8(
+        result,
+        Flags$(
+            z: f_prev.z,
+            n: true,
+            h: true,
+            c: f_prev.c,
+        ),
+    )
+}
+
+fn scf_result(f_prev: Flags) -> AluResult {
+    alu_result8(
+        0u8,
+        Flags$(
+            z: f_prev.z,
+            n: false,
+            h: false,
+            c: true,
+        ),
+    )
+}
+
+fn ccf_result(f_prev: Flags) -> AluResult {
+    alu_result8(
+        0u8,
+        Flags$(
+            z: f_prev.z,
+            n: false,
+            h: false,
+            c: !f_prev.c,
+        ),
+    )
+}
+
 pub fn idle_alu_result() -> AluResult {
     AluResult$(val8: 0, val16: 0, flags: zero_flags())
 }
@@ -265,6 +328,10 @@ pub fn alu(req: AluReq) -> AluResult {
         AluReq::Dec8$(x, f_prev) => dec8_result(x, f_prev),
         AluReq::Add16$(a, b, z_preserve) => add16_result(a, b, z_preserve),
         AluReq::AddSpE8$(sp, off) => add_sp_e8_result(sp, off),
+        AluReq::Daa$(a, f_prev) => daa_result(a, f_prev),
+        AluReq::Cpl$(a, f_prev) => cpl_result(a, f_prev),
+        AluReq::Scf$(f_prev) => scf_result(f_prev),
+        AluReq::Ccf$(f_prev) => ccf_result(f_prev),
         _ => idle_alu_result(),
     }
 }

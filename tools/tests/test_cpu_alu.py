@@ -57,6 +57,10 @@ class CpuAluContractTest(unittest.TestCase):
             "fn dec8_result(x: uint<8>, f_prev: Flags) -> AluResult",
             "fn add16_result(a: uint<16>, b: uint<16>, z_preserve: bool) -> AluResult",
             "fn add_sp_e8_result(sp: uint<16>, off: uint<8>) -> AluResult",
+            "fn daa_result(a: uint<8>, f_prev: Flags) -> AluResult",
+            "fn cpl_result(a: uint<8>, f_prev: Flags) -> AluResult",
+            "fn scf_result(f_prev: Flags) -> AluResult",
+            "fn ccf_result(f_prev: Flags) -> AluResult",
             "AluReq::Add8$(a, b, carry_in) => if carry_in { adc8_result(a, b, true) } else { add8_result(a, b) }",
             "AluReq::Sub8$(a, b, carry_in) => if carry_in { sbc8_result(a, b, true) } else { sub8_result(a, b) }",
             "AluReq::And8$(a, b) => and8_result(a, b)",
@@ -67,6 +71,10 @@ class CpuAluContractTest(unittest.TestCase):
             "AluReq::Dec8$(x, f_prev) => dec8_result(x, f_prev)",
             "AluReq::Add16$(a, b, z_preserve) => add16_result(a, b, z_preserve)",
             "AluReq::AddSpE8$(sp, off) => add_sp_e8_result(sp, off)",
+            "AluReq::Daa$(a, f_prev) => daa_result(a, f_prev)",
+            "AluReq::Cpl$(a, f_prev) => cpl_result(a, f_prev)",
+            "AluReq::Scf$(f_prev) => scf_result(f_prev)",
+            "AluReq::Ccf$(f_prev) => ccf_result(f_prev)",
             "_ => idle_alu_result()",
         ]:
             self.assertIn(symbol, text)

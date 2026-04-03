@@ -10,26 +10,40 @@ pub struct ArithmeticAluOut {
     c: bool,
 }
 
-fn selected_req(op: uint<5>, a: uint<16>, b: uint<16>, carry_in: bool, z_in: bool) -> AluReq {
+fn selected_req(op: uint<5>, a: uint<16>, b: uint<16>, z_in: bool, n_in: bool, h_in: bool, c_in: bool) -> AluReq {
+    let f_prev = Flags$(z: z_in, n: n_in, h: h_in, c: c_in);
+
     match op {
         0u5 => AluReq::Add8$(a: trunc(a), b: trunc(b), carry_in: false),
-        1u5 => AluReq::Add8$(a: trunc(a), b: trunc(b), carry_in: carry_in),
+        1u5 => AluReq::Add8$(a: trunc(a), b: trunc(b), carry_in: c_in),
         2u5 => AluReq::Sub8$(a: trunc(a), b: trunc(b), carry_in: false),
-        3u5 => AluReq::Sub8$(a: trunc(a), b: trunc(b), carry_in: carry_in),
+        3u5 => AluReq::Sub8$(a: trunc(a), b: trunc(b), carry_in: c_in),
         4u5 => AluReq::Cp8$(a: trunc(a), b: trunc(b)),
         5u5 => AluReq::And8$(a: trunc(a), b: trunc(b)),
         6u5 => AluReq::Or8$(a: trunc(a), b: trunc(b)),
         7u5 => AluReq::Xor8$(a: trunc(a), b: trunc(b)),
-        8u5 => AluReq::Inc8$(x: trunc(a), f_prev: Flags$(z: false, n: false, h: false, c: carry_in)),
-        9u5 => AluReq::Dec8$(x: trunc(a), f_prev: Flags$(z: false, n: false, h: false, c: carry_in)),
+        8u5 => AluReq::Inc8$(x: trunc(a), f_prev: f_prev),
+        9u5 => AluReq::Dec8$(x: trunc(a), f_prev: f_prev),
         10u5 => AluReq::Add16$(a: a, b: b, z_preserve: z_in),
         11u5 => AluReq::AddSpE8$(sp: a, off: trunc(b)),
+        12u5 => AluReq::Daa$(a: trunc(a), f_prev: f_prev),
+        13u5 => AluReq::Cpl$(a: trunc(a), f_prev: f_prev),
+        14u5 => AluReq::Scf$(f_prev: f_prev),
+        15u5 => AluReq::Ccf$(f_prev: f_prev),
         _ => AluReq::Idle,
     }
 }
 
-pub entity arithmetic_alu_test_top(op: uint<5>, a: uint<16>, b: uint<16>, carry_in: bool, z_in: bool) -> ArithmeticAluOut {
-    let result = lib::cpu::alu::alu(selected_req(op, a, b, carry_in, z_in));
+pub entity arithmetic_alu_test_top(
+    op: uint<5>,
+    a: uint<16>,
+    b: uint<16>,
+    z_in: bool,
+    n_in: bool,
+    h_in: bool,
+    c_in: bool,
+) -> ArithmeticAluOut {
+    let result = lib::cpu::alu::alu(selected_req(op, a, b, z_in, n_in, h_in, c_in));
 
     ArithmeticAluOut$(
         val16: result.val16,
