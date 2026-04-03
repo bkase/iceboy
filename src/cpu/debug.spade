@@ -1,6 +1,6 @@
 use std::option::Option;
 use lib::bus::types::{BusObs, BusReq, BusResp, idle_bus_req};
-use lib::cpu::types::{CpuArchState, CpuDelta, Phase, idle_cpu_delta};
+use lib::cpu::types::{CpuArchState, CpuDelta, IrqAck, Phase, idle_cpu_delta, no_irq_ack};
 
 pub enum CommitKind {
     MCycle,
@@ -53,6 +53,7 @@ pub struct Sideband {
 pub struct MicroOutput {
     delta: CpuDelta,
     bus_req: BusReq,
+    irq_ack: IrqAck,
     commit: Option<CommitTrace>,
     sideband: Option<Sideband>,
 }
@@ -69,6 +70,7 @@ pub fn idle_micro_output() -> MicroOutput {
     MicroOutput$(
         delta: idle_cpu_delta(),
         bus_req: idle_bus_req(),
+        irq_ack: no_irq_ack(),
         commit: Option::None,
         sideband: Option::None,
     )

@@ -1,0 +1,197 @@
+use std::option::Option;
+use lib::bus::types::{BusReq, BusResp};
+use lib::cpu::decode::decode;
+use lib::cpu::regs::Registers;
+use lib::cpu::semantics::{apply_delta, step_mcycle};
+use lib::cpu::types::{CpuArchState, CpuMicroState, CpuState, HaltState, ImeState, IrqPending, IrqPhase, IrqSel, MicroInput, Phase};
+
+fn ime_from_code(code: uint<2>) -> ImeState {
+    match code {
+        1u2 => ImeState::PendingEnable,
+        2u2 => ImeState::Enabled,
+        _ => ImeState::Disabled,
+    }
+}
+
+fn ime_code(ime: ImeState) -> uint<2> {
+    match ime {
+        ImeState::Disabled => 0u2,
+        ImeState::PendingEnable => 1u2,
+        ImeState::Enabled => 2u2,
+    }
+}
+
+fn halt_from_code(code: uint<2>) -> HaltState {
+    match code {
+        1u2 => HaltState::Halted,
+        2u2 => HaltState::HaltBugPending,
+        _ => HaltState::Running,
+    }
+}
+
+fn halt_code(halt: HaltState) -> uint<2> {
+    match halt {
+        HaltState::Running => 0u2,
+        HaltState::Halted => 1u2,
+        HaltState::HaltBugPending => 2u2,
+    }
+}
+
+fn irq_sel_from_code(code: uint<3>) -> IrqSel {
+    match code {
+        1u3 => IrqSel::LcdStat,
+        2u3 => IrqSel::Timer,
+        3u3 => IrqSel::Serial,
+        4u3 => IrqSel::Joypad,
+        _ => IrqSel::VBlank,
+    }
+}
+
+fn irq_sel_code(irq: IrqSel) -> uint<3> {
+    match irq {
+        IrqSel::VBlank => 0u3,
+        IrqSel::LcdStat => 1u3,
+        IrqSel::Timer => 2u3,
+        IrqSel::Serial => 3u3,
+        IrqSel::Joypad => 4u3,
+    }
+}
+
+fn irq_phase_from_code(code: uint<3>) -> IrqPhase {
+    match code {
+        1u3 => IrqPhase::Delay2,
+        2u3 => IrqPhase::PushPcHi,
+        3u3 => IrqPhase::PushPcLo,
+        4u3 => IrqPhase::Jump,
+        _ => IrqPhase::Delay1,
+    }
+}
+
+fn irq_phase_code(phase: IrqPhase) -> uint<3> {
+    match phase {
+        IrqPhase::Delay1 => 0u3,
+        IrqPhase::Delay2 => 1u3,
+        IrqPhase::PushPcHi => 2u3,
+        IrqPhase::PushPcLo => 3u3,
+        IrqPhase::Jump => 4u3,
+    }
+}
+
+fn phase_from_inputs(kind: uint<2>, irq_sel: uint<3>, irq_phase: uint<3>) -> Phase {
+    match kind {
+        1u2 => Phase::Halted,
+        2u2 => Phase::ServiceInterrupt$(irq: irq_sel_from_code(irq_sel), subphase: irq_phase_from_code(irq_phase)),
+        _ => Phase::Fetch,
+    }
+}
+
+fn next_phase_kind(phase: Phase) -> uint<2> {
+    match phase {
+        Phase::Halted => 1u2,
+        Phase::ServiceInterrupt$(irq: _, subphase: _) => 2u2,
+        _ => 0u2,
+    }
+}
+
+fn next_irq_sel_code(phase: Phase) -> uint<3> {
+    match phase {
+        Phase::ServiceInterrupt$(irq, subphase: _) => irq_sel_code(irq),
+        _ => 0u3,
+    }
+}
+
+fn next_irq_phase_code(phase: Phase) -> uint<3> {
+    match phase {
+        Phase::ServiceInterrupt$(irq: _, subphase) => irq_phase_code(subphase),
+        _ => 0u3,
+    }
+}
+
+fn bus_req_kind(req: BusReq) -> uint<2> {
+    match req {
+        BusReq::Idle => 0u2,
+        BusReq::Read$(addr: _) => 1u2,
+        BusReq::Write$(addr: _, data: _) => 2u2,
+    }
+}
+
+fn bus_req_addr(req: BusReq) -> uint<16> {
+    match req {
+        BusReq::Idle => 0u16,
+        BusReq::Read$(addr: addr) => addr,
+        BusReq::Write$(addr: addr, data: _) => addr,
+    }
+}
+
+fn bus_req_data(req: BusReq) -> uint<8> {
+    match req {
+        BusReq::Idle => 0u8,
+        BusReq::Read$(addr: _) => 0u8,
+        BusReq::Write$(addr: _, data: data) => data,
+    }
+}
+
+entity semantics_interrupt_test_top(
+    state_pc_i: uint<16>,
+    state_sp_i: uint<16>,
+    state_ime_i: uint<2>,
+    state_halt_i: uint<2>,
+    state_phase_kind_i: uint<2>,
+    state_irq_sel_i: uint<3>,
+    state_irq_phase_i: uint<3>,
+    bus_resp_i: uint<8>,
+    irq_pending_i: uint<5>,
+) -> uint<128> {
+    let regs = Registers(0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, state_sp_i, state_pc_i);
+    let arch = CpuArchState(regs, ime_from_code(state_ime_i), halt_from_code(state_halt_i));
+    let micro = CpuMicroState(phase_from_inputs(state_phase_kind_i, state_irq_sel_i, state_irq_phase_i), 0u8, 0u8, 0u8, decode(bus_resp_i), 0u16);
+    let state = CpuState(arch, micro);
+    let step = step_mcycle(state, MicroInput(BusResp$(data: bus_resp_i), IrqPending$(pending: irq_pending_i)));
+    let next_state = apply_delta(state, step.delta);
+    let pc_write_valid = match step.delta.pc_write {
+        Option::Some(value) => { let _ = value; true },
+        Option::None => false,
+    };
+    let pc_write = match step.delta.pc_write {
+        Option::Some(value) => value,
+        Option::None => 0u16,
+    };
+    let sp_write_valid = match step.delta.sp_write {
+        Option::Some(value) => { let _ = value; true },
+        Option::None => false,
+    };
+    let sp_write = match step.delta.sp_write {
+        Option::Some(value) => value,
+        Option::None => 0u16,
+    };
+    let irq_ack_valid = match step.irq_ack.ack_bit {
+        Option::Some(value) => { let _ = value; true },
+        Option::None => false,
+    };
+    let irq_ack_bit = match step.irq_ack.ack_bit {
+        Option::Some(value) => value,
+        Option::None => 0u3,
+    };
+    let commit_present = match step.commit {
+        Option::Some(value) => { let _ = value; true },
+        Option::None => false,
+    };
+
+    (zext(next_state.arch.regs.pc) << 112)
+    | (zext(next_state.arch.regs.sp) << 96)
+    | (zext(ime_code(next_state.arch.ime_state)) << 94)
+    | (zext(halt_code(next_state.arch.halt_state)) << 92)
+    | (zext(next_phase_kind(next_state.micro.phase)) << 88)
+    | (zext(next_irq_sel_code(next_state.micro.phase)) << 85)
+    | (zext(next_irq_phase_code(next_state.micro.phase)) << 82)
+    | (zext(bus_req_kind(step.bus_req)) << 80)
+    | (zext(bus_req_addr(step.bus_req)) << 64)
+    | (zext(bus_req_data(step.bus_req)) << 56)
+    | ((if pc_write_valid { 1u128 } else { 0u128 }) << 55)
+    | (zext(pc_write) << 39)
+    | ((if sp_write_valid { 1u128 } else { 0u128 }) << 38)
+    | (zext(sp_write) << 22)
+    | ((if irq_ack_valid { 1u128 } else { 0u128 }) << 21)
+    | (zext(irq_ack_bit) << 18)
+    | ((if commit_present { 1u128 } else { 0u128 }) << 17)
+}

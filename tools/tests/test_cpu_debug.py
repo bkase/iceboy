@@ -41,10 +41,12 @@ class CpuDebugContractTest(unittest.TestCase):
             "debug_trace: Option<DebugTrace>",
             "struct MicroOutput",
             "delta: CpuDelta",
+            "irq_ack: IrqAck",
             "commit: Option<CommitTrace>",
             "sideband: Option<Sideband>",
             "pub fn idle_sideband() -> Sideband",
             "pub fn idle_micro_output() -> MicroOutput",
+            "irq_ack: no_irq_ack()",
         ]:
             self.assertIn(symbol, text)
 

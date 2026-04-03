@@ -13,6 +13,7 @@ pub mod semantics;
 pub mod semantics_alu_test_top;
 pub mod semantics_cb_test_top;
 pub mod semantics_flow_test_top;
+pub mod semantics_interrupt_test_top;
 pub mod semantics_load_test_top;
 pub mod semantics_misc_test_top;
 pub mod semantics_test_top;

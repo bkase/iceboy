@@ -1,7 +1,8 @@
+use std::option::Option;
 use lib::bus::types::{BusReq, BusResp};
 use lib::cpu::regs::{Registers, mask_f};
 use lib::cpu::semantics::{apply_delta, step_mcycle};
-use lib::cpu::types::{CpuArchState, CpuMicroState, CpuState, HaltState, ImeState, IrqPending, MicroInput, Phase, initial_cpu_micro_state};
+use lib::cpu::types::{CpuArchState, CpuMicroState, CpuState, HaltState, ImeState, IrqPending, MicroInput, Phase, initial_cpu_micro_state, no_irq_ack};
 
 pub struct CpuCoreOut {
     commit_seq: uint<64>,
@@ -14,6 +15,8 @@ pub struct CpuCoreOut {
     bus_req_kind: uint<2>,
     bus_req_addr: uint<16>,
     bus_req_data: uint<8>,
+    irq_ack_valid: bool,
+    irq_ack_bit: uint<3>,
 }
 
 fn skipboot_pc() -> uint<16> {
@@ -89,6 +92,7 @@ pub entity cpu_core(
     let visible_arch = arch_state;
     let visible_phase = micro_state.phase;
     let visible_bus_req = if m_ce { step.bus_req } else { BusReq::Idle };
+    let visible_irq_ack = if m_ce { step.irq_ack } else { no_irq_ack() };
     let visible_f = visible_arch.regs.f;
 
     CpuCoreOut$(
@@ -102,5 +106,13 @@ pub entity cpu_core(
         bus_req_kind: bus_req_kind(visible_bus_req),
         bus_req_addr: bus_req_addr(visible_bus_req),
         bus_req_data: bus_req_data(visible_bus_req),
+        irq_ack_valid: match visible_irq_ack.ack_bit {
+            Option::Some(value) => { let _ = value; true },
+            Option::None => false,
+        },
+        irq_ack_bit: match visible_irq_ack.ack_bit {
+            Option::Some(value) => value,
+            Option::None => 0u3,
+        },
     )
 }

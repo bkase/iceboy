@@ -30,6 +30,8 @@ class CpuCoreStubContractTest(unittest.TestCase):
             "bus_req_kind: uint<2>",
             "bus_req_addr: uint<16>",
             "bus_req_data: uint<8>",
+            "irq_ack_valid: bool",
+            "irq_ack_bit: uint<3>",
             "fn skipboot_pc() -> uint<16>",
             "fn skipboot_sp() -> uint<16>",
             "fn skipboot_regs() -> Registers",
@@ -60,6 +62,7 @@ class CpuCoreStubContractTest(unittest.TestCase):
             "let visible_arch = arch_state;",
             "let visible_phase = micro_state.phase;",
             "let visible_bus_req = if m_ce { step.bus_req } else { BusReq::Idle };",
+            "let visible_irq_ack = if m_ce { step.irq_ack } else { no_irq_ack() };",
             "let visible_f = visible_arch.regs.f;",
             "regs: visible_arch.regs",
             "ime_state: visible_arch.ime_state",
@@ -69,6 +72,8 @@ class CpuCoreStubContractTest(unittest.TestCase):
             "bus_req_kind: bus_req_kind(visible_bus_req)",
             "bus_req_addr: bus_req_addr(visible_bus_req)",
             "bus_req_data: bus_req_data(visible_bus_req)",
+            "irq_ack_valid: match visible_irq_ack.ack_bit {",
+            "irq_ack_bit: match visible_irq_ack.ack_bit {",
         ]:
             self.assertIn(symbol, text)
 

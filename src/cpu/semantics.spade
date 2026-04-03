@@ -16,7 +16,10 @@ use lib::cpu::types::{
     Imm16HiCont,
     Imm8Cont,
     ImeState,
+    IrqAck,
+    IrqPhase,
     IrqPending,
+    IrqSel,
     MicroInput,
     MicroWriteSet,
     Phase,
@@ -26,6 +29,7 @@ use lib::cpu::types::{
     idle_cpu_delta,
     idle_micro_write_set,
     idle_reg_write_set,
+    no_irq_ack,
 };
 
 fn some_u8(value: uint<8>) -> Option<uint<8>> {
@@ -121,6 +125,49 @@ fn irq_sel_from_pending(pending: uint<5>) -> lib::cpu::types::IrqSel {
     } else {
         lib::cpu::types::IrqSel::Joypad
     }
+}
+
+fn irq_vector(irq: IrqSel) -> uint<16> {
+    match irq {
+        IrqSel::VBlank => 0x0040u16,
+        IrqSel::LcdStat => 0x0048u16,
+        IrqSel::Timer => 0x0050u16,
+        IrqSel::Serial => 0x0058u16,
+        IrqSel::Joypad => 0x0060u16,
+    }
+}
+
+fn irq_ack_for_sel(irq: IrqSel) -> IrqAck {
+    match irq {
+        IrqSel::VBlank => IrqAck$(ack_bit: Option::Some(0u3)),
+        IrqSel::LcdStat => IrqAck$(ack_bit: Option::Some(1u3)),
+        IrqSel::Timer => IrqAck$(ack_bit: Option::Some(2u3)),
+        IrqSel::Serial => IrqAck$(ack_bit: Option::Some(3u3)),
+        IrqSel::Joypad => IrqAck$(ack_bit: Option::Some(4u3)),
+    }
+}
+
+fn service_entry_output(state: CpuState, input: MicroInput, irq: IrqSel) -> MicroOutput {
+    let delta = CpuDelta(
+        idle_reg_write_set(),
+        Option::None,
+        Option::None,
+        Option::Some(ImeState::Disabled),
+        Option::Some(HaltState::Running),
+        MicroWriteSet(
+            some_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::Delay1)),
+            Option::None,
+            Option::None,
+            Option::None,
+            Option::None,
+            Option::None,
+        ),
+    );
+    let bus_req = idle_bus_req();
+    let irq_ack = irq_ack_for_sel(irq);
+    let commit = make_commit(state, input, bus_req, delta, Option::None);
+
+    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: irq_ack, commit: Option::Some(commit), sideband: Option::None)
 }
 
 fn select_halt(write: Option<HaltState>, current: HaltState) -> HaltState {
@@ -1098,12 +1145,28 @@ fn fetch_delta(state: CpuState, opcode: uint<8>) -> CpuDelta {
 }
 
 fn handle_fetch(state: CpuState, input: MicroInput) -> MicroOutput {
-    let opcode = input.bus_resp.data;
-    let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
-    let delta = fetch_delta(state, opcode);
-    let commit = make_commit(state, input, bus_req, delta, Option::Some(opcode));
+    match state.arch.ime_state {
+        ImeState::Enabled => {
+            if any_irq_pending(input.irq_pending) {
+                service_entry_output(state, input, irq_sel_from_pending(input.irq_pending.pending))
+            } else {
+                let opcode = input.bus_resp.data;
+                let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
+                let delta = fetch_delta(state, opcode);
+                let commit = make_commit(state, input, bus_req, delta, Option::Some(opcode));
 
-    MicroOutput(delta, bus_req, Option::Some(commit), Option::None)
+                MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+            }
+        },
+        _ => {
+            let opcode = input.bus_resp.data;
+            let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
+            let delta = fetch_delta(state, opcode);
+            let commit = make_commit(state, input, bus_req, delta, Option::Some(opcode));
+
+            MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+        },
+    }
 }
 
 fn handle_fetch_prefix(state: CpuState, input: MicroInput, prefix: PrefixKind) -> MicroOutput {
@@ -1161,47 +1224,35 @@ fn handle_fetch_prefix(state: CpuState, input: MicroInput, prefix: PrefixKind) -
     };
     let commit = make_commit(state, input, bus_req, delta, Option::Some(opcode));
 
-    MicroOutput(delta, bus_req, Option::Some(commit), Option::None)
+    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
 }
 
 fn handle_halted(state: CpuState, input: MicroInput) -> MicroOutput {
-    let delta =
-        if any_irq_pending(input.irq_pending) {
-            match state.arch.ime_state {
-                ImeState::Enabled => {
-                    let irq = irq_sel_from_pending(input.irq_pending.pending);
-                    CpuDelta(
-                        idle_reg_write_set(),
-                        Option::None,
-                        Option::None,
-                        Option::Some(ImeState::Disabled),
-                        Option::Some(HaltState::Running),
-                        MicroWriteSet(
-                            some_phase(Phase::ServiceInterrupt$(irq: irq, subphase: lib::cpu::types::IrqPhase::Delay1)),
-                            Option::None,
-                            Option::None,
-                            Option::None,
-                            Option::None,
-                            Option::None,
-                        ),
-                    )
-                },
-                _ => CpuDelta(
+    if any_irq_pending(input.irq_pending) {
+        match state.arch.ime_state {
+            ImeState::Enabled => service_entry_output(state, input, irq_sel_from_pending(input.irq_pending.pending)),
+            _ => {
+                let delta = CpuDelta(
                     idle_reg_write_set(),
                     Option::None,
                     Option::None,
                     Option::None,
                     Option::Some(HaltState::Running),
                     MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-                ),
-            }
-        } else {
-            idle_cpu_delta()
-        };
-    let bus_req = idle_bus_req();
-    let commit = make_commit(state, input, bus_req, delta, Option::None);
+                );
+                let bus_req = idle_bus_req();
+                let commit = make_commit(state, input, bus_req, delta, Option::None);
 
-    MicroOutput(delta, bus_req, Option::Some(commit), Option::None)
+                MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+            },
+        }
+    } else {
+        let delta = idle_cpu_delta();
+        let bus_req = idle_bus_req();
+        let commit = make_commit(state, input, bus_req, delta, Option::None);
+
+        MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+    }
 }
 
 fn handle_read_imm8(state: CpuState, input: MicroInput, k: Imm8Cont) -> MicroOutput {
@@ -1328,7 +1379,7 @@ fn handle_read_imm8(state: CpuState, input: MicroInput, k: Imm8Cont) -> MicroOut
     };
     let commit = make_commit(state, input, bus_req, delta, Option::None);
 
-    MicroOutput(delta, bus_req, Option::Some(commit), Option::None)
+    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
 }
 
 fn handle_read_imm16_lo(state: CpuState, input: MicroInput, k: Imm16Cont) -> MicroOutput {
@@ -1353,7 +1404,7 @@ fn handle_read_imm16_lo(state: CpuState, input: MicroInput, k: Imm16Cont) -> Mic
     );
     let commit = make_commit(state, input, bus_req, delta, Option::None);
 
-    MicroOutput(delta, bus_req, Option::Some(commit), Option::None)
+    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
 }
 
 fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm16HiCont) -> MicroOutput {
@@ -1470,7 +1521,7 @@ fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm1
     };
     let commit = make_commit(state, input, bus_req, delta, Option::None);
 
-    MicroOutput(delta, bus_req, Option::Some(commit), Option::None)
+    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
 }
 
 fn load_hl_adjust(op: DecodedOp, regs: Registers) -> RegWriteSet {
@@ -1655,7 +1706,7 @@ fn handle_read_mem(state: CpuState, input: MicroInput, addr: uint<16>, k: ReadCo
     };
     let commit = make_commit(state, input, bus_req, delta, Option::None);
 
-    MicroOutput(delta, bus_req, Option::Some(commit), Option::None)
+    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
 }
 
 fn handle_write_mem(state: CpuState, input: MicroInput, addr: uint<16>, data: uint<8>, k: WriteCont) -> MicroOutput {
@@ -1763,7 +1814,66 @@ fn handle_write_mem(state: CpuState, input: MicroInput, addr: uint<16>, data: ui
     };
     let commit = make_commit(state, input, bus_req, delta, Option::None);
 
-    MicroOutput(delta, bus_req, Option::Some(commit), Option::None)
+    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+}
+
+fn handle_service_interrupt(state: CpuState, input: MicroInput, irq: IrqSel, subphase: IrqPhase) -> MicroOutput {
+    let bus_req = match subphase {
+        IrqPhase::PushPcHi => BusReq::Write$(addr: trunc(state.arch.regs.sp - 1u16), data: hi_byte(state.arch.regs.pc)),
+        IrqPhase::PushPcLo => BusReq::Write$(addr: trunc(state.arch.regs.sp - 1u16), data: lo_byte(state.arch.regs.pc)),
+        _ => idle_bus_req(),
+    };
+    let delta = match subphase {
+        IrqPhase::Delay1 => CpuDelta(
+            idle_reg_write_set(),
+            Option::None,
+            Option::None,
+            Option::None,
+            Option::None,
+            MicroWriteSet(some_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::Delay2)), Option::None, Option::None, Option::None, Option::None, Option::None),
+        ),
+        IrqPhase::Delay2 => CpuDelta(
+            idle_reg_write_set(),
+            Option::None,
+            Option::None,
+            Option::None,
+            Option::None,
+            MicroWriteSet(some_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::PushPcHi)), Option::None, Option::None, Option::None, Option::None, Option::None),
+        ),
+        IrqPhase::PushPcHi => {
+            let target = trunc(state.arch.regs.sp - 1u16);
+            CpuDelta(
+                idle_reg_write_set(),
+                Option::None,
+                some_u16(target),
+                Option::None,
+                Option::None,
+                MicroWriteSet(some_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::PushPcLo)), Option::None, Option::None, Option::None, Option::None, Option::None),
+            )
+        },
+        IrqPhase::PushPcLo => {
+            let target = trunc(state.arch.regs.sp - 1u16);
+            CpuDelta(
+                idle_reg_write_set(),
+                Option::None,
+                some_u16(target),
+                Option::None,
+                Option::None,
+                MicroWriteSet(some_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::Jump)), Option::None, Option::None, Option::None, Option::None, Option::None),
+            )
+        },
+        IrqPhase::Jump => CpuDelta(
+            idle_reg_write_set(),
+            some_u16(irq_vector(irq)),
+            Option::None,
+            Option::None,
+            Option::None,
+            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
+        ),
+    };
+    let commit = make_commit(state, input, bus_req, delta, Option::None);
+
+    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
 }
 
 fn handle_execute(state: CpuState, input: MicroInput, op: DecodedOp) -> MicroOutput {
@@ -1932,7 +2042,7 @@ fn handle_execute(state: CpuState, input: MicroInput, op: DecodedOp) -> MicroOut
     let bus_req = idle_bus_req();
     let commit = make_commit(state, input, bus_req, delta, Option::None);
 
-    MicroOutput(delta, bus_req, Option::Some(commit), Option::None)
+    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
 }
 
 fn handle_passthrough(state: CpuState, input: MicroInput) -> MicroOutput {
@@ -1940,7 +2050,7 @@ fn handle_passthrough(state: CpuState, input: MicroInput) -> MicroOutput {
     let bus_req = idle_bus_req();
     let commit = make_commit(state, input, bus_req, delta, Option::None);
 
-    MicroOutput(delta, bus_req, Option::Some(commit), Option::None)
+    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
 }
 
 pub fn step_mcycle(state: CpuState, input: MicroInput) -> MicroOutput {
@@ -1953,6 +2063,7 @@ pub fn step_mcycle(state: CpuState, input: MicroInput) -> MicroOutput {
         Phase::ReadMem$(addr, k) => handle_read_mem(state, input, addr, k),
         Phase::WriteMem$(addr, data, k) => handle_write_mem(state, input, addr, data, k),
         Phase::Execute$(op) => handle_execute(state, input, op),
+        Phase::ServiceInterrupt$(irq, subphase) => handle_service_interrupt(state, input, irq, subphase),
         Phase::Halted => handle_halted(state, input),
         _ => handle_passthrough(state, input),
     }

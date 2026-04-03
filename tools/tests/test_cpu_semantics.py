@@ -11,6 +11,7 @@ CPU_SEMANTICS_PATH = ROOT / "src" / "cpu" / "semantics.spade"
 CPU_SEMANTICS_ALU_TOP_PATH = ROOT / "src" / "cpu" / "semantics_alu_test_top.spade"
 CPU_SEMANTICS_CB_TOP_PATH = ROOT / "src" / "cpu" / "semantics_cb_test_top.spade"
 CPU_SEMANTICS_FLOW_TOP_PATH = ROOT / "src" / "cpu" / "semantics_flow_test_top.spade"
+CPU_SEMANTICS_INTERRUPT_TOP_PATH = ROOT / "src" / "cpu" / "semantics_interrupt_test_top.spade"
 CPU_SEMANTICS_LOAD_TOP_PATH = ROOT / "src" / "cpu" / "semantics_load_test_top.spade"
 CPU_SEMANTICS_TOP_PATH = ROOT / "src" / "cpu" / "semantics_test_top.spade"
 CPU_SEMANTICS_WORDALU_TOP_PATH = ROOT / "src" / "cpu" / "semantics_wordalu_test_top.spade"
@@ -25,6 +26,7 @@ class CpuSemanticsContractTest(unittest.TestCase):
         self.assertIn("pub mod semantics_alu_test_top;", text)
         self.assertIn("pub mod semantics_cb_test_top;", text)
         self.assertIn("pub mod semantics_flow_test_top;", text)
+        self.assertIn("pub mod semantics_interrupt_test_top;", text)
         self.assertIn("pub mod semantics_load_test_top;", text)
         self.assertIn("pub mod semantics_misc_test_top;", text)
         self.assertIn("pub mod semantics_test_top;", text)
@@ -65,10 +67,14 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm16HiCont) -> MicroOutput",
             "fn handle_read_mem(state: CpuState, input: MicroInput, addr: uint<16>, k: ReadCont) -> MicroOutput",
             "fn handle_write_mem(state: CpuState, input: MicroInput, addr: uint<16>, data: uint<8>, k: WriteCont) -> MicroOutput",
+            "fn handle_service_interrupt(state: CpuState, input: MicroInput, irq: IrqSel, subphase: IrqPhase) -> MicroOutput",
             "fn handle_execute(state: CpuState, input: MicroInput, op: DecodedOp) -> MicroOutput",
             "fn handle_halted(state: CpuState, input: MicroInput) -> MicroOutput",
             "fn any_irq_pending(irq_pending: IrqPending) -> bool",
             "fn irq_sel_from_pending(pending: uint<5>) -> lib::cpu::types::IrqSel",
+            "fn irq_vector(irq: IrqSel) -> uint<16>",
+            "fn irq_ack_for_sel(irq: IrqSel) -> IrqAck",
+            "fn service_entry_output(state: CpuState, input: MicroInput, irq: IrqSel) -> MicroOutput",
             "fn execute_alu_delta(state: CpuState, kind: AluKind, dst: Operand8, src: Operand8, addressing: AddressingMode) -> CpuDelta",
             "fn execute_misc_delta(state: CpuState, kind: MiscKind) -> CpuDelta",
             "fn execute_bitop_delta(",
@@ -97,7 +103,8 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "Option::Some(ImeState::PendingEnable)",
             "MiscKind::Halt => CpuDelta(",
             "Option::Some(HaltState::Halted)",
-            "Phase::ServiceInterrupt$(irq: irq, subphase: lib::cpu::types::IrqPhase::Delay1)",
+            "Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::Delay1)",
+            "MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: irq_ack, commit: Option::Some(commit), sideband: Option::None)",
             "aluish_fetch_phase(decoded, state.arch.regs)",
             "cb_prefixed_fetch_phase(decoded, state.arch.regs)",
             "control_flow_fetch_pc_write(decoded, state.arch.regs)",
@@ -109,6 +116,7 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "mask_f(select_u8(writes.f, regs.f))",
             "CpuState(next_arch, next_micro)",
             "Phase::Fetch => handle_fetch(state, input)",
+            "Phase::ServiceInterrupt$(irq, subphase) => handle_service_interrupt(state, input, irq, subphase)",
             "Phase::Halted => handle_halted(state, input)",
             "Phase::ReadImm8$(k) => handle_read_imm8(state, input, k)",
             "Phase::ReadImm16Lo$(k) => handle_read_imm16_lo(state, input, k)",
@@ -149,6 +157,21 @@ class CpuSemanticsContractTest(unittest.TestCase):
             "fn ime_code(ime: ImeState) -> uint<2>",
             "zext(ime_code(next_state.arch.ime_state)) << 152",
             "zext(next_state.micro.imm_hi) << 128",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_semantics_interrupt_test_top_exposes_service_projection_surface(self) -> None:
+        text = CPU_SEMANTICS_INTERRUPT_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "entity semantics_interrupt_test_top(",
+            "state_irq_sel_i: uint<3>",
+            "state_irq_phase_i: uint<3>",
+            "fn irq_sel_from_code(code: uint<3>) -> IrqSel",
+            "fn irq_phase_from_code(code: uint<3>) -> IrqPhase",
+            "fn phase_from_inputs(kind: uint<2>, irq_sel: uint<3>, irq_phase: uint<3>) -> Phase",
+            "step.irq_ack.ack_bit",
+            "zext(next_phase_kind(next_state.micro.phase)) << 88",
+            "zext(next_irq_phase_code(next_state.micro.phase)) << 82",
         ]:
             self.assertIn(symbol, text)
 
