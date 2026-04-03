@@ -1,6 +1,8 @@
 pub mod alu;
 pub mod alu_test_top;
 pub mod core;
+pub mod decode;
+pub mod decode_test_top;
 pub mod decode_types;
 pub mod debug;
 pub mod regs;

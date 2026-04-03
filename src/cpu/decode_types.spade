@@ -1,5 +1,5 @@
 use std::option::Option;
-use lib::cpu::alu::AluKind;
+use lib::cpu::alu::{AluKind, RotShiftKind};
 use lib::cpu::regs::{R8, RegPair};
 
 pub enum PrefixKind {
@@ -19,6 +19,8 @@ pub enum Operand8 {
     AddrHl,
     AddrBc,
     AddrDe,
+    AddrHli,
+    AddrHld,
     AddrImm16,
     IoImm8,
     IoC,
@@ -41,17 +43,24 @@ pub enum AddressingMode {
     Register8,
     Register16,
     MemoryViaRegPair { pair: RegPair },
+    MemoryViaHl,
+    MemoryViaHlIncrement,
+    MemoryViaHlDecrement,
     MemoryImm16,
     IoImm8,
     IoC,
+    Stack,
     Prefixed { prefix: PrefixKind },
+    SpPlusE8,
 }
 
 pub enum DecodedOpClass {
     Load,
     Alu,
+    WordAlu,
     ControlFlow,
     BitOp,
+    Stack,
     Misc,
     InterruptControl,
 }
@@ -60,7 +69,7 @@ pub enum ControlTarget {
     Absolute { target: Operand16 },
     Relative,
     Call { target: Operand16 },
-    Return,
+    Return { enable_interrupts: bool },
     Restart { vector: uint<8> },
 }
 
@@ -76,10 +85,23 @@ pub enum MiscKind {
 }
 
 pub enum BitOpKind {
-    RotateShift,
+    RotateShift { kind: RotShiftKind },
     Bit,
     Res,
     Set,
+}
+
+pub enum WordAluKind {
+    AddHl,
+    AddSpE8,
+    Inc,
+    Dec,
+    LdHlSpPlusE8,
+}
+
+pub enum StackOpKind {
+    Push,
+    Pop,
 }
 
 pub enum DecodedOp {
@@ -97,6 +119,12 @@ pub enum DecodedOp {
         src: Operand8,
         addressing: AddressingMode,
     },
+    WordAlu {
+        kind: WordAluKind,
+        dst: Operand16,
+        src: Option<Operand16>,
+        addressing: AddressingMode,
+    },
     ControlFlow {
         condition: Option<ConditionCode>,
         target: ControlTarget,
@@ -104,9 +132,15 @@ pub enum DecodedOp {
     },
     BitOp {
         kind: BitOpKind,
-        prefix: PrefixKind,
+        prefix: Option<PrefixKind>,
         target: Operand8,
         bit_index: Option<uint<3>>,
+        zero_on_result: bool,
+        addressing: AddressingMode,
+    },
+    Stack {
+        kind: StackOpKind,
+        pair: RegPair,
         addressing: AddressingMode,
     },
     Misc {
@@ -130,13 +164,21 @@ pub fn decoded_op_class(op: DecodedOp) -> DecodedOpClass {
             let _ = (kind, dst, src, addressing);
             DecodedOpClass::Alu
         },
+        DecodedOp::WordAlu$(kind, dst, src, addressing) => {
+            let _ = (kind, dst, src, addressing);
+            DecodedOpClass::WordAlu
+        },
         DecodedOp::ControlFlow$(condition, target, addressing) => {
             let _ = (condition, target, addressing);
             DecodedOpClass::ControlFlow
         },
-        DecodedOp::BitOp$(kind, prefix, target, bit_index, addressing) => {
-            let _ = (kind, prefix, target, bit_index, addressing);
+        DecodedOp::BitOp$(kind, prefix, target, bit_index, zero_on_result, addressing) => {
+            let _ = (kind, prefix, target, bit_index, zero_on_result, addressing);
             DecodedOpClass::BitOp
+        },
+        DecodedOp::Stack$(kind, pair, addressing) => {
+            let _ = (kind, pair, addressing);
+            DecodedOpClass::Stack
         },
         DecodedOp::Misc$(kind, addressing) => {
             let _ = (kind, addressing);

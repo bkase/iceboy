@@ -1,0 +1,523 @@
+use std::option::Option;
+use lib::cpu::alu::{AluKind, RotShiftKind};
+use lib::cpu::decode::decode;
+use lib::cpu::decode_types::{
+    AddressingMode,
+    BitOpKind,
+    ConditionCode,
+    ControlTarget,
+    DecodedOp,
+    MiscKind,
+    Operand8,
+    Operand16,
+    PrefixKind,
+    StackOpKind,
+    WordAluKind,
+};
+use lib::cpu::regs::{R8, RegPair};
+
+struct DecodeProjection {
+    invalid: uint<1>,
+    class_id: uint<4>,
+    addressing: uint<5>,
+    condition: uint<3>,
+    control_target: uint<3>,
+    control_return_enable_interrupts: uint<1>,
+    dst8_kind: uint<4>,
+    dst8_reg: uint<3>,
+    src8_kind: uint<4>,
+    src8_reg: uint<3>,
+    dst16_kind: uint<3>,
+    dst16_reg: uint<3>,
+    src16_kind: uint<3>,
+    src16_reg: uint<3>,
+    alu_kind: uint<4>,
+    word_alu_kind: uint<3>,
+    bit_kind: uint<3>,
+    rot_shift_kind: uint<4>,
+    bit_index: uint<4>,
+    zero_on_result: uint<1>,
+    stack_kind: uint<2>,
+    stack_pair: uint<3>,
+    misc_kind: uint<4>,
+    interrupt_enable: uint<1>,
+    prefix: uint<2>,
+    rst_vector: uint<8>,
+}
+
+fn bool_code(value: bool) -> uint<1> {
+    if value { 1u1 } else { 0u1 }
+}
+
+fn projection(
+    invalid: uint<1>,
+    class_id: uint<4>,
+    addressing: uint<5>,
+    condition: uint<3>,
+    control_target: uint<3>,
+    control_return_enable_interrupts: uint<1>,
+    dst8_kind: uint<4>,
+    dst8_reg: uint<3>,
+    src8_kind: uint<4>,
+    src8_reg: uint<3>,
+    dst16_kind: uint<3>,
+    dst16_reg: uint<3>,
+    src16_kind: uint<3>,
+    src16_reg: uint<3>,
+    alu_kind: uint<4>,
+    word_alu_kind: uint<3>,
+    bit_kind: uint<3>,
+    rot_shift_kind: uint<4>,
+    bit_index: uint<4>,
+    zero_on_result: uint<1>,
+    stack_kind: uint<2>,
+    stack_pair: uint<3>,
+    misc_kind: uint<4>,
+    interrupt_enable: uint<1>,
+    prefix: uint<2>,
+    rst_vector: uint<8>,
+) -> DecodeProjection {
+    DecodeProjection$(
+        invalid: invalid,
+        class_id: class_id,
+        addressing: addressing,
+        condition: condition,
+        control_target: control_target,
+        control_return_enable_interrupts: control_return_enable_interrupts,
+        dst8_kind: dst8_kind,
+        dst8_reg: dst8_reg,
+        src8_kind: src8_kind,
+        src8_reg: src8_reg,
+        dst16_kind: dst16_kind,
+        dst16_reg: dst16_reg,
+        src16_kind: src16_kind,
+        src16_reg: src16_reg,
+        alu_kind: alu_kind,
+        word_alu_kind: word_alu_kind,
+        bit_kind: bit_kind,
+        rot_shift_kind: rot_shift_kind,
+        bit_index: bit_index,
+        zero_on_result: zero_on_result,
+        stack_kind: stack_kind,
+        stack_pair: stack_pair,
+        misc_kind: misc_kind,
+        interrupt_enable: interrupt_enable,
+        prefix: prefix,
+        rst_vector: rst_vector,
+    )
+}
+
+fn empty_projection() -> DecodeProjection {
+    projection(
+        0u1,
+        0u4,
+        0u5,
+        0u3,
+        0u3,
+        0u1,
+        0u4,
+        0u3,
+        0u4,
+        0u3,
+        0u3,
+        0u3,
+        0u3,
+        0u3,
+        0u4,
+        0u3,
+        0u3,
+        0u4,
+        0u4,
+        0u1,
+        0u2,
+        0u3,
+        0u4,
+        0u1,
+        0u2,
+        0u8,
+    )
+}
+
+fn with_operands(
+    base: DecodeProjection,
+    dst8_kind: uint<4>,
+    dst8_reg: uint<3>,
+    src8_kind: uint<4>,
+    src8_reg: uint<3>,
+    dst16_kind: uint<3>,
+    dst16_reg: uint<3>,
+    src16_kind: uint<3>,
+    src16_reg: uint<3>,
+) -> DecodeProjection {
+    projection(
+        base.invalid,
+        base.class_id,
+        base.addressing,
+        base.condition,
+        base.control_target,
+        base.control_return_enable_interrupts,
+        dst8_kind,
+        dst8_reg,
+        src8_kind,
+        src8_reg,
+        dst16_kind,
+        dst16_reg,
+        src16_kind,
+        src16_reg,
+        base.alu_kind,
+        base.word_alu_kind,
+        base.bit_kind,
+        base.rot_shift_kind,
+        base.bit_index,
+        base.zero_on_result,
+        base.stack_kind,
+        base.stack_pair,
+        base.misc_kind,
+        base.interrupt_enable,
+        base.prefix,
+        base.rst_vector,
+    )
+}
+
+fn r8_code(sel: R8) -> uint<3> {
+    match sel {
+        R8::A => 0u3,
+        R8::B => 1u3,
+        R8::C => 2u3,
+        R8::D => 3u3,
+        R8::E => 4u3,
+        R8::H => 5u3,
+        R8::L => 6u3,
+    }
+}
+
+fn pair_code(pair: RegPair) -> uint<3> {
+    match pair {
+        RegPair::BC => 0u3,
+        RegPair::DE => 1u3,
+        RegPair::HL => 2u3,
+        RegPair::SP => 3u3,
+        RegPair::AF => 4u3,
+    }
+}
+
+fn operand8_codes(operand: Operand8) -> (uint<4>, uint<3>) {
+    match operand {
+        Operand8::Register$(r8) => (1u4, r8_code(r8)),
+        Operand8::Imm8 => (2u4, 0u3),
+        Operand8::AddrHl => (3u4, 0u3),
+        Operand8::AddrBc => (4u4, 0u3),
+        Operand8::AddrDe => (5u4, 0u3),
+        Operand8::AddrHli => (6u4, 0u3),
+        Operand8::AddrHld => (7u4, 0u3),
+        Operand8::AddrImm16 => (8u4, 0u3),
+        Operand8::IoImm8 => (9u4, 0u3),
+        Operand8::IoC => (10u4, 0u3),
+        Operand8::Literal$(value) => {
+            let _ = value;
+            (11u4, 0u3)
+        },
+    }
+}
+
+fn operand16_codes(operand: Operand16) -> (uint<3>, uint<3>) {
+    match operand {
+        Operand16::RegisterPair$(pair) => (1u3, pair_code(pair)),
+        Operand16::Imm16 => (2u3, 0u3),
+        Operand16::AddrImm16 => (3u3, 0u3),
+        Operand16::SpPlusE8 => (4u3, 0u3),
+        Operand16::Literal$(value) => {
+            let _ = value;
+            (5u3, 0u3)
+        },
+    }
+}
+
+fn option_operand8_codes(operand: Option<Operand8>) -> (uint<4>, uint<3>) {
+    match operand {
+        Option::None => (0u4, 0u3),
+        Option::Some$(value) => operand8_codes(value),
+    }
+}
+
+fn option_operand16_codes(operand: Option<Operand16>) -> (uint<3>, uint<3>) {
+    match operand {
+        Option::None => (0u3, 0u3),
+        Option::Some$(value) => operand16_codes(value),
+    }
+}
+
+fn addressing_code(addressing: AddressingMode) -> uint<5> {
+    match addressing {
+        AddressingMode::Implied => 0u5,
+        AddressingMode::Immediate8 => 1u5,
+        AddressingMode::Immediate16 => 2u5,
+        AddressingMode::Relative8 => 3u5,
+        AddressingMode::Register8 => 4u5,
+        AddressingMode::Register16 => 5u5,
+        AddressingMode::MemoryViaRegPair$(pair) => match pair {
+            RegPair::BC => 6u5,
+            RegPair::DE => 7u5,
+            _ => 8u5,
+        },
+        AddressingMode::MemoryViaHl => 8u5,
+        AddressingMode::MemoryViaHlIncrement => 9u5,
+        AddressingMode::MemoryViaHlDecrement => 10u5,
+        AddressingMode::MemoryImm16 => 11u5,
+        AddressingMode::IoImm8 => 12u5,
+        AddressingMode::IoC => 13u5,
+        AddressingMode::Stack => 14u5,
+        AddressingMode::Prefixed$(prefix) => match prefix {
+            PrefixKind::Cb => 15u5,
+        },
+        AddressingMode::SpPlusE8 => 16u5,
+    }
+}
+
+fn condition_code(condition: Option<ConditionCode>) -> uint<3> {
+    match condition {
+        Option::None => 0u3,
+        Option::Some$(value) => match value {
+            ConditionCode::Nz => 1u3,
+            ConditionCode::Z => 2u3,
+            ConditionCode::Nc => 3u3,
+            ConditionCode::C => 4u3,
+        },
+    }
+}
+
+fn alu_kind_code(kind: AluKind) -> uint<4> {
+    match kind {
+        AluKind::Add => 1u4,
+        AluKind::Adc => 2u4,
+        AluKind::Sub => 3u4,
+        AluKind::Sbc => 4u4,
+        AluKind::And => 5u4,
+        AluKind::Or => 6u4,
+        AluKind::Xor => 7u4,
+        AluKind::Cp => 8u4,
+        AluKind::Inc => 9u4,
+        AluKind::Dec => 10u4,
+    }
+}
+
+fn word_alu_kind_code(kind: WordAluKind) -> uint<3> {
+    match kind {
+        WordAluKind::AddHl => 1u3,
+        WordAluKind::AddSpE8 => 2u3,
+        WordAluKind::Inc => 3u3,
+        WordAluKind::Dec => 4u3,
+        WordAluKind::LdHlSpPlusE8 => 5u3,
+    }
+}
+
+fn rot_shift_kind_code(kind: RotShiftKind) -> uint<4> {
+    match kind {
+        RotShiftKind::Rlca => 1u4,
+        RotShiftKind::Rrca => 2u4,
+        RotShiftKind::Rla => 3u4,
+        RotShiftKind::Rra => 4u4,
+        RotShiftKind::Rlc => 5u4,
+        RotShiftKind::Rrc => 6u4,
+        RotShiftKind::Rl => 7u4,
+        RotShiftKind::Rr => 8u4,
+        RotShiftKind::Sla => 9u4,
+        RotShiftKind::Sra => 10u4,
+        RotShiftKind::Srl => 11u4,
+        RotShiftKind::Swap => 12u4,
+    }
+}
+
+fn bit_kind_codes(kind: BitOpKind) -> (uint<3>, uint<4>) {
+    match kind {
+        BitOpKind::RotateShift$(kind) => (1u3, rot_shift_kind_code(kind)),
+        BitOpKind::Bit => (2u3, 0u4),
+        BitOpKind::Res => (3u3, 0u4),
+        BitOpKind::Set => (4u3, 0u4),
+    }
+}
+
+fn bit_index_code(bit_index: Option<uint<3>>) -> uint<4> {
+    match bit_index {
+        Option::None => 0u4,
+        Option::Some$(value) => trunc(zext(value) + 1u4),
+    }
+}
+
+fn stack_kind_code(kind: StackOpKind) -> uint<2> {
+    match kind {
+        StackOpKind::Push => 1u2,
+        StackOpKind::Pop => 2u2,
+    }
+}
+
+fn misc_kind_code(kind: MiscKind) -> (uint<4>, uint<2>) {
+    match kind {
+        MiscKind::Nop => (1u4, 0u2),
+        MiscKind::Halt => (2u4, 0u2),
+        MiscKind::Stop => (3u4, 0u2),
+        MiscKind::Prefix$(prefix) => match prefix {
+            PrefixKind::Cb => (4u4, 1u2),
+        },
+        MiscKind::Daa => (5u4, 0u2),
+        MiscKind::Cpl => (6u4, 0u2),
+        MiscKind::Scf => (7u4, 0u2),
+        MiscKind::Ccf => (8u4, 0u2),
+    }
+}
+
+fn prefix_code(prefix: Option<PrefixKind>) -> uint<2> {
+    match prefix {
+        Option::None => 0u2,
+        Option::Some$(value) => match value {
+            PrefixKind::Cb => 1u2,
+        },
+    }
+}
+
+fn project(op: DecodedOp) -> DecodeProjection {
+    match op {
+        DecodedOp::Invalid => projection(1u1, 0u4, 0u5, 0u3, 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, 0u4, 0u3, 0u3, 0u4, 0u4, 0u1, 0u2, 0u3, 0u4, 0u1, 0u2, 0u8),
+        DecodedOp::Load$(dst8, src8, dst16, src16, addressing) => {
+            let (dst8_kind, dst8_reg) = option_operand8_codes(dst8);
+            let (src8_kind, src8_reg) = option_operand8_codes(src8);
+            let (dst16_kind, dst16_reg) = option_operand16_codes(dst16);
+            let (src16_kind, src16_reg) = option_operand16_codes(src16);
+            with_operands(
+                projection(0u1, 1u4, addressing_code(addressing), 0u3, 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, 0u4, 0u3, 0u3, 0u4, 0u4, 0u1, 0u2, 0u3, 0u4, 0u1, 0u2, 0u8),
+                dst8_kind,
+                dst8_reg,
+                src8_kind,
+                src8_reg,
+                dst16_kind,
+                dst16_reg,
+                src16_kind,
+                src16_reg,
+            )
+        },
+        DecodedOp::Alu$(kind, dst, src, addressing) => {
+            let (dst8_kind, dst8_reg) = operand8_codes(dst);
+            let (src8_kind, src8_reg) = operand8_codes(src);
+            with_operands(
+                projection(0u1, 2u4, addressing_code(addressing), 0u3, 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, alu_kind_code(kind), 0u3, 0u3, 0u4, 0u4, 0u1, 0u2, 0u3, 0u4, 0u1, 0u2, 0u8),
+                dst8_kind,
+                dst8_reg,
+                src8_kind,
+                src8_reg,
+                0u3,
+                0u3,
+                0u3,
+                0u3,
+            )
+        },
+        DecodedOp::WordAlu$(kind, dst, src, addressing) => {
+            let (dst16_kind, dst16_reg) = operand16_codes(dst);
+            let (src16_kind, src16_reg) = option_operand16_codes(src);
+            with_operands(
+                projection(0u1, 3u4, addressing_code(addressing), 0u3, 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, 0u4, word_alu_kind_code(kind), 0u3, 0u4, 0u4, 0u1, 0u2, 0u3, 0u4, 0u1, 0u2, 0u8),
+                0u4,
+                0u3,
+                0u4,
+                0u3,
+                dst16_kind,
+                dst16_reg,
+                src16_kind,
+                src16_reg,
+            )
+        },
+        DecodedOp::ControlFlow$(condition, target, addressing) => {
+            let base = projection(0u1, 4u4, addressing_code(addressing), condition_code(condition), 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, 0u4, 0u3, 0u3, 0u4, 0u4, 0u1, 0u2, 0u3, 0u4, 0u1, 0u2, 0u8);
+            match target {
+                ControlTarget::Absolute$(target) => {
+                    let (dst16_kind, dst16_reg) = operand16_codes(target);
+                    with_operands(
+                        projection(base.invalid, base.class_id, base.addressing, base.condition, 1u3, base.control_return_enable_interrupts, base.dst8_kind, base.dst8_reg, base.src8_kind, base.src8_reg, base.dst16_kind, base.dst16_reg, base.src16_kind, base.src16_reg, base.alu_kind, base.word_alu_kind, base.bit_kind, base.rot_shift_kind, base.bit_index, base.zero_on_result, base.stack_kind, base.stack_pair, base.misc_kind, base.interrupt_enable, base.prefix, base.rst_vector),
+                        0u4,
+                        0u3,
+                        0u4,
+                        0u3,
+                        dst16_kind,
+                        dst16_reg,
+                        0u3,
+                        0u3,
+                    )
+                },
+                ControlTarget::Relative => projection(base.invalid, base.class_id, base.addressing, base.condition, 2u3, base.control_return_enable_interrupts, base.dst8_kind, base.dst8_reg, base.src8_kind, base.src8_reg, base.dst16_kind, base.dst16_reg, base.src16_kind, base.src16_reg, base.alu_kind, base.word_alu_kind, base.bit_kind, base.rot_shift_kind, base.bit_index, base.zero_on_result, base.stack_kind, base.stack_pair, base.misc_kind, base.interrupt_enable, base.prefix, base.rst_vector),
+                ControlTarget::Call$(target) => {
+                    let (dst16_kind, dst16_reg) = operand16_codes(target);
+                    with_operands(
+                        projection(base.invalid, base.class_id, base.addressing, base.condition, 3u3, base.control_return_enable_interrupts, base.dst8_kind, base.dst8_reg, base.src8_kind, base.src8_reg, base.dst16_kind, base.dst16_reg, base.src16_kind, base.src16_reg, base.alu_kind, base.word_alu_kind, base.bit_kind, base.rot_shift_kind, base.bit_index, base.zero_on_result, base.stack_kind, base.stack_pair, base.misc_kind, base.interrupt_enable, base.prefix, base.rst_vector),
+                        0u4,
+                        0u3,
+                        0u4,
+                        0u3,
+                        dst16_kind,
+                        dst16_reg,
+                        0u3,
+                        0u3,
+                    )
+                },
+                ControlTarget::Return$(enable_interrupts) => projection(base.invalid, base.class_id, base.addressing, base.condition, 4u3, bool_code(enable_interrupts), base.dst8_kind, base.dst8_reg, base.src8_kind, base.src8_reg, base.dst16_kind, base.dst16_reg, base.src16_kind, base.src16_reg, base.alu_kind, base.word_alu_kind, base.bit_kind, base.rot_shift_kind, base.bit_index, base.zero_on_result, base.stack_kind, base.stack_pair, base.misc_kind, base.interrupt_enable, base.prefix, base.rst_vector),
+                ControlTarget::Restart$(vector) => projection(base.invalid, base.class_id, base.addressing, base.condition, 5u3, base.control_return_enable_interrupts, base.dst8_kind, base.dst8_reg, base.src8_kind, base.src8_reg, base.dst16_kind, base.dst16_reg, base.src16_kind, base.src16_reg, base.alu_kind, base.word_alu_kind, base.bit_kind, base.rot_shift_kind, base.bit_index, base.zero_on_result, base.stack_kind, base.stack_pair, base.misc_kind, base.interrupt_enable, base.prefix, vector),
+            }
+        },
+        DecodedOp::BitOp$(kind, prefix, target, bit_index, zero_on_result, addressing) => {
+            let (bit_kind, rot_shift_kind) = bit_kind_codes(kind);
+            let (dst8_kind, dst8_reg) = operand8_codes(target);
+            with_operands(
+                projection(0u1, 5u4, addressing_code(addressing), 0u3, 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, 0u4, 0u3, bit_kind, rot_shift_kind, bit_index_code(bit_index), bool_code(zero_on_result), 0u2, 0u3, 0u4, 0u1, prefix_code(prefix), 0u8),
+                dst8_kind,
+                dst8_reg,
+                0u4,
+                0u3,
+                0u3,
+                0u3,
+                0u3,
+                0u3,
+            )
+        },
+        DecodedOp::Stack$(kind, pair, addressing) => {
+            projection(0u1, 6u4, addressing_code(addressing), 0u3, 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, 0u4, 0u3, 0u3, 0u4, 0u4, 0u1, stack_kind_code(kind), pair_code(pair), 0u4, 0u1, 0u2, 0u8)
+        },
+        DecodedOp::Misc$(kind, addressing) => {
+            let (misc_kind, prefix) = misc_kind_code(kind);
+            projection(0u1, 7u4, addressing_code(addressing), 0u3, 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, 0u4, 0u3, 0u3, 0u4, 0u4, 0u1, 0u2, 0u3, misc_kind, 0u1, prefix, 0u8)
+        },
+        DecodedOp::InterruptControl$(enable, addressing) => {
+            projection(0u1, 8u4, addressing_code(addressing), 0u3, 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, 0u4, 0u3, 0u3, 0u4, 0u4, 0u1, 0u2, 0u3, 0u4, bool_code(enable), 0u2, 0u8)
+        },
+    }
+}
+
+fn pack_projection(value: DecodeProjection) -> uint<82> {
+    (zext(value.invalid) << 81)
+        | (zext(value.class_id) << 77)
+        | (zext(value.addressing) << 72)
+        | (zext(value.condition) << 69)
+        | (zext(value.control_target) << 66)
+        | (zext(value.control_return_enable_interrupts) << 65)
+        | (zext(value.dst8_kind) << 61)
+        | (zext(value.dst8_reg) << 58)
+        | (zext(value.src8_kind) << 54)
+        | (zext(value.src8_reg) << 51)
+        | (zext(value.dst16_kind) << 48)
+        | (zext(value.dst16_reg) << 45)
+        | (zext(value.src16_kind) << 42)
+        | (zext(value.src16_reg) << 39)
+        | (zext(value.alu_kind) << 35)
+        | (zext(value.word_alu_kind) << 32)
+        | (zext(value.bit_kind) << 29)
+        | (zext(value.rot_shift_kind) << 25)
+        | (zext(value.bit_index) << 21)
+        | (zext(value.zero_on_result) << 20)
+        | (zext(value.stack_kind) << 18)
+        | (zext(value.stack_pair) << 15)
+        | (zext(value.misc_kind) << 11)
+        | (zext(value.interrupt_enable) << 10)
+        | (zext(value.prefix) << 8)
+        | zext(value.rst_vector)
+}
+
+pub entity decode_test_top(opcode: uint<8>) -> uint<82> {
+    pack_projection(project(decode(opcode)))
+}
