@@ -164,6 +164,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("formal", "cpu_hold.sby", "shell", "tools/run_formal_cpu_hold.sh"),
     SuiteDefinition("rom", "test_alu16_sp.py", "swim", "test_alu16_sp"),
     SuiteDefinition("rom", "test_alu_flags.py", "swim", "test_alu_flags"),
+    SuiteDefinition("rom", "test_cb_bitops.py", "swim", "test_cb_bitops"),
     SuiteDefinition("rom", "test_flow_stack.py", "swim", "test_flow_stack"),
     SuiteDefinition("rom", "test_loads_basic.py", "swim", "test_loads_basic"),
     SuiteDefinition("lockstep", "test_cpu_lockstep.py", "swim", "test_cpu_lockstep"),
