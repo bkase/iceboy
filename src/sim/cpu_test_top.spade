@@ -2,7 +2,7 @@ use std::option::Option;
 use lib::bus::membus::observe_req;
 use lib::bus::types::{BusOwner, BusRegion, BusReq, BusResp};
 use lib::cpu::core::cpu_core;
-use lib::cpu::types::IrqPending;
+use lib::cpu::types::{HaltState, ImeState, IrqPending, Phase};
 use lib::sim::types::{SimStimulus, cpu_arch_time_enable, peripheral_arch_time_enable};
 
 fn encode_bus_region(region: BusRegion) -> uint<4> {
@@ -37,6 +37,38 @@ fn cpu_bus_req(kind: uint<2>, addr: uint<16>, data: uint<8>) -> BusReq {
     }
 }
 
+fn encode_ime(ime: ImeState) -> uint<2> {
+    match ime {
+        ImeState::Disabled => 0u2,
+        ImeState::PendingEnable => 1u2,
+        ImeState::Enabled => 2u2,
+    }
+}
+
+fn encode_halt(halt: HaltState) -> uint<2> {
+    match halt {
+        HaltState::Running => 0u2,
+        HaltState::Halted => 1u2,
+        HaltState::HaltBugPending => 2u2,
+    }
+}
+
+fn encode_phase(phase: Phase) -> uint<4> {
+    match phase {
+        Phase::Fetch => 0u4,
+        Phase::Halted => 1u4,
+        Phase::Execute$(op: _) => 2u4,
+        Phase::ReadImm8$(k: _) => 3u4,
+        Phase::ReadImm16Lo$(k: _) => 4u4,
+        Phase::ReadImm16Hi$(lo: _, k: _) => 5u4,
+        Phase::ReadMem$(addr: _, k: _) => 6u4,
+        Phase::WriteMem$(addr: _, data: _, k: _) => 7u4,
+        Phase::FetchPrefix$(prefix: _) => 8u4,
+        Phase::ServiceInterrupt$(irq: _, subphase: _) => 9u4,
+        _ => 15u4,
+    }
+}
+
 fn irq_ack_mask(valid: bool, ack_bit: uint<3>) -> uint<5> {
     if valid {
         match ack_bit {
@@ -53,6 +85,9 @@ fn irq_ack_mask(valid: bool, ack_bit: uint<3>) -> uint<5> {
 }
 
 struct CpuTestTopOut {
+    ime_state: uint<2>,
+    halt_state: uint<2>,
+    phase_kind: uint<4>,
     irq_ack_valid: bool,
     irq_ack_bit: uint<3>,
     commit_seq: uint<64>,
@@ -101,6 +136,9 @@ entity cpu_test_top(
     reg(clk) if_reg: uint<5> reset(rst: 0u5) = if periph_m_ce { next_if_reg } else { if_reg };
 
     CpuTestTopOut$(
+        ime_state: encode_ime(cpu.ime_state),
+        halt_state: encode_halt(cpu.halt_state),
+        phase_kind: encode_phase(cpu.phase),
         irq_ack_valid: cpu.irq_ack_valid,
         irq_ack_bit: cpu.irq_ack_bit,
         commit_seq: cpu.commit_seq,

@@ -29,6 +29,9 @@ class SimScaffoldTest(unittest.TestCase):
         text = CPU_TOP_PATH.read_text(encoding="utf-8")
         self.assertIn("entity cpu_test_top(", text)
         for symbol in [
+            "ime_state: uint<2>",
+            "halt_state: uint<2>",
+            "phase_kind: uint<4>",
             "commit_seq: uint<64>",
             "pc: uint<16>",
             "bus_req_kind: uint<2>",
@@ -40,6 +43,9 @@ class SimScaffoldTest(unittest.TestCase):
             "let cpu = inst cpu_core(",
             "let bus_obs = observe_req(",
             "let periph_m_ce = peripheral_arch_time_enable(stimulus);",
+            "ime_state: encode_ime(cpu.ime_state)",
+            "halt_state: encode_halt(cpu.halt_state)",
+            "phase_kind: encode_phase(cpu.phase)",
             "stimulus.if_set_bits",
             "stimulus.if_clear_bits",
             "cpu.irq_ack_valid",

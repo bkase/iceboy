@@ -39,6 +39,7 @@ class CoverageTrackerTest(unittest.TestCase):
                 "test_reset_profile.py",
                 "test_cpu_lockstep.py",
                 "test_interrupt_injection.py",
+                "test_ei_halt_corners.py",
             ]
         )
         opcode_dimension = snapshot.dimensions["opcode_families"]

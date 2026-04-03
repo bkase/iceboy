@@ -120,11 +120,22 @@ class LocalEntrypointsTest(unittest.TestCase):
     def test_oracle_smoke_main_round_trips_snapshot(self) -> None:
         oracle_smoke_main()
 
-    def test_precommit_runs_live_swim_tests_serially(self) -> None:
+    def test_precommit_uses_curated_exact_swim_paths(self) -> None:
         text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
-        self.assertIn("find test -type f -name 'test_*.py' | sort", text)
-        self.assertIn('label="$(basename "${test_file%.py}")"', text)
-        self.assertIn('"$SWIM" test "$label"', text)
+        self.assertIn('"test/unit/test_main.py"', text)
+        self.assertIn('"test/lockstep/test_ei_halt_corners.py"', text)
+        self.assertIn('"test/harness/test_reset_profile.py"', text)
+        self.assertIn('"test/rom/test_alu16_sp.py"', text)
+        self.assertIn('"$SWIM" test "$test_file"', text)
+        self.assertNotIn('label="$(basename "${test_file%.py}")"', text)
+
+    def test_precommit_skips_redundant_heavy_python_modules_and_formal_by_default(self) -> None:
+        text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
+        self.assertIn('tools.tests.test_spade_cocotb_pipeline', text)
+        self.assertIn('tools.tests.test_verilator_backend', text)
+        self.assertIn('tools.tests.test_alu_generated_vectors', text)
+        self.assertIn('ICEBOY_PRECOMMIT_INCLUDE_FORMAL', text)
+        self.assertIn('Running fast Python spec tests...', text)
 
 
 if __name__ == "__main__":

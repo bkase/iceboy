@@ -61,6 +61,7 @@ async def test_spade_cocotb_smoke_pipeline(dut):
             cpu_arch_time_enable=False,
             freeze_arch_time=True,
             cpu_hold_only=True,
+            phase_kind=2,
             commit_seq=1,
             pc=0x0101,
             bus_req_kind=0,

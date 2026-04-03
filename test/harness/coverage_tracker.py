@@ -208,6 +208,12 @@ SUITE_COVERAGE: dict[str, SuiteCoverage] = {
         interrupt_causes=frozenset({"vblank", "stat", "timer", "serial", "joypad"}),
         profile_triples=_profiles(CPU_BRING_UP_PROFILE),
     ),
+    "test_ei_halt_corners.py": SuiteCoverage(
+        phase_constructors=frozenset({"mcycle_commit"}),
+        bus_regions=frozenset({"rom", "hram", "io"}),
+        interrupt_causes=frozenset({"vblank", "timer"}),
+        profile_triples=_profiles(CPU_BRING_UP_PROFILE),
+    ),
     "test_cpu_single_op.py": SuiteCoverage(
         opcode_families=_families("load", "memory_load", "stack", "bitops", "alu16", "alu8", "control_flow"),
         phase_constructors=frozenset({"instr_commit"}),

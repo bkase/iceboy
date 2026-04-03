@@ -178,6 +178,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("rom", "test_mem_rwb.py", "swim", "test_mem_rwb"),
     SuiteDefinition("lockstep", "test_cpu_lockstep.py", "swim", "test_cpu_lockstep"),
     SuiteDefinition("lockstep", "test_interrupt_injection.py", "swim", "test_interrupt_injection"),
+    SuiteDefinition("lockstep", "test_ei_halt_corners.py", "swim", "test_ei_halt_corners"),
     SuiteDefinition("lockstep", "test_cpu_single_op.py", "swim", "test_cpu_single_op"),
     SuiteDefinition("invariant", "test_cpu_invariants_loads.py", "swim", "test_cpu_invariants_loads"),
     SuiteDefinition("invariant", "test_cpu_invariants_flow.py", "swim", "test_cpu_invariants_flow"),

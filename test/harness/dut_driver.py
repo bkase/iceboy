@@ -93,6 +93,9 @@ class CpuCommitTrace:
     cpu_arch_time_enable: bool
     freeze_arch_time: bool
     cpu_hold_only: bool
+    ime_state: int = 0
+    halt_state: int = 0
+    phase_kind: int = 0
     commit_seq: int = 0
     pc: int = 0
     bus_req_kind: int = 0
@@ -108,6 +111,9 @@ class CpuCommitTrace:
     def from_output(cls, output_value: int, *, seq: int) -> "CpuCommitTrace":
         return cls(
             seq=seq,
+            ime_state=(output_value >> 139) & 0x3,
+            halt_state=(output_value >> 137) & 0x3,
+            phase_kind=(output_value >> 133) & 0xF,
             irq_ack_valid=bool((output_value >> 132) & 0x1),
             irq_ack_bit=(output_value >> 129) & 0x7,
             commit_seq=(output_value >> 65) & 0xFFFF_FFFF_FFFF_FFFF,
