@@ -61,6 +61,15 @@ class CpuAluContractTest(unittest.TestCase):
             "fn cpl_result(a: uint<8>, f_prev: Flags) -> AluResult",
             "fn scf_result(f_prev: Flags) -> AluResult",
             "fn ccf_result(f_prev: Flags) -> AluResult",
+            "fn rlc8_result(x: uint<8>, zero_on_result: bool) -> AluResult",
+            "fn rrc8_result(x: uint<8>, zero_on_result: bool) -> AluResult",
+            "fn rl8_result(x: uint<8>, carry_in: bool, zero_on_result: bool) -> AluResult",
+            "fn rr8_result(x: uint<8>, carry_in: bool, zero_on_result: bool) -> AluResult",
+            "fn sla8_result(x: uint<8>) -> AluResult",
+            "fn sra8_result(x: uint<8>) -> AluResult",
+            "fn srl8_result(x: uint<8>) -> AluResult",
+            "fn swap8_result(x: uint<8>) -> AluResult",
+            "fn rot_shift_result(kind: RotShiftKind, x: uint<8>, f_prev: Flags, zero_on_result: bool) -> AluResult",
             "AluReq::Add8$(a, b, carry_in) => if carry_in { adc8_result(a, b, true) } else { add8_result(a, b) }",
             "AluReq::Sub8$(a, b, carry_in) => if carry_in { sbc8_result(a, b, true) } else { sub8_result(a, b) }",
             "AluReq::And8$(a, b) => and8_result(a, b)",
@@ -75,6 +84,7 @@ class CpuAluContractTest(unittest.TestCase):
             "AluReq::Cpl$(a, f_prev) => cpl_result(a, f_prev)",
             "AluReq::Scf$(f_prev) => scf_result(f_prev)",
             "AluReq::Ccf$(f_prev) => ccf_result(f_prev)",
+            "AluReq::RotShift$(kind, x, f_prev, zero_on_result) => rot_shift_result(kind, x, f_prev, zero_on_result)",
             "_ => idle_alu_result()",
         ]:
             self.assertIn(symbol, text)

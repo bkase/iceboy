@@ -312,6 +312,87 @@ fn ccf_result(f_prev: Flags) -> AluResult {
     )
 }
 
+fn rot_shift_flags(result: uint<8>, carry_out: bool, zero_on_result: bool) -> Flags {
+    Flags$(
+        z: zero_on_result && (result == 0u8),
+        n: false,
+        h: false,
+        c: carry_out,
+    )
+}
+
+fn rlc8_result(x: uint<8>, zero_on_result: bool) -> AluResult {
+    let carry_out = (x & 0x80u8) == 0x80u8;
+    let result = trunc((x << 1) | (x >> 7));
+
+    alu_result8(result, rot_shift_flags(result, carry_out, zero_on_result))
+}
+
+fn rrc8_result(x: uint<8>, zero_on_result: bool) -> AluResult {
+    let carry_out = (x & 0x01u8) == 0x01u8;
+    let result = trunc((x >> 1) | ((x & 0x01u8) << 7));
+
+    alu_result8(result, rot_shift_flags(result, carry_out, zero_on_result))
+}
+
+fn rl8_result(x: uint<8>, carry_in: bool, zero_on_result: bool) -> AluResult {
+    let carry_out = (x & 0x80u8) == 0x80u8;
+    let result = trunc((x << 1) | carry_u8(carry_in));
+
+    alu_result8(result, rot_shift_flags(result, carry_out, zero_on_result))
+}
+
+fn rr8_result(x: uint<8>, carry_in: bool, zero_on_result: bool) -> AluResult {
+    let carry_out = (x & 0x01u8) == 0x01u8;
+    let result = trunc((x >> 1) | (carry_u8(carry_in) << 7));
+
+    alu_result8(result, rot_shift_flags(result, carry_out, zero_on_result))
+}
+
+fn sla8_result(x: uint<8>) -> AluResult {
+    let carry_out = (x & 0x80u8) == 0x80u8;
+    let result = trunc(x << 1);
+
+    alu_result8(result, rot_shift_flags(result, carry_out, true))
+}
+
+fn sra8_result(x: uint<8>) -> AluResult {
+    let carry_out = (x & 0x01u8) == 0x01u8;
+    let result = trunc((x >> 1) | (x & 0x80u8));
+
+    alu_result8(result, rot_shift_flags(result, carry_out, true))
+}
+
+fn srl8_result(x: uint<8>) -> AluResult {
+    let carry_out = (x & 0x01u8) == 0x01u8;
+    let result = x >> 1;
+
+    alu_result8(result, rot_shift_flags(result, carry_out, true))
+}
+
+fn swap8_result(x: uint<8>) -> AluResult {
+    let result = trunc((x >> 4) | (x << 4));
+
+    alu_result8(result, rot_shift_flags(result, false, true))
+}
+
+fn rot_shift_result(kind: RotShiftKind, x: uint<8>, f_prev: Flags, zero_on_result: bool) -> AluResult {
+    match kind {
+        RotShiftKind::Rlca => rlc8_result(x, zero_on_result),
+        RotShiftKind::Rrca => rrc8_result(x, zero_on_result),
+        RotShiftKind::Rla => rl8_result(x, f_prev.c, zero_on_result),
+        RotShiftKind::Rra => rr8_result(x, f_prev.c, zero_on_result),
+        RotShiftKind::Rlc => rlc8_result(x, zero_on_result),
+        RotShiftKind::Rrc => rrc8_result(x, zero_on_result),
+        RotShiftKind::Rl => rl8_result(x, f_prev.c, zero_on_result),
+        RotShiftKind::Rr => rr8_result(x, f_prev.c, zero_on_result),
+        RotShiftKind::Sla => sla8_result(x),
+        RotShiftKind::Sra => sra8_result(x),
+        RotShiftKind::Srl => srl8_result(x),
+        RotShiftKind::Swap => swap8_result(x),
+    }
+}
+
 pub fn idle_alu_result() -> AluResult {
     AluResult$(val8: 0, val16: 0, flags: zero_flags())
 }
@@ -332,6 +413,7 @@ pub fn alu(req: AluReq) -> AluResult {
         AluReq::Cpl$(a, f_prev) => cpl_result(a, f_prev),
         AluReq::Scf$(f_prev) => scf_result(f_prev),
         AluReq::Ccf$(f_prev) => ccf_result(f_prev),
+        AluReq::RotShift$(kind, x, f_prev, zero_on_result) => rot_shift_result(kind, x, f_prev, zero_on_result),
         _ => idle_alu_result(),
     }
 }

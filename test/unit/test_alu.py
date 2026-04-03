@@ -21,7 +21,7 @@ ROOT = find_repo_root()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from spec.flag_policies import Flags, add16_hl, adc8, add8, add_sp_e8, and8, ccf, cp8, cpl, daa, dec8, inc8, ld_hl_sp_plus_e8, or8, sbc8, scf, sub8, xor8
+from spec.flag_policies import Flags, add16_hl, adc8, add8, add_sp_e8, and8, ccf, cp8, cpl, daa, dec8, inc8, ld_hl_sp_plus_e8, or8, rl8, rlc8, rr8, rrc8, sbc8, scf, sla8, sra8, srl8, sub8, swap8, xor8
 
 
 OP_ADD = 0
@@ -40,6 +40,18 @@ OP_DAA = 12
 OP_CPL = 13
 OP_SCF = 14
 OP_CCF = 15
+OP_RLCA = 16
+OP_RRCA = 17
+OP_RLA = 18
+OP_RRA = 19
+OP_RLC = 20
+OP_RRC = 21
+OP_RL = 22
+OP_RR = 23
+OP_SLA = 24
+OP_SRA = 25
+OP_SRL = 26
+OP_SWAP = 27
 VALUES = (0x00, 0x01, 0x0F, 0x10, 0x7F, 0x80, 0xFE, 0xFF)
 VALUES16 = (0x0000, 0x0001, 0x0FFF, 0x1000, 0x7FFF, 0x8000, 0xFFFE, 0xFFFF)
 OFFSETS8 = (0x00, 0x01, 0x08, 0x0F, 0x10, 0x7F, 0x80, 0xF8, 0xFF)
@@ -142,6 +154,18 @@ async def test_curated_arithmetic_flag_edges(dut):
         (OP_DAA, 0x9A, 0x0000, {"n_in": False, "h_in": False, "c_in": False}, daa(0x9A, Flags(False, False, False, False))),
         (OP_DAA, 0x13, 0x0000, {"n_in": True, "h_in": True, "c_in": True}, daa(0x13, Flags(False, True, True, True))),
         (OP_CPL, 0x3C, 0x0000, {"z_in": True, "c_in": False}, cpl(0x3C, True, False)),
+        (OP_RLCA, 0x80, 0x0000, {}, rlc8(0x80, zero_affects=False)),
+        (OP_RRCA, 0x01, 0x0000, {}, rrc8(0x01, zero_affects=False)),
+        (OP_RLA, 0x80, 0x0000, {"c_in": True}, rl8(0x80, True, zero_affects=False)),
+        (OP_RRA, 0x01, 0x0000, {"c_in": True}, rr8(0x01, True, zero_affects=False)),
+        (OP_RLC, 0x80, 0x0000, {}, rlc8(0x80)),
+        (OP_RRC, 0x01, 0x0000, {}, rrc8(0x01)),
+        (OP_RL, 0x80, 0x0000, {"c_in": True}, rl8(0x80, True)),
+        (OP_RR, 0x01, 0x0000, {"c_in": True}, rr8(0x01, True)),
+        (OP_SLA, 0x80, 0x0000, {}, sla8(0x80)),
+        (OP_SRA, 0x81, 0x0000, {}, sra8(0x81)),
+        (OP_SRL, 0x01, 0x0000, {}, srl8(0x01)),
+        (OP_SWAP, 0xF0, 0x0000, {}, swap8(0xF0)),
     ]
 
     for op, a, b, flags_in, expected in cases:
@@ -164,11 +188,23 @@ async def test_generated_alu_vectors_match_spec_flag_policies(dut):
             assert_matches(await sample(dut, op=OP_AND, a=a, b=b), and8(a, b))
             assert_matches(await sample(dut, op=OP_OR, a=a, b=b), or8(a, b))
             assert_matches(await sample(dut, op=OP_XOR, a=a, b=b), xor8(a, b))
+            assert_matches(await sample(dut, op=OP_RLCA, a=a, b=0), rlc8(a, zero_affects=False))
+            assert_matches(await sample(dut, op=OP_RRCA, a=a, b=0), rrc8(a, zero_affects=False))
+            assert_matches(await sample(dut, op=OP_RLC, a=a, b=0), rlc8(a))
+            assert_matches(await sample(dut, op=OP_RRC, a=a, b=0), rrc8(a))
+            assert_matches(await sample(dut, op=OP_SLA, a=a, b=0), sla8(a))
+            assert_matches(await sample(dut, op=OP_SRA, a=a, b=0), sra8(a))
+            assert_matches(await sample(dut, op=OP_SRL, a=a, b=0), srl8(a))
+            assert_matches(await sample(dut, op=OP_SWAP, a=a, b=0), swap8(a))
             for c_in in (False, True):
                 assert_matches(await sample(dut, op=OP_ADC, a=a, b=b, c_in=c_in), adc8(a, b, c_in))
                 assert_matches(await sample(dut, op=OP_SBC, a=a, b=b, c_in=c_in), sbc8(a, b, c_in))
                 assert_matches(await sample(dut, op=OP_INC, a=a, b=0x00, c_in=c_in), inc8(a, c_in))
                 assert_matches(await sample(dut, op=OP_DEC, a=a, b=0x00, c_in=c_in), dec8(a, c_in))
+                assert_matches(await sample(dut, op=OP_RLA, a=a, b=0, c_in=c_in), rl8(a, c_in, zero_affects=False))
+                assert_matches(await sample(dut, op=OP_RRA, a=a, b=0, c_in=c_in), rr8(a, c_in, zero_affects=False))
+                assert_matches(await sample(dut, op=OP_RL, a=a, b=0, c_in=c_in), rl8(a, c_in))
+                assert_matches(await sample(dut, op=OP_RR, a=a, b=0, c_in=c_in), rr8(a, c_in))
     for a in VALUES16:
         for b in VALUES16:
             for z_in in (False, True):

@@ -1,4 +1,4 @@
-use lib::cpu::alu::AluReq;
+use lib::cpu::alu::{AluReq, RotShiftKind};
 use lib::cpu::regs::Flags;
 
 pub struct ArithmeticAluOut {
@@ -30,6 +30,18 @@ fn selected_req(op: uint<5>, a: uint<16>, b: uint<16>, z_in: bool, n_in: bool, h
         13u5 => AluReq::Cpl$(a: trunc(a), f_prev: f_prev),
         14u5 => AluReq::Scf$(f_prev: f_prev),
         15u5 => AluReq::Ccf$(f_prev: f_prev),
+        16u5 => AluReq::RotShift$(kind: RotShiftKind::Rlca, x: trunc(a), f_prev: f_prev, zero_on_result: false),
+        17u5 => AluReq::RotShift$(kind: RotShiftKind::Rrca, x: trunc(a), f_prev: f_prev, zero_on_result: false),
+        18u5 => AluReq::RotShift$(kind: RotShiftKind::Rla, x: trunc(a), f_prev: f_prev, zero_on_result: false),
+        19u5 => AluReq::RotShift$(kind: RotShiftKind::Rra, x: trunc(a), f_prev: f_prev, zero_on_result: false),
+        20u5 => AluReq::RotShift$(kind: RotShiftKind::Rlc, x: trunc(a), f_prev: f_prev, zero_on_result: true),
+        21u5 => AluReq::RotShift$(kind: RotShiftKind::Rrc, x: trunc(a), f_prev: f_prev, zero_on_result: true),
+        22u5 => AluReq::RotShift$(kind: RotShiftKind::Rl, x: trunc(a), f_prev: f_prev, zero_on_result: true),
+        23u5 => AluReq::RotShift$(kind: RotShiftKind::Rr, x: trunc(a), f_prev: f_prev, zero_on_result: true),
+        24u5 => AluReq::RotShift$(kind: RotShiftKind::Sla, x: trunc(a), f_prev: f_prev, zero_on_result: true),
+        25u5 => AluReq::RotShift$(kind: RotShiftKind::Sra, x: trunc(a), f_prev: f_prev, zero_on_result: true),
+        26u5 => AluReq::RotShift$(kind: RotShiftKind::Srl, x: trunc(a), f_prev: f_prev, zero_on_result: true),
+        27u5 => AluReq::RotShift$(kind: RotShiftKind::Swap, x: trunc(a), f_prev: f_prev, zero_on_result: true),
         _ => AluReq::Idle,
     }
 }
