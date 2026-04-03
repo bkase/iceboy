@@ -161,6 +161,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("unit", "test_semantics_flow.py", "swim", "test_semantics_flow"),
     SuiteDefinition("unit", "test_semantics_loads.py", "swim", "test_semantics_loads"),
     SuiteDefinition("unit", "test_semantics_wordalu.py", "swim", "test_semantics_wordalu"),
+    SuiteDefinition("unit", "test_timer.py", "swim", "test_timer"),
     SuiteDefinition("unit", "test_timebase.py", "swim", "test_timebase"),
     SuiteDefinition("unit", "test_write_enable.py", "swim", "test_write_enable"),
     SuiteDefinition("formal", "cpu_invariants.sby", "shell", "tools/run_formal_cpu_invariants.sh"),

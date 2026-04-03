@@ -1,0 +1,121 @@
+pub struct TimerOut {
+    div: uint<8>,
+    tima: uint<8>,
+    tma: uint<8>,
+    tac: uint<3>,
+    timer_irq: bool,
+    div_reset_request: bool,
+    overflow_delay: uint<3>,
+}
+
+fn div_value(sys_counter: uint<32>) -> uint<8> {
+    trunc(sys_counter >> 8)
+}
+
+fn tac_enabled(tac: uint<3>) -> bool {
+    (tac & 0x4u3) == 0x4u3
+}
+
+fn timer_bit(sys_counter: uint<32>, tac: uint<3>) -> bool {
+    let bit: uint<1> = match tac & 0x3u3 {
+        0u3 => trunc(sys_counter >> 9),
+        1u3 => trunc(sys_counter >> 3),
+        2u3 => trunc(sys_counter >> 5),
+        _ => trunc(sys_counter >> 7),
+    };
+    bit == 1u1
+}
+
+fn tac_from_write(value: uint<8>) -> uint<3> {
+    trunc(value)
+}
+
+fn io_write(write_en: bool, write_addr: uint<16>, target: uint<16>) -> bool {
+    write_en && write_addr == target
+}
+
+pub entity timer(
+    clk: clock,
+    rst: bool,
+    sys_counter: uint<32>,
+    write_en: bool,
+    write_addr: uint<16>,
+    write_data: uint<8>,
+) -> TimerOut {
+    let write_div = io_write(write_en, write_addr, 0xFF04u16);
+    let write_tima = io_write(write_en, write_addr, 0xFF05u16);
+    let write_tma = io_write(write_en, write_addr, 0xFF06u16);
+    let write_tac = io_write(write_en, write_addr, 0xFF07u16);
+
+    let effective_sys_counter = if write_div { 0u32 } else { sys_counter };
+
+    decl tima_reg;
+    decl tma_reg;
+    decl tac_reg;
+    decl sampled_timer_enabled;
+    decl sampled_timer_bit;
+    decl overflow_delay_reg;
+    decl timer_irq_reg;
+
+    let next_tma_reg =
+        if write_tma {
+            write_data
+        } else {
+            tma_reg
+        };
+    let next_tac_reg =
+        if write_tac {
+            tac_from_write(write_data)
+        } else {
+            tac_reg
+        };
+
+    let next_sampled_timer_enabled = tac_enabled(next_tac_reg);
+    let next_sampled_timer_bit = timer_bit(effective_sys_counter, next_tac_reg);
+    let timer_tick =
+        sampled_timer_enabled
+        && next_sampled_timer_enabled
+        && sampled_timer_bit
+        && !next_sampled_timer_bit;
+
+    let (next_tima_reg, next_overflow_delay_reg, next_timer_irq_reg) =
+        if write_tima {
+            (write_data, 0u3, false)
+        } else {
+            if overflow_delay_reg == 1u3 {
+                (next_tma_reg, 0u3, true)
+            } else {
+                if overflow_delay_reg > 1u3 {
+                    (tima_reg, trunc(overflow_delay_reg - 1u3), false)
+                } else {
+                    if timer_tick {
+                        if tima_reg == 0xFFu8 {
+                            (0u8, 4u3, false)
+                        } else {
+                            (trunc(tima_reg + 1u8), 0u3, false)
+                        }
+                    } else {
+                        (tima_reg, 0u3, false)
+                    }
+                }
+            }
+        };
+
+    reg(clk) tima_reg: uint<8> reset(rst: 0u8) = next_tima_reg;
+    reg(clk) tma_reg: uint<8> reset(rst: 0u8) = next_tma_reg;
+    reg(clk) tac_reg: uint<3> reset(rst: 0u3) = next_tac_reg;
+    reg(clk) sampled_timer_enabled: bool reset(rst: false) = next_sampled_timer_enabled;
+    reg(clk) sampled_timer_bit: bool reset(rst: false) = next_sampled_timer_bit;
+    reg(clk) overflow_delay_reg: uint<3> reset(rst: 0u3) = next_overflow_delay_reg;
+    reg(clk) timer_irq_reg: bool reset(rst: false) = next_timer_irq_reg;
+
+    TimerOut$(
+        div: div_value(effective_sys_counter),
+        tima: tima_reg,
+        tma: tma_reg,
+        tac: tac_reg,
+        timer_irq: timer_irq_reg,
+        div_reset_request: write_div,
+        overflow_delay: overflow_delay_reg,
+    )
+}

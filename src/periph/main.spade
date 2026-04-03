@@ -1,1 +1,2 @@
-// Peripheral module scaffold.
+pub mod timer;
+pub mod timer_test_top;

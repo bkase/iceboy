@@ -1,0 +1,27 @@
+use lib::periph::timer::timer;
+
+pub entity timer_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    sys_counter_i: uint<32>,
+    write_en_i: bool,
+    write_addr_i: uint<16>,
+    write_data_i: uint<8>,
+) -> uint<32> {
+    let timer_out = inst timer(
+        clk_i,
+        rst_i,
+        sys_counter_i,
+        write_en_i,
+        write_addr_i,
+        write_data_i,
+    );
+
+    (zext(timer_out.div) << 24)
+    | (zext(timer_out.tima) << 16)
+    | (zext(timer_out.tma) << 8)
+    | (zext(timer_out.tac) << 5)
+    | (zext(if timer_out.timer_irq { 1u1 } else { 0u1 }) << 4)
+    | (zext(if timer_out.div_reset_request { 1u1 } else { 0u1 }) << 3)
+    | zext(timer_out.overflow_delay)
+}
