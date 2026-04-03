@@ -41,6 +41,42 @@ class SimulationProfilesTest(unittest.TestCase):
             self.assertEqual(rom["model_profile"], CPU_BRING_UP_PROFILES.model.value)
             self.assertEqual(rom["reset_profile"], CPU_BRING_UP_PROFILES.reset.value)
 
+    def test_wave_b_manifest_entries_use_instr_commit_with_checkpoints(self) -> None:
+        inventory = yaml.safe_load(ROM_INVENTORY_PATH.read_text(encoding="utf-8"))
+        roms = {rom["id"]: rom for rom in inventory["roms"]}
+
+        self.assertEqual(
+            roms["TIMER_DIV_BASIC"]["checkpoint_symbols"],
+            [
+                "__checkpoint_div_count",
+                "__checkpoint_div_reset",
+                "__checkpoint_tac_prescaler",
+                "__checkpoint_tma_reload",
+            ],
+        )
+        self.assertEqual(roms["TIMER_DIV_BASIC"]["oracle_mode"], "instr_commit")
+
+        self.assertEqual(
+            roms["EI_DELAY"]["checkpoint_symbols"],
+            [
+                "__checkpoint_ei_nop",
+                "__checkpoint_ei_di",
+                "__checkpoint_reti",
+            ],
+        )
+        self.assertEqual(roms["EI_DELAY"]["oracle_mode"], "instr_commit")
+
+        self.assertEqual(
+            roms["TIMER_IRQ_HALT"]["checkpoint_symbols"],
+            [
+                "__checkpoint_halt_enter",
+                "__checkpoint_irq_fire",
+                "__checkpoint_isr_execute",
+                "__checkpoint_halt_wake",
+            ],
+        )
+        self.assertEqual(roms["TIMER_IRQ_HALT"]["oracle_mode"], "instr_commit")
+
     def test_spade_types_define_same_profile_names(self) -> None:
         spade_types = SPADE_TYPES_PATH.read_text(encoding="utf-8")
 

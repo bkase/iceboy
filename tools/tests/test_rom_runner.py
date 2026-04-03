@@ -54,6 +54,13 @@ class RomRunnerTest(unittest.TestCase):
         self.assertGreater(entry.timeout_commits, 0)
         self.assertIn("__checkpoint_ld_r_r", entry.checkpoint_symbols)
 
+    def test_load_manifest_entry_resolves_wave_b_rom(self) -> None:
+        entry = load_manifest_entry("TIMER_DIV_BASIC")
+        self.assertEqual(entry.rom_id, "TIMER_DIV_BASIC")
+        self.assertEqual(entry.rom_path.name, "timer_div_basic.gb")
+        self.assertEqual(entry.sym_path.name, "timer_div_basic.sym")
+        self.assertIn("__checkpoint_div_count", entry.checkpoint_symbols)
+
     def test_assert_rom_matches_pyboy_signature_uses_manifest_timeout(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             rom_path = Path(tmpdir) / "alu_flags.gb"
