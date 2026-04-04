@@ -3,6 +3,8 @@ INCLUDE "template.inc"
 DEF MBC1_TEST_REMAP EQU $01
 DEF MBC1_TEST_BANK2 EQU $02
 DEF MBC1_TEST_BANK21 EQU $03
+DEF MBC1_TEST_BANK41 EQU $04
+DEF MBC1_TEST_BANK61 EQU $05
 
 ICEBOY_ROM_HEADER
 
@@ -47,17 +49,47 @@ Entry:
     ld a, [hl]
     ld [wDebugCounters + 2], a
     cp $21
-    jr z, .pass
+    jr z, .bank41
     ld b, MBC1_TEST_BANK21
     ld d, $21
     ld e, a
     ld c, $00
     jp FailTest
 
+.bank41:
+    ld a, $02
+    ld [$4000], a
+    xor a
+    ld [$2000], a
+    ld a, [hl]
+    ld [wDebugCounters + 3], a
+    cp $41
+    jr z, .bank61
+    ld b, MBC1_TEST_BANK41
+    ld d, $41
+    ld e, a
+    ld c, $00
+    jp FailTest
+
+.bank61:
+    ld a, $03
+    ld [$4000], a
+    xor a
+    ld [$2000], a
+    ld a, [hl]
+    ld [wDebugCounters + 4], a
+    cp $61
+    jr z, .pass
+    ld b, MBC1_TEST_BANK61
+    ld d, $61
+    ld e, a
+    ld c, $00
+    jp FailTest
+
 .pass:
-    ld a, 3
+    ld a, 5
     ld [wPassCountLo], a
-    ICEBOY_LOG_CASE MBC1_TEST_BANK21, $00, ABI_LOG_STATUS_PASS, $21, $21, $00
+    ICEBOY_LOG_CASE MBC1_TEST_BANK61, $00, ABI_LOG_STATUS_PASS, $61, $61, $00
     ICEBOY_SET_RESULT ABI_RESULT_PASS
     jp __pass
 
@@ -74,7 +106,7 @@ __pass:
 
 InitAbiSignature:
     ICEBOY_INIT_SIGNATURE
-    ld a, 3
+    ld a, 5
     ld [wTestCountLo], a
     ld a, 'M'
     ld [wTestName + 0], a
@@ -92,5 +124,11 @@ SECTION "Bank02", ROMX[$4000], BANK[$02]
 
 SECTION "Bank21", ROMX[$4000], BANK[$21]
     db $21
+
+SECTION "Bank41", ROMX[$4000], BANK[$41]
+    db $41
+
+SECTION "Bank61", ROMX[$4000], BANK[$61]
+    db $61
 
 ICEBOY_ABI_WRAM
