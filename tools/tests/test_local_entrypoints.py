@@ -130,6 +130,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/unit/test_frame_sink.py"', text)
         self.assertIn('"test/unit/test_ppu_irq.py"', text)
         self.assertIn('"test/unit/test_ppu_timing.py"', text)
+        self.assertIn('"test/unit/test_video_access.py"', text)
         self.assertIn('"test/unit/test_oam_dma.py"', text)
         self.assertIn('"test/unit/test_serial.py"', text)
         self.assertIn('"test/lockstep/test_ei_halt_corners.py"', text)

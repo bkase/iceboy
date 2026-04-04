@@ -1,0 +1,101 @@
+use std::option::Option;
+
+use lib::ppu::sem::memory::{
+    MemClient,
+    MemRegion,
+    PpuMemKind,
+    PpuMemReq,
+    PpuMemResp,
+    PpuMemResult,
+    VideoBlockReason,
+};
+use lib::ppu::sem::types::{PpuRegs, PpuStatusState, lcd_enabled, visible_mode};
+
+fn region_is_vram(region: MemRegion) -> bool {
+    match region {
+        MemRegion::Vram => true,
+        MemRegion::Oam => false,
+    }
+}
+
+fn region_is_oam(region: MemRegion) -> bool {
+    match region {
+        MemRegion::Vram => false,
+        MemRegion::Oam => true,
+    }
+}
+
+fn client_is_cpu(client: MemClient) -> bool {
+    match client {
+        MemClient::Cpu => true,
+        _ => false,
+    }
+}
+
+pub fn access_block_reason(
+    req: PpuMemReq,
+    status: PpuStatusState,
+    regs: PpuRegs,
+    oam_dma_active: bool,
+    ownership_granted: bool,
+) -> Option<VideoBlockReason> {
+    if client_is_cpu(req.tag.client) {
+        if oam_dma_active {
+            Option::Some(VideoBlockReason::CpuBlockedByOamDma)
+        } else if !lcd_enabled(status, regs) {
+            Option::None
+        } else {
+            match visible_mode(status) {
+                lib::ppu::sem::types::PpuMode::OamScan => {
+                    if region_is_oam(req.tag.region) {
+                        Option::Some(VideoBlockReason::CpuBlockedByMode2)
+                    } else {
+                        Option::None
+                    }
+                },
+                lib::ppu::sem::types::PpuMode::PixelTransfer => {
+                    if region_is_vram(req.tag.region) || region_is_oam(req.tag.region) {
+                        Option::Some(VideoBlockReason::CpuBlockedByMode3)
+                    } else {
+                        Option::None
+                    }
+                },
+                _ => Option::None,
+            }
+        }
+    } else if ownership_granted {
+        Option::None
+    } else {
+        Option::Some(VideoBlockReason::PpuBlockedByOwnership)
+    }
+}
+
+pub fn blocked_access_result(kind: PpuMemKind, reason: VideoBlockReason) -> PpuMemResult {
+    match kind {
+        PpuMemKind::Read => PpuMemResult::UndefinedRead$(reason: reason),
+        PpuMemKind::Write$(data: _) => PpuMemResult::Denied,
+    }
+}
+
+pub fn granted_access_result(kind: PpuMemKind, read_data: uint<8>) -> PpuMemResult {
+    match kind {
+        PpuMemKind::Read => PpuMemResult::Ok$(data: read_data),
+        PpuMemKind::Write$(data: data) => PpuMemResult::Ok$(data: data),
+    }
+}
+
+pub fn evaluate_access(
+    req: PpuMemReq,
+    status: PpuStatusState,
+    regs: PpuRegs,
+    oam_dma_active: bool,
+    ownership_granted: bool,
+    read_data: uint<8>,
+) -> PpuMemResp {
+    let result = match access_block_reason(req, status, regs, oam_dma_active, ownership_granted) {
+        Option::Some(reason) => blocked_access_result(req.kind, reason),
+        Option::None => granted_access_result(req.kind, read_data),
+    };
+
+    PpuMemResp$(tag: req.tag, result: result)
+}

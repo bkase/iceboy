@@ -1,2 +1,4 @@
+pub mod access;
+pub mod access_test_top;
 pub mod frame_sink;
 pub mod frame_sink_test_top;

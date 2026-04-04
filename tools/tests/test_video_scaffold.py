@@ -7,6 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ROOT_MAIN_PATH = ROOT / "src" / "main.spade"
 VIDEO_MAIN_PATH = ROOT / "src" / "video" / "main.spade"
+ACCESS_PATH = ROOT / "src" / "video" / "access.spade"
+ACCESS_TEST_TOP_PATH = ROOT / "src" / "video" / "access_test_top.spade"
 FRAME_SINK_PATH = ROOT / "src" / "video" / "frame_sink.spade"
 FRAME_SINK_TEST_TOP_PATH = ROOT / "src" / "video" / "frame_sink_test_top.spade"
 
@@ -15,8 +17,43 @@ class VideoScaffoldTest(unittest.TestCase):
     def test_root_exports_video_tree(self) -> None:
         self.assertIn("mod video;", ROOT_MAIN_PATH.read_text(encoding="utf-8"))
         text = VIDEO_MAIN_PATH.read_text(encoding="utf-8")
+        self.assertIn("pub mod access;", text)
+        self.assertIn("pub mod access_test_top;", text)
         self.assertIn("pub mod frame_sink;", text)
         self.assertIn("pub mod frame_sink_test_top;", text)
+
+    def test_access_policy_surface_matches_contract(self) -> None:
+        text = ACCESS_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub fn access_block_reason(",
+            "ownership_granted: bool",
+            "pub fn blocked_access_result(kind: PpuMemKind, reason: VideoBlockReason) -> PpuMemResult",
+            "pub fn granted_access_result(kind: PpuMemKind, read_data: uint<8>) -> PpuMemResult",
+            "pub fn evaluate_access(",
+            "VideoBlockReason::CpuBlockedByMode2",
+            "VideoBlockReason::CpuBlockedByMode3",
+            "VideoBlockReason::CpuBlockedByOamDma",
+            "VideoBlockReason::PpuBlockedByOwnership",
+            "PpuMemResult::UndefinedRead$(reason: reason)",
+            "PpuMemResult::Denied",
+            "PpuMemResult::Ok$(data: read_data)",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_access_test_top_exposes_stable_projection(self) -> None:
+        text = ACCESS_TEST_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub entity access_test_top(",
+            "ownership_granted_i: bool",
+            "read_data_i: uint<8>",
+            "write_data_i: uint<8>",
+            ") -> uint<21>",
+            "let resp = evaluate_access(",
+            "PpuMemResult::Ok$(data: data) => (0u2, data, 0u3)",
+            "PpuMemResult::Denied => (1u2, 0u8, 0u3)",
+            "PpuMemResult::UndefinedRead$(reason: reason) => (2u2, 0u8, reason_bits(reason))",
+        ]:
+            self.assertIn(symbol, text)
 
     def test_frame_sink_surface_matches_contract(self) -> None:
         text = FRAME_SINK_PATH.read_text(encoding="utf-8")

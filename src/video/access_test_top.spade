@@ -1,0 +1,131 @@
+use lib::ppu::sem::memory::{MemClient, MemRegion, MemTxnTag, PpuMemKind, PpuMemReq, PpuMemResult, VideoBlockReason};
+use lib::ppu::sem::types::{LcdRunState, Lcdc, PpuPhase, PpuRegs, PpuStatusState, StatIrqState, StatSelect};
+use lib::video::access::evaluate_access;
+
+fn decode_region(region_i: bool) -> MemRegion {
+    if region_i { MemRegion::Oam } else { MemRegion::Vram }
+}
+
+fn decode_client(client_i: uint<3>) -> MemClient {
+    match client_i {
+        1u3 => MemClient::BgFetcher,
+        2u3 => MemClient::ObjFetcher,
+        3u3 => MemClient::OamScanner,
+        4u3 => MemClient::Dma,
+        _ => MemClient::Cpu,
+    }
+}
+
+fn decode_kind(req_kind_i: bool, write_data_i: uint<8>) -> PpuMemKind {
+    if req_kind_i {
+        PpuMemKind::Write$(data: write_data_i)
+    } else {
+        PpuMemKind::Read
+    }
+}
+
+fn decode_run(run_i: uint<2>) -> LcdRunState {
+    match run_i {
+        1u2 => LcdRunState::WarmupBlankFrame,
+        2u2 => LcdRunState::Running,
+        _ => LcdRunState::Disabled,
+    }
+}
+
+fn decode_phase(phase_i: uint<3>) -> PpuPhase {
+    match phase_i {
+        1u3 => PpuPhase::OamScan$(index: 0u6, found: 0u4),
+        2u3 => PpuPhase::Transfer$(x_out: 0u8, discard_scx: 0u3),
+        3u3 => PpuPhase::HBlank$(dots_left: 204u9),
+        4u3 => PpuPhase::VBlank$(line: 144u8, dots_left: 456u9),
+        _ => PpuPhase::LcdOff,
+    }
+}
+
+fn build_regs(lcd_enable_i: bool) -> PpuRegs {
+    PpuRegs$(
+        lcdc: Lcdc$(
+            lcd_enable: lcd_enable_i,
+            win_map_hi: false,
+            win_enable: false,
+            bgwin_data_hi: false,
+            bg_map_hi: false,
+            obj_size_8x16: false,
+            obj_enable: false,
+            bg_enable: false,
+        ),
+        stat_sel: StatSelect$(lyc_sel: false, mode2_sel: false, mode1_sel: false, mode0_sel: false),
+        scy: 0u8,
+        scx: 0u8,
+        lyc: 0u8,
+        wy: 0u8,
+        wx: 0u8,
+        bgp: 0u8,
+        obp0: 0u8,
+        obp1: 0u8,
+    )
+}
+
+fn build_status(run_i: uint<2>, phase_i: uint<3>) -> PpuStatusState {
+    PpuStatusState$(
+        run: decode_run(run_i),
+        phase: decode_phase(phase_i),
+        stat_irq: StatIrqState$(line_high: false),
+    )
+}
+
+fn reason_bits(reason: VideoBlockReason) -> uint<3> {
+    match reason {
+        VideoBlockReason::CpuBlockedByMode2 => 1u3,
+        VideoBlockReason::CpuBlockedByMode3 => 2u3,
+        VideoBlockReason::CpuBlockedByOamDma => 3u3,
+        VideoBlockReason::PpuBlockedByOwnership => 4u3,
+    }
+}
+
+fn region_bit(region: MemRegion) -> uint<1> {
+    match region {
+        MemRegion::Vram => 0u1,
+        MemRegion::Oam => 1u1,
+    }
+}
+
+pub entity access_test_top(
+    run_i: uint<2>,
+    phase_i: uint<3>,
+    lcd_enable_i: bool,
+    region_i: bool,
+    client_i: uint<3>,
+    req_kind_i: bool,
+    tag_id_i: uint<4>,
+    oam_dma_active_i: bool,
+    ownership_granted_i: bool,
+    read_data_i: uint<8>,
+    write_data_i: uint<8>,
+) -> uint<21> {
+    let req = PpuMemReq$(
+        tag: MemTxnTag$(region: decode_region(region_i), client: decode_client(client_i), id: tag_id_i),
+        kind: decode_kind(req_kind_i, write_data_i),
+        addr: 0u16,
+    );
+    let resp = evaluate_access(
+        req,
+        build_status(run_i, phase_i),
+        build_regs(lcd_enable_i),
+        oam_dma_active_i,
+        ownership_granted_i,
+        read_data_i,
+    );
+    let (result_code, result_data, reason_code) = match resp.result {
+        PpuMemResult::Ok$(data: data) => (0u2, data, 0u3),
+        PpuMemResult::Denied => (1u2, 0u8, 0u3),
+        PpuMemResult::UndefinedRead$(reason: reason) => (2u2, 0u8, reason_bits(reason)),
+    };
+
+    zext(result_data)
+        | (zext(result_code) << 8)
+        | (zext(reason_code) << 10)
+        | (zext(resp.tag.id) << 13)
+        | (zext(region_bit(resp.tag.region)) << 17)
+        | (zext(client_i) << 18)
+}

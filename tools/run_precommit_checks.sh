@@ -27,6 +27,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/unit/test_event_bridge.py"
     "test/unit/test_frame_sink.py"
     "test/unit/test_memory_map.py"
+    "test/unit/test_video_access.py"
     "test/unit/test_ppu_irq.py"
     "test/unit/test_ppu_timing.py"
     "test/unit/test_serial.py"
