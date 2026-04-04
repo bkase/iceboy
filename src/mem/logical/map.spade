@@ -1,0 +1,56 @@
+use lib::bus::types::BusRegion;
+
+pub enum PhysicalMemoryKind {
+    Spram,
+    Ebr,
+    Unmapped,
+}
+
+pub fn physical_memory_kind(region: BusRegion) -> PhysicalMemoryKind {
+    match region {
+        BusRegion::Rom => PhysicalMemoryKind::Spram,
+        BusRegion::Vram => PhysicalMemoryKind::Spram,
+        BusRegion::CartRam => PhysicalMemoryKind::Spram,
+        BusRegion::Wram => PhysicalMemoryKind::Spram,
+        BusRegion::Echo => PhysicalMemoryKind::Spram,
+        BusRegion::Oam => PhysicalMemoryKind::Ebr,
+        BusRegion::Hram => PhysicalMemoryKind::Ebr,
+        _ => PhysicalMemoryKind::Unmapped,
+    }
+}
+
+pub fn rom_addr(region: BusRegion, addr: uint<16>) -> uint<15> {
+    match region {
+        BusRegion::Rom => trunc(addr),
+        _ => 0u15,
+    }
+}
+
+pub fn vram_addr(region: BusRegion, addr: uint<16>) -> uint<13> {
+    match region {
+        BusRegion::Vram => trunc(addr - 0x8000u16),
+        _ => 0u13,
+    }
+}
+
+pub fn wram_addr(region: BusRegion, addr: uint<16>) -> uint<13> {
+    match region {
+        BusRegion::Wram => trunc(addr - 0xc000u16),
+        BusRegion::Echo => trunc(addr - 0xe000u16),
+        _ => 0u13,
+    }
+}
+
+pub fn hram_addr(region: BusRegion, addr: uint<16>) -> uint<7> {
+    match region {
+        BusRegion::Hram => trunc(addr - 0xff80u16),
+        _ => 0u7,
+    }
+}
+
+pub fn oam_addr(region: BusRegion, addr: uint<16>) -> uint<8> {
+    match region {
+        BusRegion::Oam => trunc(addr - 0xfe00u16),
+        _ => 0u8,
+    }
+}

@@ -1,2 +1,2 @@
-mod logical;
-mod phys;
+pub mod logical;
+pub mod phys;

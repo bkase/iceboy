@@ -1,1 +1,2 @@
-// Physical memory primitive scaffold.
+pub mod ebr;
+pub mod spram;

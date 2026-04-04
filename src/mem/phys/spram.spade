@@ -1,0 +1,58 @@
+use std::mem::{clocked_memory_init, read_memory};
+
+pub entity rom_image_spram(
+    clk: clock,
+    cpu_addr: uint<15>,
+    dma_addr: uint<15>,
+) -> (uint<8>, uint<8>) {
+    let mem = inst clocked_memory_init::<32768, 1, 15, uint<8>>(
+        clk,
+        [(false, 0u15, 0u8)],
+        [0u8; 32768],
+    );
+
+    (
+        inst read_memory(mem, cpu_addr),
+        inst read_memory(mem, dma_addr),
+    )
+}
+
+pub entity wram_spram(
+    clk: clock,
+    cpu_addr: uint<13>,
+    dma_addr: uint<13>,
+    write_en: bool,
+    write_addr: uint<13>,
+    write_data: uint<8>,
+) -> (uint<8>, uint<8>) {
+    let mem = inst clocked_memory_init::<8192, 1, 13, uint<8>>(
+        clk,
+        [(write_en, write_addr, write_data)],
+        [0u8; 8192],
+    );
+
+    (
+        inst read_memory(mem, cpu_addr),
+        inst read_memory(mem, dma_addr),
+    )
+}
+
+pub entity vram_spram(
+    clk: clock,
+    cpu_addr: uint<13>,
+    ppu_addr: uint<13>,
+    write_en: bool,
+    write_addr: uint<13>,
+    write_data: uint<8>,
+) -> (uint<8>, uint<8>) {
+    let mem = inst clocked_memory_init::<8192, 1, 13, uint<8>>(
+        clk,
+        [(write_en, write_addr, write_data)],
+        [0u8; 8192],
+    );
+
+    (
+        inst read_memory(mem, cpu_addr),
+        inst read_memory(mem, ppu_addr),
+    )
+}

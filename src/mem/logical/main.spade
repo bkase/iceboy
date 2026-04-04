@@ -1,1 +1,1 @@
-// Logical memory map scaffold.
+pub mod map;

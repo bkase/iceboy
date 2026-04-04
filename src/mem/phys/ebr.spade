@@ -1,0 +1,43 @@
+use std::mem::{clocked_memory_init, read_memory};
+
+pub entity hram_ebr(
+    clk: clock,
+    cpu_addr: uint<7>,
+    dma_addr: uint<7>,
+    write_en: bool,
+    write_addr: uint<7>,
+    write_data: uint<8>,
+) -> (uint<8>, uint<8>) {
+    let mem = inst clocked_memory_init::<127, 1, 7, uint<8>>(
+        clk,
+        [(write_en, write_addr, write_data)],
+        [0u8; 127],
+    );
+
+    (
+        inst read_memory(mem, cpu_addr),
+        inst read_memory(mem, dma_addr),
+    )
+}
+
+pub entity oam_ebr(
+    clk: clock,
+    read_addr: uint<8>,
+    cpu_write_en: bool,
+    cpu_write_addr: uint<8>,
+    cpu_write_data: uint<8>,
+    dma_write_en: bool,
+    dma_write_addr: uint<8>,
+    dma_write_data: uint<8>,
+) -> uint<8> {
+    let mem = inst clocked_memory_init::<256, 2, 8, uint<8>>(
+        clk,
+        [
+            (cpu_write_en, cpu_write_addr, cpu_write_data),
+            (dma_write_en, dma_write_addr, dma_write_data),
+        ],
+        [0u8; 256],
+    );
+
+    inst read_memory(mem, read_addr)
+}
