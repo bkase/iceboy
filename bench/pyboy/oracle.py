@@ -9,7 +9,9 @@ import warnings
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, Sequence
+from typing import Any, Mapping, Protocol, Sequence
+
+import numpy
 
 warnings.filterwarnings("ignore", message="Using SDL2 binaries from pysdl2-dll.*")
 
@@ -25,7 +27,7 @@ from bench.actions.generators import (
     RawInputEvent,
     SimEvent,
 )
-from spec.profiles import ModelProfile, ResetProfile
+from spec.profiles import BehaviorConfig, ModelProfile, ResetProfile, default_behavior_config
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -65,6 +67,12 @@ DMG_SKIPBOOT_IO = {
 SYMBOL_RE = re.compile(r"^(?P<bank>[0-9A-Fa-f]{2,}):(?P<addr>[0-9A-Fa-f]{4})\s+(?P<label>\S+)$")
 RESERVED_HOOK_PREFIXES = ("__checkpoint_", "__commit_")
 RESERVED_HOOK_LABELS = RESERVED_HOOK_PREFIXES + ("__pass", "__fail")
+DMG_SHADE_VALUES = (0x00, 0x55, 0xAA, 0xFF)
+SCREEN_WIDTH = 160
+SCREEN_HEIGHT = 144
+TILEMAP_WIDTH = 32
+TILEMAP_HEIGHT = 32
+SPRITE_COUNT = 40
 
 
 @dataclass(frozen=True)
@@ -147,8 +155,83 @@ class _RuntimeHookSpec:
     callback: Any
 
 
+@dataclass(frozen=True)
+class TileMapCapture:
+    width: int
+    height: int
+    tile_ids: tuple[int, ...]
+
+    def tile_id(self, x: int, y: int) -> int:
+        if not (0 <= x < self.width and 0 <= y < self.height):
+            raise IndexError("tile coordinates out of range")
+        return self.tile_ids[(y * self.width) + x]
+
+
+@dataclass(frozen=True)
+class SpriteCapture:
+    sprite_index: int
+    x: int
+    y: int
+    tile_identifier: int
+    on_screen: bool
+    width: int
+    height: int
+    palette_number: int
+    x_flip: bool
+    y_flip: bool
+    obj_bg_priority: bool
+    cgb_bank_number: bool
+
+
+@dataclass(frozen=True)
+class LineScrollCapture:
+    line: int
+    scx: int
+    scy: int
+    wx: int
+    wy: int
+
+
+@dataclass(frozen=True)
+class FrameSemanticCapture:
+    bg_tilemap: TileMapCapture
+    window_tilemap: TileMapCapture
+    sprites: tuple[SpriteCapture, ...]
+    line_scroll: tuple[LineScrollCapture, ...]
+
+
+class VideoOracle(Protocol):
+    def reset(
+        self,
+        model_profile: ModelProfile | str,
+        reset_profile: ResetProfile | str,
+        behavior_config: BehaviorConfig | Mapping[str, object] | None = None,
+    ) -> None:
+        ...
+
+    def frame_semantics(self) -> FrameSemanticCapture:
+        ...
+
+    def shade_buffer(self) -> bytes:
+        ...
+
+    def frame_buffer_rgba(self) -> numpy.ndarray[Any, Any]:
+        ...
+
+    def snapshot(self) -> bytes:
+        ...
+
+    def restore(self, snapshot: bytes) -> None:
+        ...
+
+
 class Oracle(Protocol):
-    def reset(self, model_profile: ModelProfile | str, reset_profile: ResetProfile | str) -> None:
+    def reset(
+        self,
+        model_profile: ModelProfile | str,
+        reset_profile: ResetProfile | str,
+        behavior_config: BehaviorConfig | Mapping[str, object] | None = None,
+    ) -> None:
         ...
 
     def step_commit(self) -> OracleCommit:
@@ -177,6 +260,40 @@ def _coerce_reset_profile(reset_profile: ResetProfile | str) -> ResetProfile:
     if isinstance(reset_profile, ResetProfile):
         return reset_profile
     return ResetProfile(str(reset_profile))
+
+
+def _coerce_behavior_config(
+    behavior_config: BehaviorConfig | Mapping[str, object] | None,
+    model_profile: ModelProfile,
+) -> BehaviorConfig:
+    if behavior_config is None:
+        return default_behavior_config(model_profile)
+    if isinstance(behavior_config, BehaviorConfig):
+        config = behavior_config
+    else:
+        config = BehaviorConfig.from_mapping(behavior_config)
+    if config.model is not model_profile:
+        raise ValueError(
+            f"BehaviorConfig.model ({config.model.value}) does not match requested model profile {model_profile.value}"
+        )
+    return config
+
+
+def _normalize_rgba_to_dmg_shades(rgba: numpy.ndarray[Any, Any]) -> bytes:
+    array = numpy.asarray(rgba, dtype=numpy.uint8)
+    if array.shape != (SCREEN_HEIGHT, SCREEN_WIDTH, 4):
+        raise ValueError(f"expected RGBA frame shape {(SCREEN_HEIGHT, SCREEN_WIDTH, 4)}, got {array.shape}")
+    rgb = array[:, :, :3]
+    flat_rgb = rgb.reshape(-1, 3)
+    shade_map: dict[tuple[int, int, int], int] = {}
+    for color in numpy.unique(flat_rgb, axis=0):
+        rgb_key = tuple(int(channel) for channel in color)
+        luminance = sum(rgb_key) // 3
+        shade_map[rgb_key] = min(DMG_SHADE_VALUES, key=lambda shade: abs(shade - luminance))
+    normalized = bytearray(flat_rgb.shape[0])
+    for index, color in enumerate(flat_rgb):
+        normalized[index] = shade_map[tuple(int(channel) for channel in color)]
+    return bytes(normalized)
 
 
 def _is_executable_rom(bank: int, addr: int) -> bool:
@@ -247,9 +364,15 @@ class PyBoyOracle:
             self._pyboy = None
         self._pressed_buttons.clear()
 
-    def reset(self, model_profile: ModelProfile | str, reset_profile: ResetProfile | str) -> None:
+    def reset(
+        self,
+        model_profile: ModelProfile | str,
+        reset_profile: ResetProfile | str,
+        behavior_config: BehaviorConfig | Mapping[str, object] | None = None,
+    ) -> None:
         model = _coerce_model_profile(model_profile)
         reset = _coerce_reset_profile(reset_profile)
+        _coerce_behavior_config(behavior_config, model)
 
         self.close()
         self._commit_queue.clear()
@@ -274,6 +397,22 @@ class PyBoyOracle:
         if reset is ResetProfile.SkipBoot:
             self._apply_skipboot_state(model)
         self._install_hooks()
+
+    def frame_buffer_rgba(self) -> numpy.ndarray[Any, Any]:
+        pyboy = self._require_pyboy()
+        return numpy.array(pyboy.screen.ndarray, copy=True)
+
+    def shade_buffer(self) -> bytes:
+        return _normalize_rgba_to_dmg_shades(self.frame_buffer_rgba())
+
+    def frame_semantics(self) -> FrameSemanticCapture:
+        pyboy = self._require_pyboy()
+        return FrameSemanticCapture(
+            bg_tilemap=_capture_tilemap(pyboy.tilemap_background),
+            window_tilemap=_capture_tilemap(pyboy.tilemap_window),
+            sprites=tuple(_capture_sprite(pyboy.get_sprite(index)) for index in range(SPRITE_COUNT)),
+            line_scroll=_capture_line_scroll(pyboy.screen.tilemap_position_list),
+        )
 
     def step_commit(self) -> OracleCommit:
         pyboy = self._require_pyboy()
@@ -463,3 +602,41 @@ class PyBoyOracle:
         if self._pyboy is None:
             raise RuntimeError("Oracle has not been reset yet")
         return self._pyboy
+
+
+def _capture_tilemap(tilemap: Any) -> TileMapCapture:
+    width = int(tilemap.shape[0])
+    height = int(tilemap.shape[1])
+    tile_ids = []
+    for y in range(height):
+        for x in range(width):
+            tile_ids.append(int(tilemap.tile_identifier(x, y)))
+    return TileMapCapture(width=width, height=height, tile_ids=tuple(tile_ids))
+
+
+def _capture_sprite(sprite: Any) -> SpriteCapture:
+    shape = getattr(sprite, "shape", (8, 8))
+    return SpriteCapture(
+        sprite_index=int(sprite.sprite_index),
+        x=int(sprite.x),
+        y=int(sprite.y),
+        tile_identifier=int(sprite.tile_identifier),
+        on_screen=bool(sprite.on_screen),
+        width=int(shape[0]),
+        height=int(shape[1]),
+        palette_number=int(sprite.attr_palette_number),
+        x_flip=bool(sprite.attr_x_flip),
+        y_flip=bool(sprite.attr_y_flip),
+        obj_bg_priority=bool(sprite.attr_obj_bg_priority),
+        cgb_bank_number=bool(sprite.attr_cgb_bank_number),
+    )
+
+
+def _capture_line_scroll(position_list: Sequence[Sequence[int]]) -> tuple[LineScrollCapture, ...]:
+    captures = []
+    for line, entry in enumerate(position_list):
+        if len(entry) != 4:
+            raise ValueError(f"expected tilemap position entry with 4 fields, got {entry!r}")
+        scx, scy, wx_internal, wy = (int(value) for value in entry)
+        captures.append(LineScrollCapture(line=line, scx=scx, scy=scy, wx=wx_internal + 7, wy=wy))
+    return tuple(captures)

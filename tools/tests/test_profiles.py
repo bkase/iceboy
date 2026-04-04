@@ -6,11 +6,16 @@ from pathlib import Path
 import yaml
 
 from spec.profiles import (
+    BehaviorConfig,
+    BehaviorFeature,
     CPU_BRING_UP_PROFILES,
     MemoryBehaviorProfile,
     ModelProfile,
     ResetProfile,
+    SocRevision,
     SimulationProfiles,
+    default_behavior_config,
+    dmg_behavior_config,
 )
 
 
@@ -31,6 +36,18 @@ class SimulationProfilesTest(unittest.TestCase):
     def test_manifest_round_trip_mapping(self) -> None:
         round_trip = SimulationProfiles.from_mapping(CPU_BRING_UP_PROFILES.as_manifest_fields())
         self.assertEqual(round_trip, CPU_BRING_UP_PROFILES)
+
+    def test_behavior_config_round_trip_and_presets(self) -> None:
+        config = BehaviorConfig(
+            model=ModelProfile.DMG,
+            soc_revision=SocRevision.DMGB,
+            features=(BehaviorFeature.DmgStatWriteQuirk, BehaviorFeature.DmgOamDmaBasic),
+        )
+        round_trip = BehaviorConfig.from_mapping(config.as_manifest_fields())
+
+        self.assertEqual(round_trip, config)
+        self.assertEqual(default_behavior_config(ModelProfile.DMG), BehaviorConfig(model=ModelProfile.DMG))
+        self.assertEqual(dmg_behavior_config(), BehaviorConfig(model=ModelProfile.DMG))
 
     def test_rom_inventory_records_bring_up_profiles(self) -> None:
         inventory = yaml.safe_load(ROM_INVENTORY_PATH.read_text(encoding="utf-8"))

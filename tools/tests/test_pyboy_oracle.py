@@ -6,9 +6,9 @@ import warnings
 from pathlib import Path
 
 from bench.actions.generators import IeOverrideEvent, IfClearBitsEvent, IfSetBitsEvent, MemoryWriteEvent
-from bench.pyboy.oracle import CommitPoint, PyBoyOracle
+from bench.pyboy.oracle import CommitPoint, PyBoyOracle, _normalize_rgba_to_dmg_shades
 from roms.build_micro_rom import build_alu_loop
-from spec.profiles import ModelProfile, ResetProfile
+from spec.profiles import BehaviorConfig, BehaviorFeature, ModelProfile, ResetProfile, SocRevision
 
 
 HOOK_ADDRS = (0x0150, 0x0152, 0x0154, 0x0155, 0x0156)
@@ -98,6 +98,67 @@ class PyBoyOracleTest(unittest.TestCase):
             self.assertEqual(int(rf.PC), 0x0100)
             self.assertEqual(oracle.read_mem(0xFF40), 0x91)
             self.assertEqual(oracle.read_mem(0xFF47), 0xFC)
+
+    def test_reset_accepts_behavior_config_and_rejects_model_mismatches(self) -> None:
+        with self.make_oracle() as oracle:
+            oracle.reset(
+                ModelProfile.DMG,
+                ResetProfile.SkipBoot,
+                BehaviorConfig(
+                    model=ModelProfile.DMG,
+                    soc_revision=SocRevision.DMGB,
+                    features=(BehaviorFeature.DmgStatWriteQuirk,),
+                ),
+            )
+            self.assertEqual(oracle.read_mem(0xFF40), 0x91)
+
+            with self.assertRaisesRegex(ValueError, "BehaviorConfig.model"):
+                oracle.reset(
+                    ModelProfile.DMG,
+                    ResetProfile.SkipBoot,
+                    {"model": "CGB", "soc_revision": None, "features": []},
+                )
+
+    def test_frame_semantics_capture_surfaces_tilemaps_sprites_and_scroll_state(self) -> None:
+        with self.make_oracle() as oracle:
+            oracle.reset(ModelProfile.DMG, ResetProfile.SkipBoot)
+
+            rgba = oracle.frame_buffer_rgba()
+            self.assertEqual(tuple(rgba.shape), (144, 160, 4))
+
+            shades = oracle.shade_buffer()
+            self.assertEqual(len(shades), 144 * 160)
+            self.assertTrue(set(shades))
+            self.assertTrue(set(shades).issubset({0x00, 0x55, 0xAA, 0xFF}))
+
+            semantics = oracle.frame_semantics()
+            self.assertEqual((semantics.bg_tilemap.width, semantics.bg_tilemap.height), (32, 32))
+            self.assertEqual((semantics.window_tilemap.width, semantics.window_tilemap.height), (32, 32))
+            self.assertEqual(len(semantics.sprites), 40)
+            self.assertEqual(len(semantics.line_scroll), 144)
+            self.assertEqual(semantics.line_scroll[0].scx, 0)
+            self.assertEqual(semantics.line_scroll[0].scy, 0)
+            self.assertEqual(semantics.line_scroll[0].wx, 0)
+            self.assertEqual(semantics.line_scroll[0].wy, 0)
+            self.assertEqual(semantics.sprites[0].sprite_index, 0)
+
+    def test_rgba_normalization_maps_luminance_order_to_canonical_dmg_shades(self) -> None:
+        import numpy
+
+        rgba = numpy.zeros((144, 160, 4), dtype=numpy.uint8)
+        rgba[:, :, 3] = 0xFF
+        rgba[:, 0:40, :3] = (0, 0, 0)
+        rgba[:, 40:80, :3] = (85, 85, 85)
+        rgba[:, 80:120, :3] = (170, 170, 170)
+        rgba[:, 120:160, :3] = (255, 255, 255)
+
+        normalized = _normalize_rgba_to_dmg_shades(rgba)
+
+        self.assertEqual(set(normalized), {0x00, 0x55, 0xAA, 0xFF})
+        self.assertEqual(normalized[0], 0x00)
+        self.assertEqual(normalized[40], 0x55)
+        self.assertEqual(normalized[80], 0xAA)
+        self.assertEqual(normalized[120], 0xFF)
 
 
 if __name__ == "__main__":
