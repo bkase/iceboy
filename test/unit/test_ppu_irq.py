@@ -195,3 +195,25 @@ async def test_stat_write_quirk_hook_is_feature_gated(dut):
     assert enabled["quirk_pulse"] is True
     assert enabled["stat_req"] is True
     assert enabled["next_line_high"] is False
+
+
+@cocotb.test()
+async def test_lcd_disabled_forces_stat_line_low(dut):
+    snapshot = await sample(
+        dut,
+        prev_run=RUN_DISABLED,
+        prev_phase=PHASE_LCD_OFF,
+        next_run=RUN_DISABLED,
+        next_phase=PHASE_LCD_OFF,
+        ly=7,
+        lyc=7,
+        lyc_sel=True,
+        mode0_sel=True,
+        mode1_sel=True,
+        mode2_sel=True,
+    )
+    assert snapshot["lyc_match"] is True
+    assert snapshot["new_line"] is False
+    assert snapshot["next_line_high"] is False
+    assert snapshot["stat_req"] is False
+    assert snapshot["vblank_req"] is False

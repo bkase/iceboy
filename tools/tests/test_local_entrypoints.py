@@ -164,6 +164,15 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('ICEBOY_PRECOMMIT_EXTENDED', text)
         self.assertIn('Running fast Python spec tests...', text)
 
+    def test_formal_tier_registers_ppu_control_jobs(self) -> None:
+        text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
+        self.assertIn('SuiteDefinition("formal", "ppu_irq.sby", "shell", "tools/run_formal_ppu_irq.sh")', text)
+        self.assertIn('SuiteDefinition("formal", "ppu_timing.sby", "shell", "tools/run_formal_ppu_timing.sh")', text)
+        self.assertTrue((TOOLS / "run_formal_ppu_irq.sh").exists())
+        self.assertTrue((TOOLS / "run_formal_ppu_timing.sh").exists())
+        self.assertTrue((ROOT / "formal" / "ppu" / "safety" / "ppu_irq.sby").exists())
+        self.assertTrue((ROOT / "formal" / "ppu" / "safety" / "ppu_timing.sby").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,15 @@
+[options]
+mode prove
+depth 8
+
+[engines]
+smtbmc bitwuzla
+
+[script]
+read -formal -sv spade.sv ppu_timing_formal.sv
+clk2fflogic
+prep -top ppu_timing_formal
+
+[files]
+build/spade.sv
+formal/ppu/safety/ppu_timing_formal.sv
