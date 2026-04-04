@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -28,6 +29,7 @@ SWIM = str(Path.home() / ".cargo" / "bin" / "swim")
 PYTHON_LOCK = "toolchain/python.lock"
 ENSURE_SWIM_PYTHON_DEPS = ROOT / "tools" / "ensure_swim_python_deps.sh"
 TIER_CONFIG_PATH = ROOT / "test" / "tiers.yaml"
+POWER_METRICS_ARTIFACT_ROOT = ROOT / "bench" / "artifacts" / "power_metrics"
 FAILED_COUNT_RE = re.compile(r"(\d+)/(\d+)\s+failed")
 UNITTEST_RAN_RE = re.compile(r"Ran (\d+) tests? in")
 UNITTEST_FAILED_RE = re.compile(r"FAILED \((.*?)\)")
@@ -189,6 +191,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("invariant", "test_cpu_invariants_flow.py", "swim", "test_cpu_invariants_flow"),
     SuiteDefinition("invariant", "test_arch_time_invariants.py", "swim", "test_arch_time_invariants"),
     SuiteDefinition("invariant", "test_write_enable_hold.py", "swim", "test_write_enable_hold"),
+    SuiteDefinition("power", "test_duty_cycle_metrics.py", "swim", "test_duty_cycle_metrics"),
     SuiteDefinition("power", "test_halt_quiescence.py", "swim", "test_halt_quiescence"),
 )
 
@@ -322,6 +325,9 @@ def parse_suite_counts(definition: SuiteDefinition, output: str, exit_code: int)
 
 def run_suite(definition: SuiteDefinition, *, sim: str, logger: TestLogger, nightly: bool) -> SuiteResult:
     env = command_env(sim=sim, nightly=nightly and definition.nightly_only)
+    power_metrics_artifact = POWER_METRICS_ARTIFACT_ROOT / f"{definition.label}.json"
+    if power_metrics_artifact.exists():
+        power_metrics_artifact.unlink()
     if definition.runner == "swim":
         patch_cocotb_config_wrapper()
         provisioned = subprocess.run(
@@ -360,6 +366,17 @@ def run_suite(definition: SuiteDefinition, *, sim: str, logger: TestLogger, nigh
             contexts={"command": " ".join(command), "output": output},
         )
         raise RuntimeError(f"{definition.label} failed")
+    if power_metrics_artifact.exists():
+        payload = json.loads(power_metrics_artifact.read_text(encoding="utf-8"))
+        for case in payload.get("cases", []):
+            if not isinstance(case, dict):
+                continue
+            case_name = str(case.get("case", "unknown"))
+            for line in case.get("summary", []):
+                logger.context(f"power.{definition.label}.{case_name}", line)
+            anomalies = case.get("anomalies", [])
+            if anomalies:
+                logger.context(f"power.{definition.label}.{case_name}.anomalies", ", ".join(str(item) for item in anomalies))
     return SuiteResult(
         definition=definition,
         passed=passed,

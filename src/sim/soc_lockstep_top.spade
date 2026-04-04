@@ -2,7 +2,7 @@ use lib::board::clockgen::timebase;
 use lib::bus::membus::observe_req;
 use lib::bus::types::{BusOwner, BusRegion, BusReq, BusResp};
 use lib::cpu::core::cpu_core;
-use lib::cpu::types::{IrqPending, MemoryBehaviorProfile, ModelProfile, ResetProfile, SimulationProfiles};
+use lib::cpu::types::{HaltState, IrqPending, MemoryBehaviorProfile, ModelProfile, Phase, ResetProfile, SimulationProfiles};
 use lib::sim::types::{SimStimulus, cpu_arch_time_enable, peripheral_arch_time_enable};
 
 struct SocLockstepTopOut {
@@ -25,6 +25,28 @@ struct SocLockstepTopOut {
     peripheral_arch_time_enable: bool,
     irq_pending: uint<5>,
     bus_read_data: uint<8>,
+}
+
+fn count_inc(counter: uint<64>, active: bool) -> uint<64> {
+    if active { trunc(counter + 1u64) } else { counter }
+}
+
+fn mask_has(mask: uint<10>, bit: uint<10>) -> bool {
+    (mask & bit) == bit
+}
+
+fn phase_is_halted(phase: Phase) -> bool {
+    match phase {
+        Phase::Halted => true,
+        _ => false,
+    }
+}
+
+fn halt_is_halted(halt: HaltState) -> bool {
+    match halt {
+        HaltState::Halted => true,
+        _ => false,
+    }
 }
 
 fn encode_model_profile(profile: SimulationProfiles) -> uint<2> {
@@ -96,6 +118,24 @@ entity soc_lockstep_top(
     let cpu_irq_pending = IrqPending$(pending: irq_pending);
     let cpu = inst cpu_core(clk, rst, cpu_m_ce, cpu_bus_resp, cpu_irq_pending);
     let bus_obs = observe_req(rst, cpu_m_ce, cpu_bus_req(cpu.bus_req_kind, cpu.bus_req_addr, cpu.bus_req_data));
+    let bus_active = cpu.bus_req_kind != 0u2;
+    let halted_cycle = halt_is_halted(cpu.halt_state) && phase_is_halted(cpu.phase);
+    let halt_quiescent = halted_cycle && !bus_active && !cpu.alu_active && !cpu.delta_active && !cpu.irq_ack_valid;
+    reg(clk) metric_total_cycles: uint<64> reset(rst: 0u64) = trunc(metric_total_cycles + 1u64);
+    reg(clk) metric_bus_active_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_bus_active_cycles, bus_active);
+    reg(clk) metric_alu_active_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_alu_active_cycles, cpu.alu_active);
+    reg(clk) metric_halted_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_halted_cycles, halted_cycle);
+    reg(clk) metric_halt_quiescent_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_halt_quiescent_cycles, halt_quiescent);
+    reg(clk) metric_reg_a_we_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_reg_a_we_cycles, mask_has(cpu.reg_we_mask, 0x001u10));
+    reg(clk) metric_reg_f_we_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_reg_f_we_cycles, mask_has(cpu.reg_we_mask, 0x002u10));
+    reg(clk) metric_reg_b_we_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_reg_b_we_cycles, mask_has(cpu.reg_we_mask, 0x004u10));
+    reg(clk) metric_reg_c_we_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_reg_c_we_cycles, mask_has(cpu.reg_we_mask, 0x008u10));
+    reg(clk) metric_reg_d_we_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_reg_d_we_cycles, mask_has(cpu.reg_we_mask, 0x010u10));
+    reg(clk) metric_reg_e_we_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_reg_e_we_cycles, mask_has(cpu.reg_we_mask, 0x020u10));
+    reg(clk) metric_reg_h_we_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_reg_h_we_cycles, mask_has(cpu.reg_we_mask, 0x040u10));
+    reg(clk) metric_reg_l_we_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_reg_l_we_cycles, mask_has(cpu.reg_we_mask, 0x080u10));
+    reg(clk) metric_reg_sp_we_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_reg_sp_we_cycles, mask_has(cpu.reg_we_mask, 0x100u10));
+    reg(clk) metric_reg_pc_we_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_reg_pc_we_cycles, mask_has(cpu.reg_we_mask, 0x200u10));
 
     SocLockstepTopOut$(
         commit_seq: cpu.commit_seq,

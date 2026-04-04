@@ -49,6 +49,11 @@ class SimScaffoldTest(unittest.TestCase):
             "stimulus.if_set_bits",
             "stimulus.if_clear_bits",
             "cpu.irq_ack_valid",
+            "metric_total_cycles",
+            "metric_bus_active_cycles",
+            "metric_alu_active_cycles",
+            "metric_halt_quiescent_cycles",
+            "metric_reg_pc_we_cycles",
         ]:
             self.assertIn(symbol, text)
         soc_text = SOC_TOP_PATH.read_text(encoding="utf-8")
@@ -60,6 +65,11 @@ class SimScaffoldTest(unittest.TestCase):
             "bus_region: uint<4>",
             "let tb = inst timebase(",
             "let cpu = inst cpu_core(",
+            "metric_total_cycles",
+            "metric_bus_active_cycles",
+            "metric_alu_active_cycles",
+            "metric_halt_quiescent_cycles",
+            "metric_reg_pc_we_cycles",
         ]:
             self.assertIn(symbol, soc_text)
 

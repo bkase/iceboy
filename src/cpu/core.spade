@@ -1,8 +1,9 @@
 use std::option::Option;
 use lib::bus::types::{BusReq, BusResp};
+use lib::cpu::decode_types::{DecodedOp, MiscKind};
 use lib::cpu::regs::{Registers, mask_f};
 use lib::cpu::semantics::{apply_delta, step_mcycle};
-use lib::cpu::types::{CpuArchState, CpuMicroState, CpuState, HaltState, ImeState, IrqPending, MicroInput, Phase, initial_cpu_micro_state, no_irq_ack};
+use lib::cpu::types::{CpuArchState, CpuDelta, CpuMicroState, CpuState, HaltState, ImeState, Imm8Cont, IrqPending, MicroInput, MicroWriteSet, Phase, ReadCont, RegWriteSet, initial_cpu_micro_state, no_irq_ack};
 
 pub struct CpuCoreOut {
     commit_seq: uint<64>,
@@ -17,6 +18,9 @@ pub struct CpuCoreOut {
     bus_req_data: uint<8>,
     irq_ack_valid: bool,
     irq_ack_bit: uint<3>,
+    reg_we_mask: uint<10>,
+    alu_active: bool,
+    delta_active: bool,
 }
 
 fn skipboot_pc() -> uint<16> {
@@ -71,6 +75,161 @@ fn bus_req_data(req: BusReq) -> uint<8> {
     }
 }
 
+fn valid_u8(value: Option<uint<8>>) -> bool {
+    match value {
+        Option::Some(inner) => {
+            let _ = inner;
+            true
+        },
+        Option::None => false,
+    }
+}
+
+fn valid_u16(value: Option<uint<16>>) -> bool {
+    match value {
+        Option::Some(inner) => {
+            let _ = inner;
+            true
+        },
+        Option::None => false,
+    }
+}
+
+fn valid_phase(value: Option<Phase>) -> bool {
+    match value {
+        Option::Some(inner) => {
+            let _ = inner;
+            true
+        },
+        Option::None => false,
+    }
+}
+
+fn valid_decoded(value: Option<DecodedOp>) -> bool {
+    match value {
+        Option::Some(inner) => {
+            let _ = inner;
+            true
+        },
+        Option::None => false,
+    }
+}
+
+fn valid_ime(value: Option<ImeState>) -> bool {
+    match value {
+        Option::Some(inner) => {
+            let _ = inner;
+            true
+        },
+        Option::None => false,
+    }
+}
+
+fn valid_halt(value: Option<HaltState>) -> bool {
+    match value {
+        Option::Some(inner) => {
+            let _ = inner;
+            true
+        },
+        Option::None => false,
+    }
+}
+
+fn reg_we_mask_from_delta(writes: RegWriteSet, sp_write: Option<uint<16>>, pc_write: Option<uint<16>>) -> uint<10> {
+    (if valid_u8(writes.a) { 0x001u10 } else { 0u10 })
+    | (if valid_u8(writes.f) { 0x002u10 } else { 0u10 })
+    | (if valid_u8(writes.b) { 0x004u10 } else { 0u10 })
+    | (if valid_u8(writes.c) { 0x008u10 } else { 0u10 })
+    | (if valid_u8(writes.d) { 0x010u10 } else { 0u10 })
+    | (if valid_u8(writes.e) { 0x020u10 } else { 0u10 })
+    | (if valid_u8(writes.h) { 0x040u10 } else { 0u10 })
+    | (if valid_u8(writes.l) { 0x080u10 } else { 0u10 })
+    | (if valid_u16(sp_write) { 0x100u10 } else { 0u10 })
+    | (if valid_u16(pc_write) { 0x200u10 } else { 0u10 })
+}
+
+fn micro_write_active(writes: MicroWriteSet) -> bool {
+    valid_phase(writes.phase)
+        || valid_u8(writes.opcode_latch)
+        || valid_u8(writes.imm_lo)
+        || valid_u8(writes.imm_hi)
+        || valid_decoded(writes.decoded)
+        || valid_u16(writes.temp)
+}
+
+fn delta_active(delta: CpuDelta) -> bool {
+    reg_we_mask_from_delta(delta.regs_write, delta.sp_write, delta.pc_write) != 0u10
+        || valid_ime(delta.ime_write)
+        || valid_halt(delta.halt_write)
+        || micro_write_active(delta.micro_write)
+}
+
+fn misc_alu_active(kind: MiscKind) -> bool {
+    match kind {
+        MiscKind::Daa => true,
+        MiscKind::Cpl => true,
+        MiscKind::Scf => true,
+        MiscKind::Ccf => true,
+        _ => false,
+    }
+}
+
+fn decoded_op_alu_active(op: DecodedOp) -> bool {
+    match op {
+        DecodedOp::Alu$(kind, dst, src, addressing) => {
+            let _ = (kind, dst, src, addressing);
+            true
+        },
+        DecodedOp::WordAlu$(kind, dst, src, addressing) => {
+            let _ = (kind, dst, src, addressing);
+            true
+        },
+        DecodedOp::BitOp$(kind, prefix, target, bit_index, zero_on_result, addressing) => {
+            let _ = (kind, prefix, target, bit_index, zero_on_result, addressing);
+            true
+        },
+        DecodedOp::Misc$(kind, addressing) => {
+            let _ = addressing;
+            misc_alu_active(kind)
+        },
+        _ => false,
+    }
+}
+
+fn read_cont_alu_active(k: ReadCont) -> bool {
+    match k {
+        ReadCont::AluFromMem$(kind) => {
+            let _ = kind;
+            true
+        },
+        ReadCont::BitOpFromMem$(kind, bit_index, zero_on_result) => {
+            let _ = (kind, bit_index, zero_on_result);
+            true
+        },
+        _ => false,
+    }
+}
+
+fn imm8_cont_alu_active(k: Imm8Cont) -> bool {
+    match k {
+        Imm8Cont::AddSpDisp => true,
+        Imm8Cont::LoadHlSpDisp => true,
+        _ => false,
+    }
+}
+
+fn alu_active_for_phase(phase: Phase) -> bool {
+    match phase {
+        Phase::Execute$(op) => decoded_op_alu_active(op),
+        Phase::ReadMem$(addr, k) => {
+            let _ = addr;
+            read_cont_alu_active(k)
+        },
+        Phase::ReadImm8$(k) => imm8_cont_alu_active(k),
+        _ => false,
+    }
+}
+
 pub entity cpu_core(
     clk: clock,
     rst: bool,
@@ -94,6 +253,9 @@ pub entity cpu_core(
     let visible_bus_req = if m_ce { step.bus_req } else { BusReq::Idle };
     let visible_irq_ack = if m_ce { step.irq_ack } else { no_irq_ack() };
     let visible_f = visible_arch.regs.f;
+    let visible_reg_we_mask = if m_ce { reg_we_mask_from_delta(step.delta.regs_write, step.delta.sp_write, step.delta.pc_write) } else { 0u10 };
+    let visible_alu_active = if m_ce { alu_active_for_phase(micro_state.phase) } else { false };
+    let visible_delta_active = if m_ce { delta_active(step.delta) } else { false };
 
     CpuCoreOut$(
         commit_seq: if m_ce { trunc(commit_seq + 1u64) } else { commit_seq },
@@ -114,5 +276,8 @@ pub entity cpu_core(
             Option::Some(value) => value,
             Option::None => 0u3,
         },
+        reg_we_mask: visible_reg_we_mask,
+        alu_active: visible_alu_active,
+        delta_active: visible_delta_active,
     )
 }

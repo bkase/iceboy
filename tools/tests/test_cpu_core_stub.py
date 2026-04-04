@@ -32,10 +32,16 @@ class CpuCoreStubContractTest(unittest.TestCase):
             "bus_req_data: uint<8>",
             "irq_ack_valid: bool",
             "irq_ack_bit: uint<3>",
+            "reg_we_mask: uint<10>",
+            "alu_active: bool",
+            "delta_active: bool",
             "fn skipboot_pc() -> uint<16>",
             "fn skipboot_sp() -> uint<16>",
             "fn skipboot_regs() -> Registers",
             "fn skipboot_arch_state() -> CpuArchState",
+            "fn reg_we_mask_from_delta(writes: RegWriteSet, sp_write: Option<uint<16>>, pc_write: Option<uint<16>>) -> uint<10>",
+            "fn delta_active(delta: CpuDelta) -> bool",
+            "fn alu_active_for_phase(phase: Phase) -> bool",
             "0x0100u16",
             "0xfffeu16",
             "0x01u8",
@@ -74,6 +80,9 @@ class CpuCoreStubContractTest(unittest.TestCase):
             "bus_req_data: bus_req_data(visible_bus_req)",
             "irq_ack_valid: match visible_irq_ack.ack_bit {",
             "irq_ack_bit: match visible_irq_ack.ack_bit {",
+            "reg_we_mask: visible_reg_we_mask",
+            "alu_active: visible_alu_active",
+            "delta_active: visible_delta_active",
         ]:
             self.assertIn(symbol, text)
 

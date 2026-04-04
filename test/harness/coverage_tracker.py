@@ -276,6 +276,12 @@ SUITE_COVERAGE: dict[str, SuiteCoverage] = {
         phase_constructors=frozenset({"skipboot_reset", "mcycle_commit"}),
         profile_triples=_profiles(CPU_BRING_UP_PROFILE),
     ),
+    "test_duty_cycle_metrics.py": SuiteCoverage(
+        opcode_families=_families("alu8", "control_misc", "load"),
+        phase_constructors=frozenset({"skipboot_reset", "mcycle_commit"}),
+        bus_regions=frozenset({"rom"}),
+        profile_triples=_profiles(CPU_BRING_UP_PROFILE),
+    ),
     "test_halt_quiescence.py": SuiteCoverage(
         phase_constructors=frozenset({"skipboot_reset", "mcycle_commit"}),
         bus_regions=frozenset({"rom"}),
