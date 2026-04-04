@@ -169,6 +169,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("unit", "test_timer.py", "swim", "test_timer"),
     SuiteDefinition("unit", "test_timebase.py", "swim", "test_timebase"),
     SuiteDefinition("unit", "test_write_enable.py", "swim", "test_write_enable"),
+    SuiteDefinition("formal", "bus_owner.sby", "shell", "tools/run_formal_bus_owner.sh"),
     SuiteDefinition("formal", "cpu_invariants.sby", "shell", "tools/run_formal_cpu_invariants.sh"),
     SuiteDefinition("formal", "cpu_reset.sby", "shell", "tools/run_formal_cpu_reset.sh"),
     SuiteDefinition("formal", "cpu_hold.sby", "shell", "tools/run_formal_cpu_hold.sh"),

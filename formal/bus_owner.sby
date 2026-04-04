@@ -1,0 +1,15 @@
+[options]
+mode prove
+depth 8
+
+[engines]
+smtbmc bitwuzla
+
+[script]
+read -formal -sv spade.sv bus_owner_formal.sv
+clk2fflogic
+prep -top bus_owner_formal
+
+[files]
+build/spade.sv
+formal/bus_owner_formal.sv
