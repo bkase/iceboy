@@ -1,0 +1,79 @@
+use std::option::Option;
+
+pub enum ModelProfile {
+    DMG,
+    CGB,
+}
+
+pub enum SocRevision {
+    DMG0,
+    DMGA,
+    DMGB,
+    DMGC,
+    MGB,
+    SGB,
+    SGB2,
+    CGB0,
+    CGBA,
+    CGBB,
+    CGBC,
+    CGBD,
+    CGBE,
+}
+
+pub enum BehaviorFeature {
+    DmgStatWriteQuirk,
+    PreCgbdScyBitplaneDesync,
+    Wx0Stutter,
+    Wx166NextLine,
+    WindowRetriggerGlitch,
+    ObjFetchCancelTiming,
+    DmgOamDmaBasic,
+    DmgOamDmaStrict,
+    ExactBlockedReadMaterialization,
+}
+
+// Spade has no generic Set<T>, so behavior flags live in a typed bitset wrapper.
+pub struct BehaviorFeatureSet {
+    bits: uint<9>,
+}
+
+pub struct BehaviorConfig {
+    model: ModelProfile,
+    soc_revision: Option<SocRevision>,
+    features: BehaviorFeatureSet,
+}
+
+pub fn empty_behavior_feature_set() -> BehaviorFeatureSet {
+    BehaviorFeatureSet$(bits: 0u9)
+}
+
+pub fn default_behavior_config(model: ModelProfile) -> BehaviorConfig {
+    BehaviorConfig$(model: model, soc_revision: Option::None, features: empty_behavior_feature_set())
+}
+
+pub fn dmg_behavior_config() -> BehaviorConfig {
+    default_behavior_config(ModelProfile::DMG)
+}
+
+pub fn behavior_feature_mask(feature: BehaviorFeature) -> uint<9> {
+    match feature {
+        BehaviorFeature::DmgStatWriteQuirk => 0b000000001u9,
+        BehaviorFeature::PreCgbdScyBitplaneDesync => 0b000000010u9,
+        BehaviorFeature::Wx0Stutter => 0b000000100u9,
+        BehaviorFeature::Wx166NextLine => 0b000001000u9,
+        BehaviorFeature::WindowRetriggerGlitch => 0b000010000u9,
+        BehaviorFeature::ObjFetchCancelTiming => 0b000100000u9,
+        BehaviorFeature::DmgOamDmaBasic => 0b001000000u9,
+        BehaviorFeature::DmgOamDmaStrict => 0b010000000u9,
+        BehaviorFeature::ExactBlockedReadMaterialization => 0b100000000u9,
+    }
+}
+
+pub fn feature_enabled(features: BehaviorFeatureSet, feature: BehaviorFeature) -> bool {
+    (features.bits & behavior_feature_mask(feature)) != 0u9
+}
+
+pub fn enable_feature(features: BehaviorFeatureSet, feature: BehaviorFeature) -> BehaviorFeatureSet {
+    BehaviorFeatureSet$(bits: features.bits | behavior_feature_mask(feature))
+}
