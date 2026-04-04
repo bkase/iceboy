@@ -59,21 +59,23 @@ Entry:
 .rtc:
     ld a, $08
     ld [$4000], a
-    ld a, $56
-    ld [$A000], a
     xor a
     ld [$6000], a
     ld a, $01
     ld [$6000], a
     ld a, [$A000]
-    ld [wDebugCounters + 2], a
-    cp $56
-    jr z, .disable
+    cp $FF
+    jr nz, .rtc_seen
     ld b, MBC3_RTC_LATCH
-    ld d, $56
-    ld e, a
-    ld c, $00
+    ld d, $00
+    ld e, $FF
+    ld c, $01
     jp FailTest
+
+.rtc_seen:
+    ld a, $01
+    ld [wDebugCounters + 2], a
+    jr .disable
 
 .disable:
     xor a

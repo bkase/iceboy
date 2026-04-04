@@ -59,7 +59,7 @@ build_one() {
             mbc_type="0x11"
             ;;
         MBC3_RAM)
-            mbc_type="0x12"
+            mbc_type="0x10"
             ram_size="0x03"
             ;;
     esac

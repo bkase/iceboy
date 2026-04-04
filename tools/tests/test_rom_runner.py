@@ -132,7 +132,7 @@ class RomRunnerTest(unittest.TestCase):
         self.assertEqual(bus.read(0x4000), 0x7F)
 
     def test_external_memory_bus_models_mbc3_ram_enable_banking_and_stub_rtc(self) -> None:
-        bus = ExternalMemoryBus(self.build_mbc3_rom(bank_count=16, cart_type=0x13, ram_size_code=0x03))
+        bus = ExternalMemoryBus(self.build_mbc3_rom(bank_count=16, cart_type=0x10, ram_size_code=0x03))
 
         self.assertEqual(bus.read(0xA000), 0xFF)
         bus.write(0xA000, 0x11)
