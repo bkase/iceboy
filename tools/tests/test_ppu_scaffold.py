@@ -382,7 +382,7 @@ class PpuScaffoldTest(unittest.TestCase):
             "write_valid_i: bool",
             "write_target_i: uint<4>",
             "write_value_i: uint<8>",
-            ") -> uint<37>",
+            ") -> uint<41>",
             "let core = inst ppu_core(",
             "let trace = core.trace;",
             "zext(encode_phase(trace.phase_after))",
@@ -392,6 +392,9 @@ class PpuScaffoldTest(unittest.TestCase):
             "(zext(encode_run(trace.run_after)) << 26)",
             "(zext(if trace.first_frame_blank_after { 1u1 } else { 0u1 }) << 28)",
             "(zext(trace.stat_readback_after) << 29)",
+            "(zext(core.mem_reqs.count) << 37)",
+            "std::option::Option::Some(event) => {",
+            "(zext(match core.scanout {",
         ]:
             self.assertIn(symbol, text)
 
