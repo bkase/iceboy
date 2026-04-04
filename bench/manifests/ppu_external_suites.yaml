@@ -1,0 +1,53 @@
+schema_version: 1
+suite_owned_root: bench/expected/suite_owned
+human_reviewed_root: bench/expected/human_reviewed
+
+suites:
+  - id: mooneye-test-suite
+    source_repo: https://github.com/Gekkio/mooneye-test-suite
+    source_rev: 443f6e1f2a8d83ad9da051cbb960311c5aaaea66
+    license: MIT
+    suite_classes:
+      acceptance: acceptance/ppu
+      emulator-only: emulator-only
+      manual-only: manual-only
+      misc: misc/ppu
+
+  - id: mealybug-tearoom-tests
+    source_repo: https://github.com/mattcurrie/mealybug-tearoom-tests
+    source_rev: 70e88fb90b59d19dfbb9c3ac36c64105202bb1f4
+    license: MIT
+    suite_class: timing-reference
+    expected_models: [DMG]
+    expected_soc_revisions: [DMG-blob]
+    local_expected:
+      artifact_origin: suite_owned
+      kind: screenshot_directory
+      path: bench/expected/suite_owned/mealybug-tearoom-tests/DMG-blob
+      screenshot_count: 24
+      image_normalization:
+        kind: logical_shades
+        shades: [0x00, 0x55, 0xAA, 0xFF]
+
+  - id: dmg-acid2
+    source_repo: https://github.com/mattcurrie/dmg-acid2
+    source_rev: 8a98ce731f96dde032ffb22ec36dc985d78fdb18
+    license: MIT
+    suite_class: reference-image
+    expected_models: [DMG]
+    local_expected:
+      artifact_origin: suite_owned
+      kind: reference_image
+      path: bench/expected/suite_owned/dmg-acid2/reference-dmg.png
+      image_normalization:
+        kind: logical_shades
+        shades: [0x00, 0x55, 0xAA, 0xFF]
+
+  - id: cgb-acid2
+    source_repo: https://github.com/mattcurrie/cgb-acid2
+    source_rev: 04c6ca40cf75b6a93513fe596de4ab797efaff97
+    license: MIT
+    suite_class: reference-image
+    expected_models: [CGB]
+    status: deferred
+    notes: Version pin only for the later CGB wave.
