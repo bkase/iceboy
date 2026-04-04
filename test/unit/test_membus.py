@@ -24,6 +24,9 @@ REQ_IDLE = 0
 REQ_READ = 1
 REQ_WRITE = 2
 
+PROFILE_DMG_CONSERVATIVE = 0
+PROFILE_DMG_REVISION_SPECIFIC = 1
+
 
 def decode_output(value: int) -> dict[str, int | bool]:
     return {
@@ -40,6 +43,7 @@ async def prepare_dut(dut) -> None:
     dut.req_kind_i_i.value = REQ_IDLE
     dut.addr_i_i.value = 0
     dut.data_i_i.value = 0
+    dut.memory_behavior_profile_i_i.value = PROFILE_DMG_CONSERVATIVE
     dut.oam_dma_active_i_i.value = 0
     dut.ppu_vram_active_i_i.value = 0
     dut.ppu_oam_active_i_i.value = 0
@@ -56,6 +60,7 @@ async def sample(
     addr: int,
     data: int = 0,
     m_ce: bool = True,
+    memory_behavior_profile: int = PROFILE_DMG_CONSERVATIVE,
     oam_dma_active: bool = False,
     ppu_vram_active: bool = False,
     ppu_oam_active: bool = False,
@@ -64,6 +69,7 @@ async def sample(
     dut.req_kind_i_i.value = req_kind & 0x3
     dut.addr_i_i.value = addr & 0xFFFF
     dut.data_i_i.value = data & 0xFF
+    dut.memory_behavior_profile_i_i.value = memory_behavior_profile & 0x3
     dut.oam_dma_active_i_i.value = int(oam_dma_active)
     dut.ppu_vram_active_i_i.value = int(ppu_vram_active)
     dut.ppu_oam_active_i_i.value = int(ppu_oam_active)
@@ -78,6 +84,7 @@ async def write_then_read(
     addr: int,
     value: int,
     m_ce: bool = True,
+    memory_behavior_profile: int = PROFILE_DMG_CONSERVATIVE,
     oam_dma_active: bool = False,
     ppu_vram_active: bool = False,
     ppu_oam_active: bool = False,
@@ -86,6 +93,7 @@ async def write_then_read(
     dut.req_kind_i_i.value = REQ_WRITE
     dut.addr_i_i.value = addr & 0xFFFF
     dut.data_i_i.value = value & 0xFF
+    dut.memory_behavior_profile_i_i.value = memory_behavior_profile & 0x3
     dut.oam_dma_active_i_i.value = int(oam_dma_active)
     dut.ppu_vram_active_i_i.value = int(ppu_vram_active)
     dut.ppu_oam_active_i_i.value = int(ppu_oam_active)
@@ -202,6 +210,29 @@ async def test_hram_round_trips(dut):
 
 
 @cocotb.test()
+async def test_echo_ram_mirrors_wram_in_both_directions(dut):
+    clock = Clock(dut.clk_i, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    await prepare_dut(dut)
+
+    _, through_echo = await write_then_read(dut, addr=0xC123, value=0x5A)
+    assert through_echo["data"] == 0x5A
+    assert through_echo["region"] == REGION_WRAM
+
+    echo_read = await sample(dut, req_kind=REQ_READ, addr=0xE123)
+    assert echo_read["data"] == 0x5A
+    assert echo_read["region"] == REGION_ECHO
+
+    _, through_wram = await write_then_read(dut, addr=0xE123, value=0xA7)
+    assert through_wram["data"] == 0xA7
+    assert through_wram["region"] == REGION_ECHO
+
+    wram_read = await sample(dut, req_kind=REQ_READ, addr=0xC123)
+    assert wram_read["data"] == 0xA7
+    assert wram_read["region"] == REGION_WRAM
+
+
+@cocotb.test()
 async def test_io_and_unimplemented_regions_read_ff_and_ignore_writes(dut):
     clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
@@ -211,7 +242,6 @@ async def test_io_and_unimplemented_regions_read_ff_and_ignore_writes(dut):
         (0xFF04, REGION_IO),
         (0x8000, REGION_VRAM),
         (0xA000, REGION_CART_RAM),
-        (0xE000, REGION_ECHO),
         (0xFEA0, REGION_NOT_USABLE),
         (0xFFFF, REGION_IE),
     ]:

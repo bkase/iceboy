@@ -1,5 +1,6 @@
 use lib::bus::membus::membus;
 use lib::bus::types::{BusObs, BusOwner, BusRegion, BusReq, BusResp};
+use lib::cpu::types::MemoryBehaviorProfile;
 
 fn encode_region(region: BusRegion) -> uint<4> {
     match region {
@@ -32,6 +33,13 @@ fn encode_output(resp: BusResp, obs: BusObs) -> uint<15> {
         | zext(if obs.blocked { 1u1 } else { 0u1 })
 }
 
+fn decode_memory_behavior_profile(profile: uint<2>) -> MemoryBehaviorProfile {
+    match profile {
+        1u2 => MemoryBehaviorProfile::DmgRevisionSpecific,
+        _ => MemoryBehaviorProfile::DmgConservative,
+    }
+}
+
 pub entity membus_test_top(
     clk: clock,
     rst: bool,
@@ -39,6 +47,7 @@ pub entity membus_test_top(
     req_kind_i: uint<2>,
     addr_i: uint<16>,
     data_i: uint<8>,
+    memory_behavior_profile_i: uint<2>,
     oam_dma_active_i: bool,
     ppu_vram_active_i: bool,
     ppu_oam_active_i: bool,
@@ -48,7 +57,16 @@ pub entity membus_test_top(
         2u2 => BusReq::Write$(addr: addr_i, data: data_i),
         _ => BusReq::Idle,
     };
-    let (resp, obs) = inst membus(clk, rst, m_ce_i, req, oam_dma_active_i, ppu_vram_active_i, ppu_oam_active_i);
+    let (resp, obs) = inst membus(
+        clk,
+        rst,
+        m_ce_i,
+        req,
+        decode_memory_behavior_profile(memory_behavior_profile_i),
+        oam_dma_active_i,
+        ppu_vram_active_i,
+        ppu_oam_active_i,
+    );
 
     encode_output(resp, obs)
 }

@@ -27,6 +27,7 @@ class MembusScaffoldTest(unittest.TestCase):
             "rst: bool",
             "m_ce: bool",
             "req: BusReq",
+            "memory_behavior_profile: MemoryBehaviorProfile",
             "oam_dma_active: bool",
             "ppu_vram_active: bool",
             "ppu_oam_active: bool",
@@ -59,10 +60,12 @@ class MembusScaffoldTest(unittest.TestCase):
             "req_kind_i: uint<2>",
             "addr_i: uint<16>",
             "data_i: uint<8>",
+            "memory_behavior_profile_i: uint<2>",
             "oam_dma_active_i: bool",
             "ppu_vram_active_i: bool",
             "ppu_oam_active_i: bool",
             ") -> uint<15>",
+            "decode_memory_behavior_profile(memory_behavior_profile_i)",
             "let (resp, obs) = inst membus(",
         ]:
             self.assertIn(symbol, text)

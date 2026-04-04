@@ -1,5 +1,6 @@
 use std::mem::{clocked_memory_init, read_memory};
 use lib::bus::types::{BusObs, BusOwner, BusRegion, BusReq, BusResp, idle_bus_obs, idle_bus_resp};
+use lib::cpu::types::MemoryBehaviorProfile;
 use lib::periph::oam_dma::oam_dma;
 
 fn decode_region(addr: uint<16>) -> BusRegion {
@@ -89,6 +90,16 @@ fn region_is_oam(region: BusRegion) -> bool {
     }
 }
 
+fn region_is_cpu_writable(region: BusRegion) -> bool {
+    match region {
+        BusRegion::Wram => true,
+        BusRegion::Echo => true,
+        BusRegion::Oam => true,
+        BusRegion::Hram => true,
+        _ => false,
+    }
+}
+
 fn owner_is_cpu(owner: BusOwner) -> bool {
     match owner {
         BusOwner::Cpu => true,
@@ -112,6 +123,31 @@ fn blocked_req(req: BusReq, owner: BusOwner) -> bool {
     match req {
         BusReq::Idle => false,
         _ => !owner_is_cpu(owner),
+    }
+}
+
+fn blocked_read_data(memory_behavior_profile: MemoryBehaviorProfile) -> uint<8> {
+    match memory_behavior_profile {
+        MemoryBehaviorProfile::DmgConservative => 0xffu8,
+        MemoryBehaviorProfile::DmgRevisionSpecific => 0xffu8,
+    }
+}
+
+fn not_usable_read_data(memory_behavior_profile: MemoryBehaviorProfile) -> uint<8> {
+    match memory_behavior_profile {
+        MemoryBehaviorProfile::DmgConservative => 0xffu8,
+        MemoryBehaviorProfile::DmgRevisionSpecific => 0xffu8,
+    }
+}
+
+fn cpu_write_allowed(
+    region: BusRegion,
+    blocked: bool,
+    memory_behavior_profile: MemoryBehaviorProfile,
+) -> bool {
+    match memory_behavior_profile {
+        MemoryBehaviorProfile::DmgConservative => !blocked && region_is_cpu_writable(region),
+        MemoryBehaviorProfile::DmgRevisionSpecific => !blocked && region_is_cpu_writable(region),
     }
 }
 
@@ -142,6 +178,7 @@ fn rom_addr(region: BusRegion, addr: uint<16>) -> uint<15> {
 fn wram_addr(region: BusRegion, addr: uint<16>) -> uint<13> {
     match region {
         BusRegion::Wram => trunc(addr - 0xc000u16),
+        BusRegion::Echo => trunc(addr - 0xe000u16),
         _ => 0u13,
     }
 }
@@ -164,6 +201,7 @@ fn wram_write(req: BusReq) -> (bool, uint<13>, uint<8>) {
     match req {
         BusReq::Write$(addr: addr, data: data) => match decode_region(addr) {
             BusRegion::Wram => (true, trunc(addr - 0xc000u16), data),
+            BusRegion::Echo => (true, trunc(addr - 0xe000u16), data),
             _ => (false, 0u13, 0u8),
         },
         _ => (false, 0u13, 0u8),
@@ -207,6 +245,7 @@ fn dma_read_data(region: BusRegion, rom_data: uint<8>, wram_data: uint<8>, hram_
     match region {
         BusRegion::Rom => rom_data,
         BusRegion::Wram => wram_data,
+        BusRegion::Echo => wram_data,
         BusRegion::Hram => hram_data,
         _ => 0xffu8,
     }
@@ -217,6 +256,7 @@ pub entity membus(
     rst: bool,
     m_ce: bool,
     req: BusReq,
+    memory_behavior_profile: MemoryBehaviorProfile,
     oam_dma_active: bool,
     ppu_vram_active: bool,
     ppu_oam_active: bool,
@@ -232,7 +272,16 @@ pub entity membus(
 
     let rom_mem = inst clocked_memory_init::<32768, 1, 15, uint<8>>(clk, [(false, 0u15, 0u8)], [0u8; 32768]);
     let dma_rom_mem = inst clocked_memory_init::<32768, 1, 15, uint<8>>(clk, [(false, 0u15, 0u8)], [0u8; 32768]);
-    let write_req = if obs.blocked { BusReq::Idle } else { req };
+    let write_req = match req {
+        BusReq::Write$(addr: _, data: _) => {
+            if cpu_write_allowed(region, obs.blocked, memory_behavior_profile) {
+                req
+            } else {
+                BusReq::Idle
+            }
+        },
+        _ => req,
+    };
     let (wram_we, wram_waddr, wram_wdata) = wram_write(write_req);
     let wram_mem = inst clocked_memory_init::<8192, 1, 13, uint<8>>(
         clk,
@@ -281,13 +330,15 @@ pub entity membus(
     let resp = match req {
         BusReq::Read$(addr: _) => BusResp$(data:
             if obs.blocked {
-                0xffu8
+                blocked_read_data(memory_behavior_profile)
             } else {
                 match region {
                     BusRegion::Rom => rom_data,
                     BusRegion::Wram => wram_data,
+                    BusRegion::Echo => wram_data,
                     BusRegion::Oam => inst read_memory(oam_mem, oam_addr(region, addr)),
                     BusRegion::Hram => hram_data,
+                    BusRegion::NotUsable => not_usable_read_data(memory_behavior_profile),
                     _ => 0xffu8,
                 }
             }),

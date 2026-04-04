@@ -22,6 +22,8 @@ REQ_IDLE = 0
 REQ_READ = 1
 REQ_WRITE = 2
 
+PROFILE_DMG_CONSERVATIVE = 0
+
 
 def decode_output(value: int) -> dict[str, int | bool]:
     return {
@@ -33,36 +35,51 @@ def decode_output(value: int) -> dict[str, int | bool]:
 
 
 async def prepare_dut(dut) -> None:
-    dut.rst.value = 0
-    dut.m_ce_i.value = 0
-    dut.req_kind_i.value = REQ_IDLE
-    dut.addr_i.value = 0
-    dut.data_i.value = 0
-    await RisingEdge(dut.clk)
+    dut.rst_i.value = 1
+    dut.m_ce_i_i.value = 0
+    dut.req_kind_i_i.value = REQ_IDLE
+    dut.addr_i_i.value = 0
+    dut.data_i_i.value = 0
+    dut.memory_behavior_profile_i_i.value = PROFILE_DMG_CONSERVATIVE
+    dut.oam_dma_active_i_i.value = 0
+    dut.ppu_vram_active_i_i.value = 0
+    dut.ppu_oam_active_i_i.value = 0
+    await RisingEdge(dut.clk_i)
+    await RisingEdge(dut.clk_i)
+    dut.rst_i.value = 0
+    await RisingEdge(dut.clk_i)
     await Timer(1, units="ns")
 
 
 async def sample(dut, *, req_kind: int, addr: int, data: int = 0, m_ce: bool = True) -> dict[str, int | bool]:
-    dut.m_ce_i.value = int(m_ce)
-    dut.req_kind_i.value = req_kind & 0x3
-    dut.addr_i.value = addr & 0xFFFF
-    dut.data_i.value = data & 0xFF
-    await RisingEdge(dut.clk)
+    dut.m_ce_i_i.value = int(m_ce)
+    dut.req_kind_i_i.value = req_kind & 0x3
+    dut.addr_i_i.value = addr & 0xFFFF
+    dut.data_i_i.value = data & 0xFF
+    dut.memory_behavior_profile_i_i.value = PROFILE_DMG_CONSERVATIVE
+    dut.oam_dma_active_i_i.value = 0
+    dut.ppu_vram_active_i_i.value = 0
+    dut.ppu_oam_active_i_i.value = 0
+    await RisingEdge(dut.clk_i)
     await Timer(1, units="ns")
     return decode_output(int(dut.output__.value))
 
 
 async def write_then_read(dut, *, addr: int, value: int) -> tuple[dict[str, int | bool], dict[str, int | bool]]:
-    dut.m_ce_i.value = 1
-    dut.req_kind_i.value = REQ_WRITE
-    dut.addr_i.value = addr & 0xFFFF
-    dut.data_i.value = value & 0xFF
-    await RisingEdge(dut.clk)
+    dut.m_ce_i_i.value = 1
+    dut.req_kind_i_i.value = REQ_WRITE
+    dut.addr_i_i.value = addr & 0xFFFF
+    dut.data_i_i.value = value & 0xFF
+    dut.memory_behavior_profile_i_i.value = PROFILE_DMG_CONSERVATIVE
+    dut.oam_dma_active_i_i.value = 0
+    dut.ppu_vram_active_i_i.value = 0
+    dut.ppu_oam_active_i_i.value = 0
+    await RisingEdge(dut.clk_i)
     await Timer(1, units="ns")
     write_snapshot = decode_output(int(dut.output__.value))
 
-    dut.req_kind_i.value = REQ_READ
-    await RisingEdge(dut.clk)
+    dut.req_kind_i_i.value = REQ_READ
+    await RisingEdge(dut.clk_i)
     await Timer(1, units="ns")
     read_snapshot = decode_output(int(dut.output__.value))
     return write_snapshot, read_snapshot
@@ -70,7 +87,7 @@ async def write_then_read(dut, *, addr: int, value: int) -> tuple[dict[str, int 
 
 @cocotb.test()
 async def test_address_decode_boundary_pairs(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -99,7 +116,7 @@ async def test_address_decode_boundary_pairs(dut):
 
 @cocotb.test()
 async def test_rom_window_endpoints_are_stable_and_read_only(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -118,7 +135,7 @@ async def test_rom_window_endpoints_are_stable_and_read_only(dut):
 
 @cocotb.test()
 async def test_wram_roundtrip_covers_endpoints_and_same_step_readback(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -133,7 +150,7 @@ async def test_wram_roundtrip_covers_endpoints_and_same_step_readback(dut):
 
 @cocotb.test()
 async def test_hram_roundtrip_covers_endpoints(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -146,7 +163,7 @@ async def test_hram_roundtrip_covers_endpoints(dut):
 
 @cocotb.test()
 async def test_io_stub_and_unmapped_regions_return_ff_without_blocking(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -154,8 +171,6 @@ async def test_io_stub_and_unmapped_regions_return_ff_without_blocking(dut):
         (0xFF00, REGION_IO),
         (0x8000, REGION_VRAM),
         (0xA000, REGION_CART_RAM),
-        (0xE000, REGION_ECHO),
-        (0xFE00, REGION_OAM),
         (0xFEA0, REGION_NOT_USABLE),
         (0xFFFF, REGION_IE),
     ]:
@@ -165,10 +180,19 @@ async def test_io_stub_and_unmapped_regions_return_ff_without_blocking(dut):
         assert snapshot["owner"] == OWNER_CPU
         assert snapshot["blocked"] is False
 
+    echo_write, echo_read = await write_then_read(dut, addr=0xE000, value=0xA4)
+    assert echo_write["region"] == REGION_ECHO
+    assert echo_read["data"] == 0xA4
+    assert echo_read["region"] == REGION_ECHO
+
+    oam_snapshot = await sample(dut, req_kind=REQ_READ, addr=0xFE00)
+    assert oam_snapshot["data"] == 0x00
+    assert oam_snapshot["region"] == REGION_OAM
+
 
 @cocotb.test()
 async def test_idle_returns_ff_without_cpu_ownership(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
