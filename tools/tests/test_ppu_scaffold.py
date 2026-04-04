@@ -13,6 +13,7 @@ PPU_MEMORY_PATH = ROOT / "src" / "ppu" / "sem" / "memory.spade"
 PPU_TYPES_PATH = ROOT / "src" / "ppu" / "sem" / "types.spade"
 PPU_PROFILES_PATH = ROOT / "src" / "ppu" / "sem" / "profiles.spade"
 PPU_SAMPLE_PATH = ROOT / "src" / "ppu" / "sem" / "sample.spade"
+PPU_SCANOUT_PATH = ROOT / "src" / "ppu" / "sem" / "scanout.spade"
 
 
 class PpuScaffoldTest(unittest.TestCase):
@@ -23,6 +24,7 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("pub mod memory;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod profiles;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod sample;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod scanout;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod types;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
 
     def test_ppu_event_bridge_surface_matches_architecture_contract(self) -> None:
@@ -86,6 +88,26 @@ class PpuScaffoldTest(unittest.TestCase):
             "Transfer { x_out: uint<8>, discard_scx: uint<3> }",
             "pub enum WindowState",
             "ActiveOnLine { win_x: uint<5>, win_line: uint<8> }",
+            "pub struct SelectedObjTicket",
+            "selection_rank: uint<4>",
+            "pub enum ObjPaletteSel",
+            "Obp0,",
+            "Obp1,",
+            "pub struct ObjFlags",
+            "y_flip: bool",
+            "x_flip: bool",
+            "palette: ObjPaletteSel",
+            "bg_over_obj: bool",
+            "pub struct ResolvedObjMeta",
+            "ticket: SelectedObjTicket",
+            "tile: uint<8>",
+            "flags: ObjFlags",
+            "row_index: uint<4>",
+            "pub struct ObjDrawRank",
+            "x: uint<8>",
+            "pub struct ObjPixel",
+            "color: uint<2>",
+            "draw_rank: ObjDrawRank",
             "pub struct PpuSamplingState",
             "pub struct PpuRenderState",
             "dot_in_line: uint<9>",
@@ -98,6 +120,9 @@ class PpuScaffoldTest(unittest.TestCase):
             "pub fn visible_mode(status: PpuStatusState) -> PpuMode",
             "pub fn lcd_enabled(status: PpuStatusState, regs: PpuRegs) -> bool",
             "LcdRunState::Disabled => PpuMode::LcdOff",
+            "pub fn zero_obj_flags() -> ObjFlags",
+            "pub fn zero_resolved_obj_meta() -> ResolvedObjMeta",
+            "pub fn zero_obj_draw_rank() -> ObjDrawRank",
         ]:
             self.assertIn(symbol, text)
 
@@ -195,6 +220,33 @@ class PpuScaffoldTest(unittest.TestCase):
             "phase: PpuPhase",
             "PpuPhase::Transfer$(x_out: _, discard_scx: _)",
             "lyc_eq_live: visible.ly == visible.regs.lyc",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_scanout_surface_matches_architecture_contract(self) -> None:
+        text = PPU_SCANOUT_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub enum PixelSource",
+            "Background,",
+            "Window,",
+            "Object,",
+            "pub struct PixelEmit",
+            "x: uint<8>",
+            "y: uint<8>",
+            "shade: uint<2>",
+            "source: PixelSource",
+            "pub enum BlankReason",
+            "LcdDisabled,",
+            "WarmupBlankFrame,",
+            "NonVisibleLine,",
+            "NonVisibleDot,",
+            "pub enum ScanoutEvent",
+            "Pixel { emit: PixelEmit }",
+            "Blank { y: uint<8>, reason: BlankReason }",
+            "FrameStart,",
+            "LineStart { y: uint<8> }",
+            "pub fn zero_pixel_emit() -> PixelEmit",
+            "pub fn blank_scanout_event(y: uint<8>, reason: BlankReason) -> ScanoutEvent",
         ]:
             self.assertIn(symbol, text)
 

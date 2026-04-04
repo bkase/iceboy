@@ -79,6 +79,25 @@ pub struct SelectedObjTicket {
     selection_rank: uint<4>,
 }
 
+pub enum ObjPaletteSel {
+    Obp0,
+    Obp1,
+}
+
+pub struct ObjFlags {
+    y_flip: bool,
+    x_flip: bool,
+    palette: ObjPaletteSel,
+    bg_over_obj: bool,
+}
+
+pub struct ResolvedObjMeta {
+    ticket: SelectedObjTicket,
+    tile: uint<8>,
+    flags: ObjFlags,
+    row_index: uint<4>,
+}
+
 pub struct LineObjList {
     count: uint<4>,
     slots: [SelectedObjTicket; 10],
@@ -119,12 +138,16 @@ pub struct BgPixel {
     palette: uint<8>,
 }
 
-pub struct ObjPixel {
-    shade: uint<2>,
-    palette: uint<8>,
-    bg_over_obj: bool,
+pub struct ObjDrawRank {
     x: uint<8>,
-    oam_index: uint<6>,
+    selection_rank: uint<4>,
+}
+
+pub struct ObjPixel {
+    color: uint<2>,
+    palette: ObjPaletteSel,
+    draw_rank: ObjDrawRank,
+    bg_over_obj: bool,
 }
 
 pub struct BgFifo {
@@ -207,6 +230,14 @@ pub fn zero_selected_obj_ticket() -> SelectedObjTicket {
     SelectedObjTicket$(oam_index: 0u6, x: 0u8, y: 0u8, selection_rank: 0u4)
 }
 
+pub fn zero_obj_flags() -> ObjFlags {
+    ObjFlags$(y_flip: false, x_flip: false, palette: ObjPaletteSel::Obp0, bg_over_obj: false)
+}
+
+pub fn zero_resolved_obj_meta() -> ResolvedObjMeta {
+    ResolvedObjMeta$(ticket: zero_selected_obj_ticket(), tile: 0u8, flags: zero_obj_flags(), row_index: 0u4)
+}
+
 pub fn empty_line_obj_list() -> LineObjList {
     LineObjList$(count: 0u4, slots: [zero_selected_obj_ticket(); 10])
 }
@@ -232,8 +263,17 @@ pub fn zero_bg_pixel() -> BgPixel {
     BgPixel$(shade: 0u2, palette: 0u8)
 }
 
+pub fn zero_obj_draw_rank() -> ObjDrawRank {
+    ObjDrawRank$(x: 0u8, selection_rank: 0u4)
+}
+
 pub fn zero_obj_pixel() -> ObjPixel {
-    ObjPixel$(shade: 0u2, palette: 0u8, bg_over_obj: false, x: 0u8, oam_index: 0u6)
+    ObjPixel$(
+        color: 0u2,
+        palette: ObjPaletteSel::Obp0,
+        draw_rank: zero_obj_draw_rank(),
+        bg_over_obj: false,
+    )
 }
 
 pub fn empty_bg_fifo() -> BgFifo {

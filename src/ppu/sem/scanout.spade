@@ -1,0 +1,34 @@
+pub enum PixelSource {
+    Background,
+    Window,
+    Object,
+}
+
+pub struct PixelEmit {
+    x: uint<8>,
+    y: uint<8>,
+    shade: uint<2>,
+    source: PixelSource,
+}
+
+pub enum BlankReason {
+    LcdDisabled,
+    WarmupBlankFrame,
+    NonVisibleLine,
+    NonVisibleDot,
+}
+
+pub enum ScanoutEvent {
+    Pixel { emit: PixelEmit },
+    Blank { y: uint<8>, reason: BlankReason },
+    FrameStart,
+    LineStart { y: uint<8> },
+}
+
+pub fn zero_pixel_emit() -> PixelEmit {
+    PixelEmit$(x: 0u8, y: 0u8, shade: 0u2, source: PixelSource::Background)
+}
+
+pub fn blank_scanout_event(y: uint<8>, reason: BlankReason) -> ScanoutEvent {
+    ScanoutEvent::Blank$(y: y, reason: reason)
+}
