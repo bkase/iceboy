@@ -35,6 +35,8 @@ build_one() {
     local sym_path
     local map_path
     local title
+    local mbc_type
+    local ram_size
 
     base="$(basename "${asm_path%.asm}")"
     obj_path="${OUT_DIR}/${base}.o"
@@ -42,10 +44,29 @@ build_one() {
     sym_path="${OUT_DIR}/${base}.sym"
     map_path="${OUT_DIR}/${base}.map"
     title="$(printf 'ICEBOY%-10s' "${base^^}" | tr -cd 'A-Z0-9' | cut -c1-16)"
+    mbc_type="0x00"
+    ram_size="0x00"
+
+    case "${base}" in
+        MBC1_SWITCH)
+            mbc_type="0x01"
+            ;;
+        MBC1_RAM)
+            mbc_type="0x02"
+            ram_size="0x03"
+            ;;
+        MBC3_SWITCH)
+            mbc_type="0x11"
+            ;;
+        MBC3_RAM)
+            mbc_type="0x12"
+            ram_size="0x03"
+            ;;
+    esac
 
     rgbasm -I "${SCRIPT_DIR}" -o "${obj_path}" "${asm_path}"
     rgblink -n "${sym_path}" -m "${map_path}" -o "${rom_path}" "${obj_path}"
-    rgbfix -v -p 0xFF -m ROM -r 0 -t "${title}" "${rom_path}"
+    rgbfix -v -p 0xFF -m "${mbc_type}" -r "${ram_size}" -t "${title}" "${rom_path}"
     "${UV_BIN}" run --with-requirements "${PY_LOCK}" python "${VALIDATOR}" --sym "${sym_path}" --asm "${asm_path}" --rom "${rom_path}"
 }
 
