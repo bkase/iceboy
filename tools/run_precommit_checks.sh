@@ -243,7 +243,7 @@ run_checked "$SWIM" build
 
 if [[ "$RUN_SYNTH" == "1" ]]; then
     echo -n "Synthesizing... "
-    run_checked "$SWIM" synth
+    run_checked tools/verify_hw_build.sh --skip-build
 else
     echo -e "Hardware synthesis: ${YELLOW}skipped in pre-commit (set ICEBOY_PRECOMMIT_INCLUDE_SYNTH=1 to enable)${NC}"
 fi

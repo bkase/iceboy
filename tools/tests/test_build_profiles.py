@@ -34,6 +34,11 @@ class BuildProfilesTest(unittest.TestCase):
             synth["instrumentation"],
             {"semantic_commit": False, "debug_trace": False, "activity_counters": False},
         )
+        self.assertEqual(synth["verification"]["script"], "tools/verify_hw_build.sh")
+        self.assertEqual(
+            synth["verification"]["forbids_debug_symbols"],
+            ["CommitTrace", "DebugTrace", "PpuDebugTrace", "SimStimulus", "BusObs", "SocLockstepTopOut"],
+        )
 
         self.assertIn("sim::semantic_observe_top::semantic_observe_top", semantic["simulation_tops"])
         self.assertIn("PpuSemanticCommit", semantic["output_ports"])

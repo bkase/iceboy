@@ -112,6 +112,18 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("[tool] nextpnr-ice40: nextpnr-0.10-15-g77ccf518", completed.stdout)
         self.assertIn("--tier power", completed.stdout)
 
+    def test_verify_hw_build_dry_run_uses_debug_free_contract(self) -> None:
+        completed = self.run_script("verify_hw_build.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+        self.assertIn("src/board/icebreaker_top.spade", completed.stdout)
+        self.assertIn("build/hw_verify/hardware.json", completed.stdout)
+        self.assertIn("build/hw_verify/yosys-stat.txt", completed.stdout)
+        self.assertIn("CommitTrace", completed.stdout)
+        self.assertIn("BusObs", completed.stdout)
+
     def test_oracle_wrapper_targets_direct_smoke_tool(self) -> None:
         completed = self.run_script("oracle.sh", "--dry-run")
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -168,6 +180,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('tools.tests.test_verilator_backend', text)
         self.assertIn('tools.tests.test_alu_generated_vectors', text)
         self.assertIn('ICEBOY_PRECOMMIT_INCLUDE_SYNTH', text)
+        self.assertIn('tools/verify_hw_build.sh --skip-build', text)
         self.assertIn('ICEBOY_PRECOMMIT_INCLUDE_FORMAL', text)
         self.assertIn('ICEBOY_PRECOMMIT_EXTENDED', text)
         self.assertIn('Running fast Python spec tests...', text)
