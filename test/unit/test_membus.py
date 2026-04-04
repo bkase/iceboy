@@ -1,7 +1,7 @@
 # top = bus::membus_test_top::membus_test_top
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, Timer
+from cocotb.triggers import ClockCycles, RisingEdge, Timer
 
 
 REGION_ROM = 0
@@ -35,15 +35,17 @@ def decode_output(value: int) -> dict[str, int | bool]:
 
 
 async def prepare_dut(dut) -> None:
-    dut.rst.value = 0
-    dut.m_ce_i.value = 0
-    dut.req_kind_i.value = REQ_IDLE
-    dut.addr_i.value = 0
-    dut.data_i.value = 0
-    dut.oam_dma_active_i.value = 0
-    dut.ppu_vram_active_i.value = 0
-    dut.ppu_oam_active_i.value = 0
-    await RisingEdge(dut.clk)
+    dut.rst_i.value = 1
+    dut.m_ce_i_i.value = 0
+    dut.req_kind_i_i.value = REQ_IDLE
+    dut.addr_i_i.value = 0
+    dut.data_i_i.value = 0
+    dut.oam_dma_active_i_i.value = 0
+    dut.ppu_vram_active_i_i.value = 0
+    dut.ppu_oam_active_i_i.value = 0
+    await ClockCycles(dut.clk_i, 2)
+    dut.rst_i.value = 0
+    await RisingEdge(dut.clk_i)
     await Timer(1, units="ns")
 
 
@@ -58,14 +60,14 @@ async def sample(
     ppu_vram_active: bool = False,
     ppu_oam_active: bool = False,
 ) -> dict[str, int | bool]:
-    dut.m_ce_i.value = int(m_ce)
-    dut.req_kind_i.value = req_kind & 0x3
-    dut.addr_i.value = addr & 0xFFFF
-    dut.data_i.value = data & 0xFF
-    dut.oam_dma_active_i.value = int(oam_dma_active)
-    dut.ppu_vram_active_i.value = int(ppu_vram_active)
-    dut.ppu_oam_active_i.value = int(ppu_oam_active)
-    await RisingEdge(dut.clk)
+    dut.m_ce_i_i.value = int(m_ce)
+    dut.req_kind_i_i.value = req_kind & 0x3
+    dut.addr_i_i.value = addr & 0xFFFF
+    dut.data_i_i.value = data & 0xFF
+    dut.oam_dma_active_i_i.value = int(oam_dma_active)
+    dut.ppu_vram_active_i_i.value = int(ppu_vram_active)
+    dut.ppu_oam_active_i_i.value = int(ppu_oam_active)
+    await RisingEdge(dut.clk_i)
     await Timer(1, units="ns")
     return decode_output(int(dut.output__.value))
 
@@ -80,19 +82,19 @@ async def write_then_read(
     ppu_vram_active: bool = False,
     ppu_oam_active: bool = False,
 ) -> tuple[dict[str, int | bool], dict[str, int | bool]]:
-    dut.m_ce_i.value = int(m_ce)
-    dut.req_kind_i.value = REQ_WRITE
-    dut.addr_i.value = addr & 0xFFFF
-    dut.data_i.value = value & 0xFF
-    dut.oam_dma_active_i.value = int(oam_dma_active)
-    dut.ppu_vram_active_i.value = int(ppu_vram_active)
-    dut.ppu_oam_active_i.value = int(ppu_oam_active)
-    await RisingEdge(dut.clk)
+    dut.m_ce_i_i.value = int(m_ce)
+    dut.req_kind_i_i.value = REQ_WRITE
+    dut.addr_i_i.value = addr & 0xFFFF
+    dut.data_i_i.value = value & 0xFF
+    dut.oam_dma_active_i_i.value = int(oam_dma_active)
+    dut.ppu_vram_active_i_i.value = int(ppu_vram_active)
+    dut.ppu_oam_active_i_i.value = int(ppu_oam_active)
+    await RisingEdge(dut.clk_i)
     await Timer(1, units="ns")
     write_snapshot = decode_output(int(dut.output__.value))
 
-    dut.req_kind_i.value = REQ_READ
-    await RisingEdge(dut.clk)
+    dut.req_kind_i_i.value = REQ_READ
+    await RisingEdge(dut.clk_i)
     await Timer(1, units="ns")
     read_snapshot = decode_output(int(dut.output__.value))
     return write_snapshot, read_snapshot
@@ -100,7 +102,7 @@ async def write_then_read(
 
 @cocotb.test()
 async def test_idle_returns_ff_and_idle_bus_obs(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -116,7 +118,7 @@ async def test_idle_returns_ff_and_idle_bus_obs(dut):
 
 @cocotb.test()
 async def test_address_decode_boundaries_cover_every_wave_a_region(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -151,7 +153,7 @@ async def test_address_decode_boundaries_cover_every_wave_a_region(dut):
 
 @cocotb.test()
 async def test_rom_reads_zero_image_and_ignores_writes(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -166,7 +168,7 @@ async def test_rom_reads_zero_image_and_ignores_writes(dut):
 
 @cocotb.test()
 async def test_wram_round_trips_and_m_ce_gates_writes(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -186,7 +188,7 @@ async def test_wram_round_trips_and_m_ce_gates_writes(dut):
 
 @cocotb.test()
 async def test_hram_round_trips(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -201,7 +203,7 @@ async def test_hram_round_trips(dut):
 
 @cocotb.test()
 async def test_io_and_unimplemented_regions_read_ff_and_ignore_writes(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -210,7 +212,6 @@ async def test_io_and_unimplemented_regions_read_ff_and_ignore_writes(dut):
         (0x8000, REGION_VRAM),
         (0xA000, REGION_CART_RAM),
         (0xE000, REGION_ECHO),
-        (0xFE00, REGION_OAM),
         (0xFEA0, REGION_NOT_USABLE),
         (0xFFFF, REGION_IE),
     ]:
@@ -222,10 +223,18 @@ async def test_io_and_unimplemented_regions_read_ff_and_ignore_writes(dut):
         assert after["data"] == 0xFF
         assert after["region"] == region
 
+    before_oam = await sample(dut, req_kind=REQ_READ, addr=0xFE00)
+    assert before_oam["data"] == 0x00
+    assert before_oam["region"] == REGION_OAM
+
+    _, after_oam = await write_then_read(dut, addr=0xFE00, value=0x77)
+    assert after_oam["data"] == 0x77
+    assert after_oam["region"] == REGION_OAM
+
 
 @cocotb.test()
-async def test_oam_dma_blocks_non_hram_accesses_and_preserves_existing_contents(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+async def test_oam_dma_blocks_non_io_hram_accesses_and_preserves_existing_contents(dut):
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -238,6 +247,12 @@ async def test_oam_dma_blocks_non_hram_accesses_and_preserves_existing_contents(
     assert blocked["owner"] == OWNER_OAM_DMA
     assert blocked["blocked"] is True
 
+    ie_blocked = await sample(dut, req_kind=REQ_READ, addr=0xFFFF, oam_dma_active=True)
+    assert ie_blocked["data"] == 0xFF
+    assert ie_blocked["region"] == REGION_IE
+    assert ie_blocked["owner"] == OWNER_OAM_DMA
+    assert ie_blocked["blocked"] is True
+
     _, after_write = await write_then_read(dut, addr=0xC123, value=0x99, oam_dma_active=True)
     assert after_write["data"] == 0xFF
     assert after_write["owner"] == OWNER_OAM_DMA
@@ -249,8 +264,8 @@ async def test_oam_dma_blocks_non_hram_accesses_and_preserves_existing_contents(
 
 
 @cocotb.test()
-async def test_oam_dma_keeps_hram_accessible(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+async def test_oam_dma_keeps_io_and_hram_accessible(dut):
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -260,10 +275,64 @@ async def test_oam_dma_keeps_hram_accessible(dut):
     assert readback["owner"] == OWNER_CPU
     assert readback["blocked"] is False
 
+    io_snapshot = await sample(dut, req_kind=REQ_READ, addr=0xFF04, oam_dma_active=True)
+    assert io_snapshot["data"] == 0xFF
+    assert io_snapshot["region"] == REGION_IO
+    assert io_snapshot["owner"] == OWNER_CPU
+    assert io_snapshot["blocked"] is False
+
+
+@cocotb.test()
+async def test_ff46_write_starts_internal_dma_copy_for_160_mcycles(dut):
+    clock = Clock(dut.clk_i, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    await prepare_dut(dut)
+
+    for addr, value in [
+        (0xC100, 0x12),
+        (0xC101, 0x34),
+        (0xC19F, 0xAB),
+    ]:
+        _, seeded = await write_then_read(dut, addr=addr, value=value)
+        assert seeded["data"] == value
+        assert seeded["region"] == REGION_WRAM
+
+    start = await sample(dut, req_kind=REQ_WRITE, addr=0xFF46, data=0xC1)
+    assert start["region"] == REGION_IO
+    assert start["owner"] == OWNER_CPU
+    assert start["blocked"] is False
+
+    for cycle in range(159):
+        blocked = await sample(dut, req_kind=REQ_READ, addr=0xC100)
+        assert blocked["data"] == 0xFF, (cycle, blocked)
+        assert blocked["region"] == REGION_WRAM, (cycle, blocked)
+        assert blocked["owner"] == OWNER_OAM_DMA, (cycle, blocked)
+        assert blocked["blocked"] is True, (cycle, blocked)
+
+    released = await sample(dut, req_kind=REQ_READ, addr=0xC100)
+    assert released["data"] == 0x12
+    assert released["region"] == REGION_WRAM
+    assert released["owner"] == OWNER_CPU
+    assert released["blocked"] is False
+
+    first = await sample(dut, req_kind=REQ_READ, addr=0xFE00)
+    assert first["data"] == 0x12
+    assert first["region"] == REGION_OAM
+    assert first["owner"] == OWNER_CPU
+    assert first["blocked"] is False
+
+    second = await sample(dut, req_kind=REQ_READ, addr=0xFE01)
+    assert second["data"] == 0x34
+    assert second["region"] == REGION_OAM
+
+    last = await sample(dut, req_kind=REQ_READ, addr=0xFE9F)
+    assert last["data"] == 0xAB
+    assert last["region"] == REGION_OAM
+
 
 @cocotb.test()
 async def test_ppu_pixel_transfer_blocks_vram_but_not_wram(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -281,7 +350,7 @@ async def test_ppu_pixel_transfer_blocks_vram_but_not_wram(dut):
 
 @cocotb.test()
 async def test_ppu_oam_search_blocks_oam_and_ignores_writes(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 
@@ -299,7 +368,7 @@ async def test_ppu_oam_search_blocks_oam_and_ignores_writes(dut):
 
 @cocotb.test()
 async def test_oam_dma_takes_precedence_over_ppu_ownership(dut):
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
 

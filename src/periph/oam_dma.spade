@@ -1,0 +1,75 @@
+pub struct OamDmaOut {
+    active: bool,
+    source_high: uint<8>,
+    index: uint<8>,
+    source_addr: uint<16>,
+    dest_addr: uint<16>,
+    write_en: bool,
+}
+
+fn last_oam_index(index: uint<8>) -> bool {
+    index == 0x9fu8
+}
+
+pub entity oam_dma(
+    clk: clock,
+    rst: bool,
+    m_ce: bool,
+    start: bool,
+    source_high: uint<8>,
+) -> OamDmaOut {
+    decl active_reg;
+    decl source_high_reg;
+    decl index_reg;
+
+    let start_transfer = m_ce && start;
+    let advance_transfer = m_ce && active_reg;
+    let finishing_transfer = advance_transfer && last_oam_index(index_reg);
+
+    let next_active_reg =
+        if start_transfer {
+            true
+        } else {
+            if advance_transfer && finishing_transfer {
+                false
+            } else {
+                active_reg
+            }
+        };
+    let next_source_high_reg =
+        if start_transfer {
+            source_high
+        } else {
+            source_high_reg
+        };
+    let next_index_reg =
+        if start_transfer {
+            0u8
+        } else {
+            if advance_transfer {
+                if finishing_transfer {
+                    0u8
+                } else {
+                    trunc(index_reg + 1u8)
+                }
+            } else {
+                index_reg
+            }
+        };
+
+    reg(clk) active_reg: bool reset(rst: false) = next_active_reg;
+    reg(clk) source_high_reg: uint<8> reset(rst: 0u8) = next_source_high_reg;
+    reg(clk) index_reg: uint<8> reset(rst: 0u8) = next_index_reg;
+    let source_addr_hi: uint<16> = zext(source_high_reg);
+    let source_addr_lo: uint<16> = zext(index_reg);
+    let dest_addr_lo: uint<16> = zext(index_reg);
+
+    OamDmaOut$(
+        active: active_reg,
+        source_high: source_high_reg,
+        index: index_reg,
+        source_addr: (source_addr_hi << 8) | source_addr_lo,
+        dest_addr: trunc(0xfe00u16 + dest_addr_lo),
+        write_en: active_reg,
+    )
+}

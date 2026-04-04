@@ -1,0 +1,52 @@
+use lib::bus::membus::observe_req;
+use lib::bus::types::{BusObs, BusOwner, BusRegion, BusReq};
+
+fn encode_region(region: BusRegion) -> uint<4> {
+    match region {
+        BusRegion::Rom => 0u4,
+        BusRegion::Vram => 1u4,
+        BusRegion::CartRam => 2u4,
+        BusRegion::Wram => 3u4,
+        BusRegion::Echo => 4u4,
+        BusRegion::Oam => 5u4,
+        BusRegion::NotUsable => 6u4,
+        BusRegion::Io => 7u4,
+        BusRegion::Hram => 8u4,
+        BusRegion::Ie => 9u4,
+    }
+}
+
+fn encode_owner(owner: BusOwner) -> uint<2> {
+    match owner {
+        BusOwner::Cpu => 0u2,
+        BusOwner::OamDma => 1u2,
+        BusOwner::Ppu => 2u2,
+        BusOwner::Idle => 3u2,
+    }
+}
+
+fn encode_output(obs: BusObs) -> uint<7> {
+    (zext(encode_region(obs.region)) << 3)
+        | (zext(encode_owner(obs.owner)) << 1)
+        | zext(if obs.blocked { 1u1 } else { 0u1 })
+}
+
+pub entity observe_req_test_top(
+    rst: bool,
+    m_ce: bool,
+    req_kind: uint<2>,
+    addr: uint<16>,
+    data: uint<8>,
+    oam_dma_active: bool,
+    ppu_vram_active: bool,
+    ppu_oam_active: bool,
+) -> uint<7> {
+    let req = match req_kind {
+        1u2 => BusReq::Read$(addr: addr),
+        2u2 => BusReq::Write$(addr: addr, data: data),
+        _ => BusReq::Idle,
+    };
+    let obs = observe_req(rst, m_ce, req, oam_dma_active, ppu_vram_active, ppu_oam_active);
+
+    encode_output(obs)
+}

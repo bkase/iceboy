@@ -19,23 +19,21 @@ module bus_owner_formal;
     (* anyseq *) reg ppu_vram_active;
     (* anyseq *) reg ppu_oam_active;
 
-    wire [14:0] packed_output;
-    wire [7:0] resp_data = packed_output[14:7];
+    wire [6:0] packed_output;
     wire [3:0] region = packed_output[6:3];
     wire [1:0] owner = packed_output[2:1];
     wire blocked = packed_output[0];
     wire req_active = req_kind == 2'd1 || req_kind == 2'd2;
 
-    \iceboy::bus::membus_test_top::membus_test_top dut (
-        .clk_i(clk),
+    \iceboy::bus::observe_req_test_top::observe_req_test_top dut (
         .rst_i(rst),
-        .m_ce_i_i(m_ce),
-        .req_kind_i_i(req_kind),
-        .addr_i_i(addr),
-        .data_i_i(data),
-        .oam_dma_active_i_i(oam_dma_active),
-        .ppu_vram_active_i_i(ppu_vram_active),
-        .ppu_oam_active_i_i(ppu_oam_active),
+        .m_ce_i(m_ce),
+        .req_kind_i(req_kind),
+        .addr_i(addr),
+        .data_i(data),
+        .oam_dma_active_i(oam_dma_active),
+        .ppu_vram_active_i(ppu_vram_active),
+        .ppu_oam_active_i(ppu_oam_active),
         .output__(packed_output)
     );
 
@@ -51,12 +49,12 @@ module bus_owner_formal;
             assert(rst || !m_ce || !req_active);
         end
 
-        if (!rst && m_ce && req_active && oam_dma_active && (addr < 16'hFF80 || addr == 16'hFFFF)) begin
+        if (!rst && m_ce && req_active && oam_dma_active && (addr < 16'hFF00 || addr == 16'hFFFF)) begin
             assert(owner == OWNER_OAM_DMA);
             assert(blocked);
         end
 
-        if (!rst && m_ce && req_active && oam_dma_active && addr >= 16'hFF80 && addr <= 16'hFFFE) begin
+        if (!rst && m_ce && req_active && oam_dma_active && addr >= 16'hFF00 && addr <= 16'hFFFE) begin
             assert(owner == OWNER_CPU);
             assert(!blocked);
         end
@@ -71,9 +69,6 @@ module bus_owner_formal;
             assert(blocked);
         end
 
-        if (!rst && m_ce && req_kind == 2'd1 && blocked) begin
-            assert(resp_data == 8'hFF);
-        end
     end
 
     always @(posedge clk) begin

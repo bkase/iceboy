@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 BUS_MAIN_PATH = ROOT / "src" / "bus" / "main.spade"
 MEMBUS_PATH = ROOT / "src" / "bus" / "membus.spade"
 MEMBUS_TEST_TOP_PATH = ROOT / "src" / "bus" / "membus_test_top.spade"
+OBSERVE_REQ_TEST_TOP_PATH = ROOT / "src" / "bus" / "observe_req_test_top.spade"
 
 
 class MembusScaffoldTest(unittest.TestCase):
@@ -15,6 +16,7 @@ class MembusScaffoldTest(unittest.TestCase):
         text = BUS_MAIN_PATH.read_text(encoding="utf-8")
         self.assertIn("pub mod membus;", text)
         self.assertIn("pub mod membus_test_top;", text)
+        self.assertIn("pub mod observe_req_test_top;", text)
 
     def test_membus_contract_matches_wave_a_memory_map(self) -> None:
         text = MEMBUS_PATH.read_text(encoding="utf-8")
@@ -41,6 +43,9 @@ class MembusScaffoldTest(unittest.TestCase):
             "clocked_memory_init::<32768, 1, 15, uint<8>>",
             "clocked_memory_init::<8192, 1, 13, uint<8>>",
             "clocked_memory_init::<127, 1, 7, uint<8>>",
+            "clocked_memory_init::<256, 2, 8, uint<8>>",
+            "let dma = inst oam_dma(",
+            "fn dma_start(req: BusReq) -> (bool, uint<8>)",
             "idle_bus_obs()",
             "idle_bus_resp()",
             "read_memory(",
@@ -59,6 +64,15 @@ class MembusScaffoldTest(unittest.TestCase):
             "ppu_oam_active_i: bool",
             ") -> uint<15>",
             "let (resp, obs) = inst membus(",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_observe_req_test_top_exists_for_formal_ownership_checks(self) -> None:
+        text = OBSERVE_REQ_TEST_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub entity observe_req_test_top(",
+            "let obs = observe_req(",
+            ") -> uint<7>",
         ]:
             self.assertIn(symbol, text)
 

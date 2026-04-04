@@ -1,0 +1,15 @@
+use lib::periph::oam_dma::oam_dma;
+
+pub entity oam_dma_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    m_ce_i: bool,
+    start_i: bool,
+    source_high_i: uint<8>,
+) -> uint<17> {
+    let dma = inst oam_dma(clk_i, rst_i, m_ce_i, start_i, source_high_i);
+
+    (zext(if dma.active { 1u1 } else { 0u1 }) << 16)
+        | (zext(dma.source_high) << 8)
+        | zext(dma.index)
+}
