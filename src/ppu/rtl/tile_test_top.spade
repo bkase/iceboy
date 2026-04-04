@@ -1,0 +1,53 @@
+use lib::ppu::rtl::tile::{apply_x_flip, apply_y_flip, bgwin_tile_addr, decode_tile_row, obj_tile_addr};
+use lib::ppu::sem::types::{Lcdc, ObjFlags, ObjPaletteSel};
+
+fn pack_row(row: [uint<2>; 8]) -> uint<16> {
+    zext(row[0])
+        | (zext(row[1]) << 2)
+        | (zext(row[2]) << 4)
+        | (zext(row[3]) << 6)
+        | (zext(row[4]) << 8)
+        | (zext(row[5]) << 10)
+        | (zext(row[6]) << 12)
+        | (zext(row[7]) << 14)
+}
+
+fn build_lcdc(bgwin_data_hi_i: bool) -> Lcdc {
+    Lcdc$(
+        lcd_enable: true,
+        win_map_hi: false,
+        win_enable: false,
+        bgwin_data_hi: bgwin_data_hi_i,
+        bg_map_hi: false,
+        obj_size_8x16: false,
+        obj_enable: false,
+        bg_enable: true,
+    )
+}
+
+fn build_flags(x_flip_i: bool, y_flip_i: bool) -> ObjFlags {
+    ObjFlags$(y_flip: y_flip_i, x_flip: x_flip_i, palette: ObjPaletteSel::Obp0, bg_over_obj: false)
+}
+
+pub entity tile_test_top(
+    lo_i: uint<8>,
+    hi_i: uint<8>,
+    bgwin_data_hi_i: bool,
+    tile_id_i: uint<8>,
+    row_i: uint<4>,
+    obj_size_i: bool,
+    x_flip_i: bool,
+    y_flip_i: bool,
+) -> uint<68> {
+    let decoded = decode_tile_row(lo_i, hi_i);
+    let flipped = if x_flip_i { apply_x_flip(decoded) } else { decoded };
+    let bg_addr = bgwin_tile_addr(build_lcdc(bgwin_data_hi_i), tile_id_i, trunc(row_i));
+    let y_flipped = apply_y_flip(row_i, obj_size_i);
+    let obj_addr = obj_tile_addr(obj_size_i, tile_id_i, row_i, build_flags(x_flip_i, y_flip_i));
+
+    zext(pack_row(decoded))
+        | (zext(pack_row(flipped)) << 16)
+        | (zext(bg_addr) << 32)
+        | (zext(y_flipped) << 48)
+        | (zext(obj_addr) << 52)
+}

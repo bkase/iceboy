@@ -31,6 +31,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/unit/test_video_backend_adapter.py"
     "test/unit/test_ppu_irq.py"
     "test/unit/test_ppu_timing.py"
+    "test/ppu/unit/test_tile.py"
     "test/unit/test_serial.py"
     "test/unit/test_interrupt_service.py"
     "test/unit/test_timer.py"
