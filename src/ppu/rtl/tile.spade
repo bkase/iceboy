@@ -1,0 +1,76 @@
+use lib::ppu::sem::types::{Lcdc, ObjFlags};
+
+fn decode_pixel(lo: uint<8>, hi: uint<8>, mask: uint<8>) -> uint<2> {
+    let lo_set = (lo & mask) != 0u8;
+    let hi_set = (hi & mask) != 0u8;
+    match (hi_set, lo_set) {
+        (false, false) => 0u2,
+        (false, true) => 1u2,
+        (true, false) => 2u2,
+        (true, true) => 3u2,
+    }
+}
+
+pub fn decode_tile_row(lo: uint<8>, hi: uint<8>) -> [uint<2>; 8] {
+    [
+        decode_pixel(lo, hi, 0x80u8),
+        decode_pixel(lo, hi, 0x40u8),
+        decode_pixel(lo, hi, 0x20u8),
+        decode_pixel(lo, hi, 0x10u8),
+        decode_pixel(lo, hi, 0x08u8),
+        decode_pixel(lo, hi, 0x04u8),
+        decode_pixel(lo, hi, 0x02u8),
+        decode_pixel(lo, hi, 0x01u8),
+    ]
+}
+
+pub fn bgwin_tile_addr(lcdc: Lcdc, tile_id: uint<8>, row: uint<3>) -> uint<16> {
+    let row_offset_u4: uint<4> = zext(row) << 1;
+    let row_offset: uint<17> = zext(row_offset_u4);
+    if lcdc.bgwin_data_hi {
+        let tile_offset: uint<17> = zext(tile_id) << 4;
+        let base_addr: uint<17> = trunc(0x8000u17 + tile_offset);
+        let addr: uint<17> = trunc(base_addr + row_offset);
+        trunc(addr)
+    } else {
+        let signed_bank = tile_id >= 0x80u8;
+        if signed_bank {
+            let signed_tile_index: uint<8> = trunc(tile_id - 0x80u8);
+            let tile_offset: uint<17> = zext(signed_tile_index) << 4;
+            let base_addr: uint<17> = trunc(0x8800u17 + tile_offset);
+            let addr: uint<17> = trunc(base_addr + row_offset);
+            trunc(addr)
+        } else {
+            let tile_offset: uint<17> = zext(tile_id) << 4;
+            let base_addr: uint<17> = trunc(0x9000u17 + tile_offset);
+            let addr: uint<17> = trunc(base_addr + row_offset);
+            trunc(addr)
+        }
+    }
+}
+
+pub fn apply_x_flip(row: [uint<2>; 8]) -> [uint<2>; 8] {
+    [row[7], row[6], row[5], row[4], row[3], row[2], row[1], row[0]]
+}
+
+pub fn apply_y_flip(row_idx: uint<4>, obj_size: bool) -> uint<4> {
+    if obj_size {
+        trunc(15u4 - row_idx)
+    } else {
+        trunc(7u4 - row_idx)
+    }
+}
+
+pub fn obj_tile_addr(obj_size: bool, tile_id: uint<8>, row: uint<4>, flags: ObjFlags) -> uint<16> {
+    let effective_row = if flags.y_flip { apply_y_flip(row, obj_size) } else { row };
+    let row_in_tile: uint<3> = trunc(effective_row);
+    let base_tile = if obj_size { tile_id & 0xfeu8 } else { tile_id };
+    let next_tile: uint<8> = trunc(base_tile + 1u8);
+    let tile_index = if obj_size && effective_row >= 8u4 { next_tile } else { base_tile };
+    let tile_offset: uint<17> = zext(tile_index) << 4;
+    let row_offset_u4: uint<4> = zext(row_in_tile) << 1;
+    let row_offset: uint<17> = zext(row_offset_u4);
+    let base_addr: uint<17> = trunc(0x8000u17 + tile_offset);
+    let addr: uint<17> = trunc(base_addr + row_offset);
+    trunc(addr)
+}

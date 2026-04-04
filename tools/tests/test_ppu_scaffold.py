@@ -12,6 +12,7 @@ PPU_RTL_MAIN_PATH = ROOT / "src" / "ppu" / "rtl" / "main.spade"
 PPU_RTL_IRQ_PATH = ROOT / "src" / "ppu" / "rtl" / "irq.spade"
 PPU_RTL_IRQ_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "irq_test_top.spade"
 PPU_RTL_REGS_PATH = ROOT / "src" / "ppu" / "rtl" / "regs.spade"
+PPU_RTL_TILE_PATH = ROOT / "src" / "ppu" / "rtl" / "tile.spade"
 PPU_RTL_TIMING_PATH = ROOT / "src" / "ppu" / "rtl" / "timing.spade"
 PPU_RTL_TIMING_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "timing_test_top.spade"
 PPU_EVENTS_PATH = ROOT / "src" / "ppu" / "sem" / "events.spade"
@@ -31,6 +32,7 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("pub mod irq;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod irq_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod regs;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod tile;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod timing;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod timing_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod events;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
@@ -358,6 +360,31 @@ class PpuScaffoldTest(unittest.TestCase):
             "0x44u8 => ly",
             "0x4Bu8 => regs.wx",
             "_ => 0xffu8",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_tile_helpers_match_architecture_contract(self) -> None:
+        text = PPU_RTL_TILE_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub fn decode_tile_row(lo: uint<8>, hi: uint<8>) -> [uint<2>; 8]",
+            "decode_pixel(lo, hi, 0x80u8)",
+            "decode_pixel(lo, hi, 0x01u8)",
+            "pub fn bgwin_tile_addr(lcdc: Lcdc, tile_id: uint<8>, row: uint<3>) -> uint<16>",
+            "if lcdc.bgwin_data_hi",
+            "0x8000u17",
+            "0x8800u17",
+            "0x9000u17",
+            "pub fn apply_x_flip(row: [uint<2>; 8]) -> [uint<2>; 8]",
+            "[row[7], row[6], row[5], row[4], row[3], row[2], row[1], row[0]]",
+            "pub fn apply_y_flip(row_idx: uint<4>, obj_size: bool) -> uint<4>",
+            "15u4 - row_idx",
+            "7u4 - row_idx",
+            "pub fn obj_tile_addr(obj_size: bool, tile_id: uint<8>, row: uint<4>, flags: ObjFlags) -> uint<16>",
+            "let effective_row = if flags.y_flip { apply_y_flip(row, obj_size) } else { row };",
+            "let base_tile = if obj_size { tile_id & 0xfeu8 } else { tile_id };",
+            "let next_tile: uint<8> = trunc(base_tile + 1u8);",
+            "let tile_index = if obj_size && effective_row >= 8u4 { next_tile } else { base_tile };",
+            "0x8000u17",
         ]:
             self.assertIn(symbol, text)
 
