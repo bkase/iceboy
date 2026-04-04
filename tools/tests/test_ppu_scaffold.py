@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ROOT_MAIN_PATH = ROOT / "src" / "main.spade"
 PPU_MAIN_PATH = ROOT / "src" / "ppu" / "main.spade"
 PPU_SEM_MAIN_PATH = ROOT / "src" / "ppu" / "sem" / "main.spade"
+PPU_EVENTS_PATH = ROOT / "src" / "ppu" / "sem" / "events.spade"
 PPU_MEMORY_PATH = ROOT / "src" / "ppu" / "sem" / "memory.spade"
 PPU_TYPES_PATH = ROOT / "src" / "ppu" / "sem" / "types.spade"
 PPU_PROFILES_PATH = ROOT / "src" / "ppu" / "sem" / "profiles.spade"
@@ -18,10 +19,57 @@ class PpuScaffoldTest(unittest.TestCase):
     def test_root_module_exports_ppu_tree(self) -> None:
         self.assertIn("mod ppu;", ROOT_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod sem;", PPU_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod events;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod memory;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod profiles;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod sample;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod types;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
+
+    def test_ppu_event_bridge_surface_matches_architecture_contract(self) -> None:
+        text = PPU_EVENTS_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub struct VideoCoord",
+            "frame: uint<32>",
+            "line: uint<8>",
+            "dot: uint<9>",
+            "pub mod mmio {",
+            "pub enum MmioReg",
+            "Lcdc,",
+            "Stat,",
+            "Scy,",
+            "Scx,",
+            "Lyc,",
+            "Wy,",
+            "Wx,",
+            "Bgp,",
+            "Obp0,",
+            "Obp1,",
+            "pub struct MmioWrite",
+            "target: MmioReg",
+            "value: uint<8>",
+            "pub enum PpuEventKind",
+            "MmioWrite { write: mmio::MmioWrite }",
+            "DmaStart { source_high: uint<8> }",
+            "ForceLcdPower { enabled: bool }",
+            "pub struct TimedPpuEvent",
+            "seq: uint<64>",
+            "at: VideoCoord",
+            "kind: PpuEventKind",
+            "pub struct OamDmaState",
+            "active: bool",
+            "source_high: uint<8>",
+            "pub struct DotInput",
+            "bus_events: [TimedPpuEvent; 4]",
+            "bus_event_count: uint<4>",
+            "mem_resp: PpuMemResp",
+            "dma_state: OamDmaState",
+            "pub fn zero_video_coord() -> VideoCoord",
+            "pub fn zero_mmio_write() -> MmioWrite",
+            "pub fn idle_timed_ppu_event() -> TimedPpuEvent",
+            "pub fn idle_oam_dma_state() -> OamDmaState",
+            "pub fn idle_dot_input() -> DotInput",
+        ]:
+            self.assertIn(symbol, text)
 
     def test_ppu_type_surface_matches_architecture_contract(self) -> None:
         text = PPU_TYPES_PATH.read_text(encoding="utf-8")

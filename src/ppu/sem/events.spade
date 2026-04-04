@@ -1,0 +1,84 @@
+use lib::ppu::sem::memory::{PpuMemResp, idle_ppu_mem_resp};
+
+pub struct VideoCoord {
+    frame: uint<32>,
+    line: uint<8>,
+    dot: uint<9>,
+}
+
+pub mod mmio {
+    pub enum MmioReg {
+        Lcdc,
+        Stat,
+        Scy,
+        Scx,
+        Lyc,
+        Wy,
+        Wx,
+        Bgp,
+        Obp0,
+        Obp1,
+    }
+
+    pub struct MmioWrite {
+        target: MmioReg,
+        value: uint<8>,
+    }
+
+    pub fn zero_mmio_write() -> MmioWrite {
+        MmioWrite$(target: MmioReg::Lcdc, value: 0u8)
+    }
+}
+
+pub enum PpuEventKind {
+    MmioWrite { write: mmio::MmioWrite },
+    DmaStart { source_high: uint<8> },
+    ForceLcdPower { enabled: bool },
+}
+
+pub struct TimedPpuEvent {
+    seq: uint<64>,
+    at: VideoCoord,
+    kind: PpuEventKind,
+}
+
+pub struct OamDmaState {
+    active: bool,
+    source_high: uint<8>,
+}
+
+pub struct DotInput {
+    bus_events: [TimedPpuEvent; 4],
+    bus_event_count: uint<4>,
+    mem_resp: PpuMemResp,
+    dma_state: OamDmaState,
+}
+
+pub fn zero_video_coord() -> VideoCoord {
+    VideoCoord$(frame: 0u32, line: 0u8, dot: 0u9)
+}
+
+pub fn zero_mmio_write() -> mmio::MmioWrite {
+    mmio::zero_mmio_write()
+}
+
+pub fn idle_timed_ppu_event() -> TimedPpuEvent {
+    TimedPpuEvent$(
+        seq: 0u64,
+        at: zero_video_coord(),
+        kind: PpuEventKind::MmioWrite$(write: zero_mmio_write()),
+    )
+}
+
+pub fn idle_oam_dma_state() -> OamDmaState {
+    OamDmaState$(active: false, source_high: 0u8)
+}
+
+pub fn idle_dot_input() -> DotInput {
+    DotInput$(
+        bus_events: [idle_timed_ppu_event(); 4],
+        bus_event_count: 0u4,
+        mem_resp: idle_ppu_mem_resp(),
+        dma_state: idle_oam_dma_state(),
+    )
+}
