@@ -337,7 +337,9 @@ class PpuScaffoldTest(unittest.TestCase):
             "pub struct PpuDebugTrace",
             "at: VideoCoord",
             "dot_in_line_after: uint<9>",
+            "run_after: LcdRunState",
             "phase_after: PpuPhase",
+            "first_frame_blank_after: bool",
             "fetcher: FetcherState",
             "bg_fifo: BgFifo",
             "obj_fifo: ObjFifo",
@@ -375,13 +377,19 @@ class PpuScaffoldTest(unittest.TestCase):
     def test_ppu_core_test_top_provides_stable_projection(self) -> None:
         text = PPU_RTL_CORE_TEST_TOP_PATH.read_text(encoding="utf-8")
         for symbol in [
-            "pub entity core_test_top(clk_i: clock, rst_i: bool, dot_ce_i: bool) -> uint<26>",
+            "pub entity core_test_top(",
+            "write_valid_i: bool",
+            "write_target_i: uint<4>",
+            "write_value_i: uint<8>",
+            ") -> uint<29>",
             "let core = inst ppu_core(",
             "let trace = core.trace;",
             "zext(encode_phase(trace.phase_after))",
             "(zext(trace.ly_after) << 3)",
             "(zext(trace.dot_in_line_after) << 11)",
             "(zext(encode_mode(trace.mode_after)) << 20)",
+            "(zext(encode_run(trace.run_after)) << 26)",
+            "(zext(if trace.first_frame_blank_after { 1u1 } else { 0u1 }) << 28)",
         ]:
             self.assertIn(symbol, text)
 

@@ -1,7 +1,8 @@
 use lib::ppu::rtl::core::ppu_core;
-use lib::ppu::sem::events::{idle_oam_dma_state, idle_timed_ppu_event, zero_video_coord};
+use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
+use lib::ppu::sem::events::{PpuEventKind, TimedPpuEvent, idle_oam_dma_state, idle_timed_ppu_event, zero_video_coord};
 use lib::ppu::sem::memory::idle_ppu_mem_resp;
-use lib::ppu::sem::types::{PpuMode, PpuPhase};
+use lib::ppu::sem::types::{LcdRunState, PpuMode, PpuPhase};
 
 fn encode_phase(phase: PpuPhase) -> uint<3> {
     match phase {
@@ -23,14 +24,59 @@ fn encode_mode(mode: PpuMode) -> uint<3> {
     }
 }
 
-pub entity core_test_top(clk_i: clock, rst_i: bool, dot_ce_i: bool) -> uint<26> {
+fn encode_run(run: LcdRunState) -> uint<2> {
+    match run {
+        LcdRunState::Disabled => 0u2,
+        LcdRunState::WarmupBlankFrame => 1u2,
+        LcdRunState::Running => 2u2,
+    }
+}
+
+fn decode_mmio_reg(target_i: uint<4>) -> MmioReg {
+    match target_i {
+        1u4 => MmioReg::Stat,
+        2u4 => MmioReg::Scy,
+        3u4 => MmioReg::Scx,
+        4u4 => MmioReg::Lyc,
+        5u4 => MmioReg::Wy,
+        6u4 => MmioReg::Wx,
+        7u4 => MmioReg::Bgp,
+        8u4 => MmioReg::Obp0,
+        9u4 => MmioReg::Obp1,
+        _ => MmioReg::Lcdc,
+    }
+}
+
+fn single_write_event(write_target_i: uint<4>, write_value_i: uint<8>) -> TimedPpuEvent {
+    TimedPpuEvent$(
+        seq: 0u64,
+        at: zero_video_coord(),
+        kind: PpuEventKind::MmioWrite$(write: MmioWrite$(target: decode_mmio_reg(write_target_i), value: write_value_i)),
+    )
+}
+
+pub entity core_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    dot_ce_i: bool,
+    write_valid_i: bool,
+    write_target_i: uint<4>,
+    write_value_i: uint<8>,
+) -> uint<29> {
+    let bus_events =
+        if write_valid_i {
+            [single_write_event(write_target_i, write_value_i), idle_timed_ppu_event(), idle_timed_ppu_event(), idle_timed_ppu_event()]
+        } else {
+            [idle_timed_ppu_event(); 4]
+        };
+    let bus_event_count = if write_valid_i { 1u4 } else { 0u4 };
     let core = inst ppu_core(
         clk_i,
         rst_i,
         dot_ce_i,
         zero_video_coord(),
-        [idle_timed_ppu_event(); 4],
-        0u4,
+        bus_events,
+        bus_event_count,
         idle_ppu_mem_resp(),
         idle_oam_dma_state(),
     );
@@ -43,4 +89,6 @@ pub entity core_test_top(clk_i: clock, rst_i: bool, dot_ce_i: bool) -> uint<26> 
         | (zext(if trace.stat_line_after { 1u1 } else { 0u1 }) << 23)
         | (zext(if core.irq_req.vblank_req { 1u1 } else { 0u1 }) << 24)
         | (zext(if core.irq_req.stat_req { 1u1 } else { 0u1 }) << 25)
+        | (zext(encode_run(trace.run_after)) << 26)
+        | (zext(if trace.first_frame_blank_after { 1u1 } else { 0u1 }) << 28)
 }
