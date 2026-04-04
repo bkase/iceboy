@@ -134,13 +134,31 @@ class CpuCommitTrace:
 
 @dataclass(frozen=True)
 class SoCLockstepObservation:
-    model_profile: int
-    reset_profile: int
-    memory_behavior_profile: int
-    cpu_arch_time_enable: bool
-    peripheral_arch_time_enable: bool
-    irq_pending: int
-    bus_read_data: int
+    ppu_scanout_valid: bool = False
+    ppu_scanout_kind: int = 0
+    ppu_scanout_x: int = 0
+    ppu_scanout_y: int = 0
+    ppu_scanout_shade: int = 0
+    ppu_scanout_source: int = 0
+    ppu_blank_reason: int = 0
+    ppu_semantic_valid: bool = False
+    ppu_semantic_ly: int = 0
+    ppu_semantic_mode: int = 0
+    ppu_semantic_stat_line: bool = False
+    ppu_semantic_irq_edge: int = 0
+    ppu_mode: int = 0
+    ppu_ly: int = 0
+    ppu_stat: int = 0
+    ppu_dot_in_line: int = 0
+    ppu_vblank_req: bool = False
+    ppu_stat_req: bool = False
+    model_profile: int = 0
+    reset_profile: int = 0
+    memory_behavior_profile: int = 0
+    cpu_arch_time_enable: bool = False
+    peripheral_arch_time_enable: bool = False
+    irq_pending: int = 0
+    bus_read_data: int = 0
     commit_seq: int = 0
     pc: int = 0
     bus_req_kind: int = 0
@@ -157,6 +175,24 @@ class SoCLockstepObservation:
     @classmethod
     def from_output(cls, output_value: int) -> "SoCLockstepObservation":
         return cls(
+            ppu_scanout_valid=bool((output_value >> 268) & 0x1),
+            ppu_scanout_kind=(output_value >> 266) & 0x3,
+            ppu_scanout_x=(output_value >> 258) & 0xFF,
+            ppu_scanout_y=(output_value >> 250) & 0xFF,
+            ppu_scanout_shade=(output_value >> 248) & 0x3,
+            ppu_scanout_source=(output_value >> 246) & 0x3,
+            ppu_blank_reason=(output_value >> 244) & 0x3,
+            ppu_semantic_valid=bool((output_value >> 243) & 0x1),
+            ppu_semantic_ly=(output_value >> 235) & 0xFF,
+            ppu_semantic_mode=(output_value >> 232) & 0x7,
+            ppu_semantic_stat_line=bool((output_value >> 231) & 0x1),
+            ppu_semantic_irq_edge=(output_value >> 229) & 0x3,
+            ppu_mode=(output_value >> 226) & 0x7,
+            ppu_ly=(output_value >> 218) & 0xFF,
+            ppu_stat=(output_value >> 210) & 0xFF,
+            ppu_dot_in_line=(output_value >> 201) & 0x1FF,
+            ppu_vblank_req=bool((output_value >> 200) & 0x1),
+            ppu_stat_req=bool((output_value >> 199) & 0x1),
             commit_seq=(output_value >> 135) & 0xFFFF_FFFF_FFFF_FFFF,
             pc=(output_value >> 119) & 0xFFFF,
             bus_req_kind=(output_value >> 117) & 0x3,

@@ -122,12 +122,22 @@ class SimScaffoldTest(unittest.TestCase):
         soc_text = SOC_TOP_PATH.read_text(encoding="utf-8")
         self.assertIn("entity soc_lockstep_top(", soc_text)
         for symbol in [
+            "ppu_mode: uint<3>",
+            "ppu_ly: uint<8>",
+            "ppu_stat: uint<8>",
+            "ppu_dot_in_line: uint<9>",
+            "ppu_vblank_req: bool",
+            "ppu_stat_req: bool",
             "commit_seq: uint<64>",
             "sys_counter: uint<32>",
             "m_ce: bool",
             "bus_region: uint<4>",
             "let tb = inst timebase(",
             "let cpu = inst cpu_core(",
+            "let (ppu_bus_events, ppu_bus_event_count) = inst ppu_event_bridge(",
+            "let ppu = inst ppu_core(",
+            "scanout_or_blank(ppu.scanout, ppu.trace.ly_after)",
+            "semantic_valid(ppu.trace.semantic)",
             "metric_total_cycles",
             "metric_bus_active_cycles",
             "metric_alu_active_cycles",
