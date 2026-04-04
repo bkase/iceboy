@@ -124,6 +124,8 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("meta", "test_cpu_semantics.py", "python", "tools.tests.test_cpu_semantics"),
     SuiteDefinition("meta", "test_bus_types.py", "python", "tools.tests.test_bus_types"),
     SuiteDefinition("meta", "test_membus_scaffold.py", "python", "tools.tests.test_membus_scaffold"),
+    SuiteDefinition("meta", "test_ppu_evidence.py", "python", "tools.tests.test_ppu_evidence"),
+    SuiteDefinition("meta", "test_ppu_scaffold.py", "python", "tools.tests.test_ppu_scaffold"),
     SuiteDefinition("meta", "test_timebase_scaffold.py", "python", "tools.tests.test_timebase_scaffold"),
     SuiteDefinition("unit", "test_sm83_opcodes.py", "python", "tools.tests.test_sm83_opcodes"),
     SuiteDefinition(

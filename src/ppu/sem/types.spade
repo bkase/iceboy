@@ -1,0 +1,311 @@
+pub enum PpuMode {
+    HBlank,
+    VBlank,
+    OamScan,
+    PixelTransfer,
+    LcdOff,
+}
+
+pub struct Lcdc {
+    lcd_enable: bool,
+    win_map_hi: bool,
+    win_enable: bool,
+    bgwin_data_hi: bool,
+    bg_map_hi: bool,
+    obj_size_8x16: bool,
+    obj_enable: bool,
+    bg_enable: bool,
+}
+
+pub struct StatSelect {
+    lyc_sel: bool,
+    mode2_sel: bool,
+    mode1_sel: bool,
+    mode0_sel: bool,
+}
+
+pub struct PpuRegs {
+    lcdc: Lcdc,
+    stat_sel: StatSelect,
+    scy: uint<8>,
+    scx: uint<8>,
+    lyc: uint<8>,
+    wy: uint<8>,
+    wx: uint<8>,
+    bgp: uint<8>,
+    obp0: uint<8>,
+    obp1: uint<8>,
+}
+
+pub struct PpuVisibleState {
+    regs: PpuRegs,
+    ly: uint<8>,
+}
+
+pub struct StatIrqState {
+    line_high: bool,
+}
+
+pub enum LcdRunState {
+    Disabled,
+    WarmupBlankFrame,
+    Running,
+}
+
+pub enum PpuPhase {
+    LcdOff,
+    OamScan { index: uint<6>, found: uint<4> },
+    Transfer { x_out: uint<8>, discard_scx: uint<3> },
+    HBlank { dots_left: uint<9> },
+    VBlank { line: uint<8>, dots_left: uint<9> },
+}
+
+pub struct PpuStatusState {
+    run: LcdRunState,
+    phase: PpuPhase,
+    stat_irq: StatIrqState,
+}
+
+pub enum WindowState {
+    Inactive,
+    ArmedThisFrame,
+    ActiveOnLine { win_x: uint<5>, win_line: uint<8> },
+}
+
+pub struct SelectedObjTicket {
+    oam_index: uint<6>,
+    x: uint<8>,
+    y: uint<8>,
+    selection_rank: uint<4>,
+}
+
+pub struct LineObjList {
+    count: uint<4>,
+    slots: [SelectedObjTicket; 10],
+}
+
+pub struct OamScanState {
+    index: uint<6>,
+    found: uint<4>,
+}
+
+pub enum FetcherSource {
+    Background,
+    Window,
+    Object,
+}
+
+pub enum FetcherStep {
+    GetTile,
+    GetLo,
+    GetHi,
+    Sleep,
+    Push,
+}
+
+pub struct FetcherState {
+    epoch: uint<4>,
+    source: FetcherSource,
+    step: FetcherStep,
+    tile_id: uint<8>,
+    map_x: uint<5>,
+    map_y: uint<5>,
+    row: uint<3>,
+    pending_push: bool,
+}
+
+pub struct BgPixel {
+    shade: uint<2>,
+    palette: uint<8>,
+}
+
+pub struct ObjPixel {
+    shade: uint<2>,
+    palette: uint<8>,
+    bg_over_obj: bool,
+    x: uint<8>,
+    oam_index: uint<6>,
+}
+
+pub struct BgFifo {
+    count: uint<5>,
+    pixels: [BgPixel; 16],
+}
+
+pub struct ObjFifo {
+    count: uint<5>,
+    pixels: [ObjPixel; 16],
+}
+
+pub struct PpuSamplingState {
+    scx_low3_line: uint<3>,
+    wy_triggered_this_frame: bool,
+    window_enable_at_mode2_start: bool,
+}
+
+pub struct PpuRenderState {
+    dot_in_line: uint<9>,
+    x_out: uint<8>,
+    window_state: WindowState,
+    window_line: uint<8>,
+    oam_scan: OamScanState,
+    line_objs: LineObjList,
+    fetcher: FetcherState,
+    bg_fifo: BgFifo,
+    obj_fifo: ObjFifo,
+    first_frame_blank: bool,
+}
+
+pub struct PpuState {
+    visible: PpuVisibleState,
+    status: PpuStatusState,
+    sampled: PpuSamplingState,
+    render: PpuRenderState,
+}
+
+pub fn zero_lcdc() -> Lcdc {
+    Lcdc$(
+        lcd_enable: false,
+        win_map_hi: false,
+        win_enable: false,
+        bgwin_data_hi: false,
+        bg_map_hi: false,
+        obj_size_8x16: false,
+        obj_enable: false,
+        bg_enable: false,
+    )
+}
+
+pub fn zero_stat_select() -> StatSelect {
+    StatSelect$(lyc_sel: false, mode2_sel: false, mode1_sel: false, mode0_sel: false)
+}
+
+pub fn initial_ppu_regs() -> PpuRegs {
+    PpuRegs$(
+        lcdc: zero_lcdc(),
+        stat_sel: zero_stat_select(),
+        scy: 0u8,
+        scx: 0u8,
+        lyc: 0u8,
+        wy: 0u8,
+        wx: 0u8,
+        bgp: 0u8,
+        obp0: 0u8,
+        obp1: 0u8,
+    )
+}
+
+pub fn initial_ppu_visible_state() -> PpuVisibleState {
+    PpuVisibleState$(regs: initial_ppu_regs(), ly: 0u8)
+}
+
+pub fn initial_stat_irq_state() -> StatIrqState {
+    StatIrqState$(line_high: false)
+}
+
+pub fn zero_selected_obj_ticket() -> SelectedObjTicket {
+    SelectedObjTicket$(oam_index: 0u6, x: 0u8, y: 0u8, selection_rank: 0u4)
+}
+
+pub fn empty_line_obj_list() -> LineObjList {
+    LineObjList$(count: 0u4, slots: [zero_selected_obj_ticket(); 10])
+}
+
+pub fn empty_oam_scan_state() -> OamScanState {
+    OamScanState$(index: 0u6, found: 0u4)
+}
+
+pub fn initial_fetcher_state() -> FetcherState {
+    FetcherState$(
+        epoch: 0u4,
+        source: FetcherSource::Background,
+        step: FetcherStep::GetTile,
+        tile_id: 0u8,
+        map_x: 0u5,
+        map_y: 0u5,
+        row: 0u3,
+        pending_push: false,
+    )
+}
+
+pub fn zero_bg_pixel() -> BgPixel {
+    BgPixel$(shade: 0u2, palette: 0u8)
+}
+
+pub fn zero_obj_pixel() -> ObjPixel {
+    ObjPixel$(shade: 0u2, palette: 0u8, bg_over_obj: false, x: 0u8, oam_index: 0u6)
+}
+
+pub fn empty_bg_fifo() -> BgFifo {
+    BgFifo$(count: 0u5, pixels: [zero_bg_pixel(); 16])
+}
+
+pub fn empty_obj_fifo() -> ObjFifo {
+    ObjFifo$(count: 0u5, pixels: [zero_obj_pixel(); 16])
+}
+
+pub fn initial_ppu_sampling_state() -> PpuSamplingState {
+    PpuSamplingState$(
+        scx_low3_line: 0u3,
+        wy_triggered_this_frame: false,
+        window_enable_at_mode2_start: false,
+    )
+}
+
+pub fn initial_ppu_render_state() -> PpuRenderState {
+    PpuRenderState$(
+        dot_in_line: 0u9,
+        x_out: 0u8,
+        window_state: WindowState::Inactive,
+        window_line: 0u8,
+        oam_scan: empty_oam_scan_state(),
+        line_objs: empty_line_obj_list(),
+        fetcher: initial_fetcher_state(),
+        bg_fifo: empty_bg_fifo(),
+        obj_fifo: empty_obj_fifo(),
+        first_frame_blank: false,
+    )
+}
+
+pub fn initial_ppu_status_state() -> PpuStatusState {
+    PpuStatusState$(
+        run: LcdRunState::Disabled,
+        phase: PpuPhase::LcdOff,
+        stat_irq: initial_stat_irq_state(),
+    )
+}
+
+pub fn initial_ppu_state() -> PpuState {
+    PpuState$(
+        visible: initial_ppu_visible_state(),
+        status: initial_ppu_status_state(),
+        sampled: initial_ppu_sampling_state(),
+        render: initial_ppu_render_state(),
+    )
+}
+
+fn phase_mode(phase: PpuPhase) -> PpuMode {
+    match phase {
+        PpuPhase::LcdOff => PpuMode::LcdOff,
+        PpuPhase::OamScan$(index: _, found: _) => PpuMode::OamScan,
+        PpuPhase::Transfer$(x_out: _, discard_scx: _) => PpuMode::PixelTransfer,
+        PpuPhase::HBlank$(dots_left: _) => PpuMode::HBlank,
+        PpuPhase::VBlank$(line: _, dots_left: _) => PpuMode::VBlank,
+    }
+}
+
+pub fn visible_mode(status: PpuStatusState) -> PpuMode {
+    match status.run {
+        LcdRunState::Disabled => PpuMode::LcdOff,
+        LcdRunState::WarmupBlankFrame => phase_mode(status.phase),
+        LcdRunState::Running => phase_mode(status.phase),
+    }
+}
+
+pub fn lcd_enabled(status: PpuStatusState, regs: PpuRegs) -> bool {
+    match status.run {
+        LcdRunState::Disabled => false,
+        LcdRunState::WarmupBlankFrame => regs.lcdc.lcd_enable,
+        LcdRunState::Running => regs.lcdc.lcd_enable,
+    }
+}

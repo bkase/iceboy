@@ -3,4 +3,5 @@ mod bus;
 mod cpu;
 mod mem;
 mod periph;
+mod ppu;
 mod sim;
