@@ -1,0 +1,17 @@
+[options]
+splitnets on
+
+[gold]
+read_verilog -sv __GOLD_VERILOG__
+prep -top __TOP__
+memory_map
+
+[gate]
+read_verilog -sv __GATE_VERILOG__
+prep -top __TOP__
+memory_map
+
+[strategy sby]
+use sby
+depth 4
+apply *

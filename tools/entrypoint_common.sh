@@ -70,6 +70,10 @@ iceboy_sby_bin() {
     iceboy_resolve_command "ICEBOY_SBY_BIN" "${ICEBOY_ROOT}/build/oss-cad-suite/bin/sby"
 }
 
+iceboy_eqy_bin() {
+    iceboy_resolve_command "ICEBOY_EQY_BIN" "eqy"
+}
+
 iceboy_version_string() {
     local tool_path="$1"
     shift

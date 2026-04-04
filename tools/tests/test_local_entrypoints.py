@@ -63,6 +63,7 @@ class LocalEntrypointsTest(unittest.TestCase):
                 "ICEBOY_YOSYS_BIN": str(make_fake_tool(bindir, "yosys", "Yosys 0.63+188")),
                 "ICEBOY_NEXTPNR_BIN": str(make_fake_tool(bindir, "nextpnr-ice40", "nextpnr-0.10-15-g77ccf518")),
                 "ICEBOY_SBY_BIN": str(make_fake_tool(bindir, "sby", "SBY 0.63-11-g6424d15")),
+                "ICEBOY_EQY_BIN": str(make_fake_tool(bindir, "eqy", "EQY 0.1-test")),
             }
         )
 
@@ -175,6 +176,31 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((TOOLS / "run_formal_ppu_timing.sh").exists())
         self.assertTrue((ROOT / "formal" / "ppu" / "safety" / "ppu_irq.sby").exists())
         self.assertTrue((ROOT / "formal" / "ppu" / "safety" / "ppu_timing.sby").exists())
+
+    def test_equivalence_wrapper_dry_run_renders_cpu_refactor_template(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            gold = tmpdir_path / "before.v"
+            gate = tmpdir_path / "after.v"
+            gold.write_text("module cpu_core; endmodule\n", encoding="utf-8")
+            gate.write_text("module cpu_core; endmodule\n", encoding="utf-8")
+
+            completed = self.run_script(
+                "check_equivalence.sh",
+                "--dry-run",
+                "--top",
+                "cpu_core",
+                str(gold),
+                str(gate),
+            )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] eqy: EQY 0.1-test", completed.stdout)
+        self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
+        self.assertIn("formal/cpu_refactor.eqy", completed.stdout)
+        self.assertIn("cpu_refactor.generated.eqy", completed.stdout)
+        self.assertIn("top=cpu_core", completed.stdout)
+        self.assertTrue((ROOT / "formal" / "cpu_refactor.eqy").exists())
 
 
 if __name__ == "__main__":
