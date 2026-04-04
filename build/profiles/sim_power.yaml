@@ -1,0 +1,21 @@
+profile: sim_power
+description: Power-analysis profile with duty-cycle metrics and simulation observability for activity studies.
+simulation_tops:
+  - sim::cpu_test_top::cpu_test_top
+  - sim::soc_lockstep_top::soc_lockstep_top
+output_ports:
+  - metric_total_cycles
+  - metric_bus_active_cycles
+  - metric_alu_active_cycles
+  - metric_halt_quiescent_cycles
+  - metric_reg_pc_we_cycles
+instrumentation:
+  semantic_commit: false
+  debug_trace: false
+  activity_counters: true
+resource_budget:
+  audience: power
+  expected_overhead: moderate
+  notes:
+    - Keep power counters enabled without forcing semantic or debug fanout.
+    - This is the Phase 7 baseline profile for duty-cycle studies.

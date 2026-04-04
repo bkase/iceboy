@@ -1,0 +1,18 @@
+profile: sim_trace
+description: Debug-oriented profile with full PPU trace visibility for waveform and narrative analysis.
+simulation_tops:
+  - sim::trace_observe_top::trace_observe_top
+  - sim::ppu_state_top::ppu_state_top
+output_ports:
+  - PpuDebugTrace
+  - PpuSimSnapshot
+instrumentation:
+  semantic_commit: true
+  debug_trace: true
+  activity_counters: false
+resource_budget:
+  audience: debug
+  expected_overhead: high
+  notes:
+    - Use only when semantic outputs are insufficient for debugging.
+    - Full trace visibility is intentionally simulation-only.

@@ -1,0 +1,15 @@
+profile: synth
+description: Default hardware-oriented build with no semantic or debug fanout on the PPU surface.
+simulation_tops:
+  - board::icebreaker_top::icebreaker_top
+output_ports: []
+instrumentation:
+  semantic_commit: false
+  debug_trace: false
+  activity_counters: false
+resource_budget:
+  audience: hardware
+  expected_overhead: none
+  notes:
+    - Keep synthesis outputs free of PPU semantic/debug buses.
+    - Prefer the existing src/board top path for hardware builds.

@@ -1,4 +1,7 @@
-build/
+build/*
+!build/profiles/
+build/profiles/*
+!build/profiles/*.yaml
 .surfer/
 repomix-output.xml
 .venv/

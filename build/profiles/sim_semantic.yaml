@@ -1,0 +1,19 @@
+profile: sim_semantic
+description: Daily regression profile for PPU lockstep and semantic differential checks.
+simulation_tops:
+  - sim::semantic_observe_top::semantic_observe_top
+  - sim::ppu_test_top::ppu_test_top
+output_ports:
+  - PpuSemanticCommit
+  - LineSummary
+  - PpuIrqReq
+instrumentation:
+  semantic_commit: true
+  debug_trace: false
+  activity_counters: false
+resource_budget:
+  audience: regression
+  expected_overhead: moderate
+  notes:
+    - Use semantic outputs as the stable PPU regression contract.
+    - Prefer this profile for daily lockstep and unit-test bring-up.
