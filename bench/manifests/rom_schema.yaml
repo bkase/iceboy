@@ -1,4 +1,4 @@
-schema_version: 1
+schema_version: 2
 manifest_type: rom_inventory_schema
 inventory_file: bench/manifests/rom_inventory.yaml
 
@@ -26,10 +26,19 @@ allowed_values:
   memory_behavior_profile:
     - DmgConservative
     - DmgRevisionSpecific
+  build_flavor:
+    - synth
+    - sim_semantic
+    - sim_trace
+    - sim_power
+  memory_backend:
+    - sim_array
+    - inferred_sync_ram
   compare_domains:
     - cpu_core
     - dma_registers
     - frame_hash
+    - frame_semantic
     - interrupt_state
     - mbc_ram
     - mbc_rom_bank
@@ -43,38 +52,98 @@ allowed_values:
     - label_or_wram_signature
   action_generators:
     - striped
+  rule_confidence:
+    - Exact
+    - High
+    - Medium
+    - Low
+    - Unknown
+  allowed_uncertainty:
+    - DotCommit
+    - ScanlineSummary
+    - FrameHash
+    - ReferenceImage
+  raster_event_coord_space:
+    - frame_line_dot
+    - video_anchor
+    - symbolic
+  soc_revision:
+    - DMG0
+    - DMGA
+    - DMGB
+    - DMGC
+    - MGB
+    - SGB
+    - SGB2
+    - CGB0
+    - CGBA
+    - CGBB
+    - CGBC
+    - CGBD
+    - CGBE
+  behavior_feature:
+    - DmgStatWriteQuirk
+    - PreCgbdScyBitplaneDesync
+    - Wx0Stutter
+    - Wx166NextLine
+    - WindowRetriggerGlitch
+    - ObjFetchCancelTiming
+    - DmgOamDmaBasic
+    - DmgOamDmaStrict
+    - ExactBlockedReadMaterialization
 
 inventory_contract:
   top_level_required:
     - schema_version
     - abi_contract
+    - artifact_schemas
     - roms
   rom_entry_required:
     - id
     - path
+    - rom_sha256
     - model_profile
     - reset_profile
     - requires
     - oracle_mode
     - memory_behavior_profile
+    - build_flavor
+    - memory_backend
+    - behavior_config
+    - rule_confidence
+    - allowed_uncertainty
+    - raster_event_coord_space
     - timeout_commits
     - checkpoint_symbols
     - pass_condition
     - compare_scope
+    - expected_soc_revisions
+    - required_behavior_features
+    - forbidden_behavior_features
     - action_script
     - action_gen
   field_notes:
     id: Unique ROM identifier used by the harness and result logs.
     path: Relative repository path to the ROM binary.
+    rom_sha256: SHA-256 digest of the built ROM, or null for planned entries whose ROM is not built yet.
     model_profile: Console model profile recorded in manifests and replay capsules.
     reset_profile: Reset-state profile recorded in manifests and replay capsules.
     requires: Hardware capabilities that must exist before the ROM can run.
     oracle_mode: Comparison cadence for the ROM.
     memory_behavior_profile: DMG memory behavior policy used by the harness.
+    build_flavor: Build profile used to produce the ROM and its expected artifacts.
+    memory_backend: Expected memory implementation backend for the run.
+    behavior_config: BehaviorConfig surface for model, optional SoC revision, and enabled behavior features.
+    rule_confidence: Confidence level for the owned ROM contract.
+    allowed_uncertainty: Compare surfaces that allow Hypothesis-tier expectations.
+    raster_event_coord_space: Coordinate space for raster scripts and replay artifacts.
     timeout_commits: Maximum commit boundaries before timeout.
     checkpoint_symbols: Optional __checkpoint_* symbols expected from the ROM.
     pass_condition: Success and failure contract for the ROM.
     compare_scope: Domains to compare at each commit or frame boundary.
+    expected_soc_revisions: Optional SoC revisions the ROM explicitly targets.
+    required_behavior_features: Behavior features that must be enabled for a valid run.
+    forbidden_behavior_features: Behavior features that must stay disabled for a valid run.
     action_script: Optional path to a deterministic input script.
     action_gen: Optional seeded action generator when a script is not used.
 

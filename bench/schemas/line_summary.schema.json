@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iceboy.local/bench/schemas/line_summary.schema.json",
+  "title": "LineSummary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "frame",
+    "line",
+    "summary"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "frame": { "type": "integer", "minimum": 0 },
+    "line": { "type": "integer", "minimum": 0, "maximum": 255 },
+    "summary": { "type": "object" },
+    "oracle_mode": {
+      "enum": ["frame_semantic", "frame_hash"]
+    }
+  }
+}

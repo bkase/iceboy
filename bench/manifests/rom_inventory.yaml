@@ -1,4 +1,4 @@
-schema_version: 1
+schema_version: 2
 abi_contract:
   sym_file_required: true
   executable_labels:
@@ -14,406 +14,351 @@ abi_contract:
     id: wram.v1
     versioned: true
 
+artifact_schemas:
+  replay_capsule: bench/schemas/replay_capsule.schema.json
+  oracle_capture: bench/schemas/oracle_capture.schema.json
+  line_summary: bench/schemas/line_summary.schema.json
+
+defaults:
+  dmg_behavior_config: &dmg_behavior_config
+    model: DMG
+    soc_revision: null
+    features: []
+  dmg_entry: &dmg_entry
+    model_profile: DMG
+    reset_profile: SkipBoot
+    memory_behavior_profile: DmgConservative
+    build_flavor: sim_semantic
+    memory_backend: sim_array
+    behavior_config: *dmg_behavior_config
+    rule_confidence: Exact
+    allowed_uncertainty: []
+    expected_soc_revisions: []
+    required_behavior_features: []
+    forbidden_behavior_features: []
+    pass_condition: &default_pass_condition
+      kind: label_or_wram_signature
+      pass_label: __pass
+      fail_label: __fail
+      signature_block: wram.v1
+    action_script: null
+    action_gen: null
+
 roms:
   # Wave A: pure CPU core bring-up
   - id: LOADS_BASIC
+    <<: *dmg_entry
     path: bench/roms/out/loads_basic.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: 9ca19bb8311fb24a74ccfd367be20530593f68847414548178664bebadb5f5db
     requires: [cpu]
     oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 250000
     checkpoint_symbols: [__checkpoint_ld_r_r, __checkpoint_ld_r_n8, __checkpoint_ld_mem, __checkpoint_ld_r16]
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, wram_signature]
-    action_script: null
-    action_gen: null
 
   - id: ALU_FLAGS
+    <<: *dmg_entry
     path: bench/roms/out/alu_flags.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: 141f4ee001dfe0925a817221cc6dc74b3140040001acfb7139ea110932855cc0
     requires: [cpu]
     oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 250000
     checkpoint_symbols: [__checkpoint_add, __checkpoint_adc, __checkpoint_sub, __checkpoint_sbc, __checkpoint_logic]
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, wram_signature]
-    action_script: null
-    action_gen: null
 
   - id: ALU16_SP
+    <<: *dmg_entry
     path: bench/roms/out/alu16_sp.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: 888b2868f99c0a63216a7667a3860d4c69b26083bdd284e8cab57942ddbfe18b
     requires: [cpu]
     oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 250000
     checkpoint_symbols: [__checkpoint_add_hl, __checkpoint_add_sp_e8, __checkpoint_ld_hl_sp_e8]
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, wram_signature]
-    action_script: null
-    action_gen: null
 
   - id: FLOW_STACK
+    <<: *dmg_entry
     path: bench/roms/out/flow_stack.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: c8a2b4d29a7335d7cb1c287c18c62908ea092e242ce0b1f2d36b7ad206ca8250
     requires: [cpu]
     oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 250000
     checkpoint_symbols: [__checkpoint_jp, __checkpoint_jr, __checkpoint_call_ret, __checkpoint_rst]
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, wram_signature]
-    action_script: null
-    action_gen: null
 
   - id: CB_BITOPS
+    <<: *dmg_entry
     path: bench/roms/out/cb_bitops.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: a22b57ad075697be5309d5b8e19adf744805c0bb9c77a273cef8bf236f84946a
     requires: [cpu]
     oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 250000
     checkpoint_symbols: [__checkpoint_rotate, __checkpoint_shift, __checkpoint_bit, __checkpoint_res_set]
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, wram_signature]
-    action_script: null
-    action_gen: null
 
   - id: MEM_RWB
+    <<: *dmg_entry
     path: bench/roms/out/mem_rwb.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: 079aeb6e25c116ab105d230a0d50a13049895ec36af16ace606da668232a8b25
     requires: [cpu]
     oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 300000
     checkpoint_symbols: [__checkpoint_fill, __checkpoint_verify]
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, wram_signature]
-    action_script: null
-    action_gen: null
 
   - id: ALU_LOOP
+    <<: *dmg_entry
     path: bench/roms/out/alu_loop.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: 673315956314bdc8fb47247911d1000cf98549aa93294b43c981da6dea7288f5
     requires: [cpu]
     oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 300000
     checkpoint_symbols: [__checkpoint_loop_setup, __checkpoint_loop_body, __checkpoint_loop_done]
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, wram_signature]
-    action_script: null
-    action_gen: null
 
   # Wave B: interrupt and timer correctness
   - id: TIMER_DIV_BASIC
+    <<: *dmg_entry
     path: bench/roms/out/timer_div_basic.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: 3327831d3ef0a306774778fb98584aaf520f5b910079d3733d51273829aeb69f
     requires: [cpu, timer]
     oracle_mode: instr_commit
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 400000
     checkpoint_symbols: [__checkpoint_div_count, __checkpoint_div_reset, __checkpoint_tac_prescaler, __checkpoint_tma_reload]
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, timer_registers, wram_signature]
-    action_script: null
-    action_gen: null
 
   - id: EI_DELAY
+    <<: *dmg_entry
     path: bench/roms/out/ei_delay.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: 51e470c2853768f733217ef2601e0131f835b46b045792056d516db652b9c4cb
     requires: [cpu]
     oracle_mode: mcycle_commit
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 400000
     checkpoint_symbols: [__checkpoint_ei_nop, __checkpoint_ei_di, __checkpoint_reti]
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, interrupt_state, wram_signature]
-    action_script: null
-    action_gen: null
 
   - id: TIMER_IRQ_HALT
+    <<: *dmg_entry
     path: bench/roms/out/timer_irq_halt.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: 2358ff3ea01591d7f8f3ad09ac39c1485436e998bf5bc5f739482b2d66001136
     requires: [cpu, timer]
     oracle_mode: mcycle_commit
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 400000
     checkpoint_symbols: [__checkpoint_halt_enter, __checkpoint_irq_fire, __checkpoint_isr_execute, __checkpoint_halt_wake]
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, interrupt_state, timer_registers, wram_signature]
-    action_script: null
-    action_gen: null
 
   # Wave C: memory-mapped bus realism
   - id: JOY_DIVERGE_PERSIST
+    <<: *dmg_entry
     path: bench/roms/out/joy_diverge_persist.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: 0d944fb54da12a3b14b69e94b13370d5c67f5e0a45929945a7a6e27b1dfce2e1
     requires: [cpu]
     oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 4
     checkpoint_symbols: [__checkpoint_poll]
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, interrupt_state, wram_signature]
     action_script: bench/actions/joy_diverge_persist.yaml
-    action_gen: null
 
   - id: DMA_OAM_COPY
+    <<: *dmg_entry
     path: bench/roms/out/DMA_OAM_COPY.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: a15e405d72d609803867fb87160a757fdf2fee3740cbd01ce597c383d7843fa3
     requires: [cpu, dma]
     oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 400000
     checkpoint_symbols: []
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, dma_registers, oam, wram_signature]
-    action_script: null
-    action_gen: null
 
   - id: MBC1_SWITCH
+    <<: *dmg_entry
     path: bench/roms/out/MBC1_SWITCH.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: c9526c260245437c6b7a1d21f2cbeba037e0bb01c2f6a8509e331a0368cad1ee
     requires: [cpu, mbc1]
     oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 400000
     checkpoint_symbols: []
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, mbc_rom_bank, wram_signature]
-    action_script: null
-    action_gen: null
 
   - id: MBC1_RAM
+    <<: *dmg_entry
     path: bench/roms/out/MBC1_RAM.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: 6f47f4964da090c019f06b1e112a7b60af63ac6a11ac18d21f7dc3baaf4f35ec
     requires: [cpu, mbc1]
     oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 400000
     checkpoint_symbols: []
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, mbc_rom_bank, mbc_ram, wram_signature]
-    action_script: null
-    action_gen: null
 
   - id: MBC3_SWITCH
+    <<: *dmg_entry
     path: bench/roms/out/MBC3_SWITCH.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: 96b4a5f5bf2abe7cdf06f5e0b0d84f5e83586c73800b51dbb7542435d65523d9
     requires: [cpu, mbc3]
     oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 400000
     checkpoint_symbols: []
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, mbc_rom_bank, wram_signature]
-    action_script: null
-    action_gen: null
 
   - id: MBC3_RAM
+    <<: *dmg_entry
     path: bench/roms/out/MBC3_RAM.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: 877c02499d5cf18792cf45c9e81f2f702923d0e6ec991ce6200c621b3e275e12
     requires: [cpu, mbc3]
     oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: symbolic
     timeout_commits: 400000
     checkpoint_symbols: []
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [cpu_core, mbc_rom_bank, mbc_ram, wram_signature]
-    action_script: null
-    action_gen: null
+
+  # Wave A: PPU timing and access architecture
+  - id: PPU_OFF_ON_BASIC
+    <<: *dmg_entry
+    path: bench/roms/out/PPU_OFF_ON_BASIC.gb
+    rom_sha256: null
+    requires: [cpu, ppu]
+    oracle_mode: frame_semantic
+    raster_event_coord_space: frame_line_dot
+    timeout_commits: 600000
+    checkpoint_symbols: []
+    compare_scope:
+      domains: [frame_semantic]
+
+  - id: LY_LYC_BASIC
+    <<: *dmg_entry
+    path: bench/roms/out/LY_LYC_BASIC.gb
+    rom_sha256: null
+    requires: [cpu, ppu]
+    oracle_mode: frame_semantic
+    raster_event_coord_space: frame_line_dot
+    timeout_commits: 600000
+    checkpoint_symbols: []
+    compare_scope:
+      domains: [frame_semantic]
+
+  - id: STAT_MODE_SEQ
+    <<: *dmg_entry
+    path: bench/roms/out/STAT_MODE_SEQ.gb
+    rom_sha256: null
+    requires: [cpu, ppu]
+    oracle_mode: frame_semantic
+    raster_event_coord_space: frame_line_dot
+    timeout_commits: 600000
+    checkpoint_symbols: []
+    compare_scope:
+      domains: [frame_semantic]
+
+  - id: VBLANK_IRQ_BASIC
+    <<: *dmg_entry
+    path: bench/roms/out/VBLANK_IRQ_BASIC.gb
+    rom_sha256: null
+    requires: [cpu, ppu]
+    oracle_mode: frame_semantic
+    raster_event_coord_space: frame_line_dot
+    timeout_commits: 600000
+    checkpoint_symbols: []
+    compare_scope:
+      domains: [frame_semantic]
+
+  - id: VRAM_OAM_GATING
+    <<: *dmg_entry
+    path: bench/roms/out/VRAM_OAM_GATING.gb
+    rom_sha256: null
+    requires: [cpu, ppu]
+    oracle_mode: frame_semantic
+    raster_event_coord_space: frame_line_dot
+    timeout_commits: 600000
+    checkpoint_symbols: []
+    compare_scope:
+      domains: [frame_semantic]
 
   # Wave D: graphics and peripheral milestones
   - id: PPU_STAT_IRQ
+    <<: *dmg_entry
     path: bench/roms/out/PPU_STAT_IRQ.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: null
     requires: [cpu, ppu]
-    oracle_mode: checkpoint
-    memory_behavior_profile: DmgConservative
+    oracle_mode: frame_semantic
+    raster_event_coord_space: frame_line_dot
     timeout_commits: 600000
     checkpoint_symbols: []
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
-      domains: [cpu_core, ppu_irq_counters, wram_signature]
-    action_script: null
-    action_gen: null
+      domains: [frame_semantic]
 
   - id: BG_STATIC
+    <<: *dmg_entry
     path: bench/roms/out/BG_STATIC.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: null
     requires: [cpu, ppu]
     oracle_mode: frame_hash
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: frame_line_dot
     timeout_commits: 600000
     checkpoint_symbols: []
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [frame_hash]
-    action_script: null
-    action_gen: null
 
   - id: BG_SCROLL_SIGNED
+    <<: *dmg_entry
     path: bench/roms/out/BG_SCROLL_SIGNED.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: null
     requires: [cpu, ppu]
     oracle_mode: frame_hash
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: frame_line_dot
     timeout_commits: 600000
     checkpoint_symbols: []
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [frame_hash]
-    action_script: null
-    action_gen: null
 
   - id: PPU_WINDOW
+    <<: *dmg_entry
     path: bench/roms/out/PPU_WINDOW.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: null
     requires: [cpu, ppu]
     oracle_mode: frame_hash
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: frame_line_dot
     timeout_commits: 600000
     checkpoint_symbols: []
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [frame_hash]
-    action_script: null
-    action_gen: null
 
   - id: PPU_SPRITES
+    <<: *dmg_entry
     path: bench/roms/out/PPU_SPRITES.gb
-    model_profile: DMG
-    reset_profile: SkipBoot
+    rom_sha256: null
     requires: [cpu, ppu]
     oracle_mode: frame_hash
-    memory_behavior_profile: DmgConservative
+    raster_event_coord_space: frame_line_dot
     timeout_commits: 600000
     checkpoint_symbols: []
-    pass_condition:
-      kind: label_or_wram_signature
-      pass_label: __pass
-      fail_label: __fail
-      signature_block: wram.v1
     compare_scope:
       domains: [frame_hash]
-    action_script: null
-    action_gen: null

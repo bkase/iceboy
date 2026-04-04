@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iceboy.local/bench/schemas/replay_capsule.schema.json",
+  "title": "ReplayCapsule",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "rom_id",
+    "model_profile",
+    "reset_profile",
+    "memory_behavior_profile",
+    "random_seed",
+    "event_log",
+    "sym_sha256",
+    "hook_manifest_id",
+    "first_divergence"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "rom_id": { "type": "string", "minLength": 1 },
+    "model_profile": { "enum": ["DMG", "CGB"] },
+    "reset_profile": { "enum": ["SkipBoot", "RawPowerOn"] },
+    "memory_behavior_profile": { "enum": ["DmgConservative", "DmgRevisionSpecific"] },
+    "random_seed": { "type": "integer", "minimum": 0 },
+    "event_log": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["commit_index", "event"],
+        "properties": {
+          "commit_index": { "type": "integer", "minimum": 0 },
+          "event": { "type": "object" }
+        }
+      }
+    },
+    "sym_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "hook_manifest_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "first_divergence": {
+      "type": ["object", "null"],
+      "additionalProperties": true,
+      "required": ["commit_index", "field", "expected", "actual"],
+      "properties": {
+        "commit_index": { "type": "integer", "minimum": 0 },
+        "field": { "type": "string", "minLength": 1 },
+        "expected": {},
+        "actual": {}
+      }
+    }
+  }
+}
