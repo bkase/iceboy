@@ -22,6 +22,7 @@ PPU_TYPES_PATH = ROOT / "src" / "ppu" / "sem" / "types.spade"
 PPU_PROFILES_PATH = ROOT / "src" / "ppu" / "sem" / "profiles.spade"
 PPU_SAMPLE_PATH = ROOT / "src" / "ppu" / "sem" / "sample.spade"
 PPU_SCANOUT_PATH = ROOT / "src" / "ppu" / "sem" / "scanout.spade"
+PPU_STEP_PATH = ROOT / "src" / "ppu" / "sem" / "step.spade"
 PPU_STIMULUS_PATH = ROOT / "src" / "ppu" / "sem" / "stimulus.spade"
 
 
@@ -42,6 +43,7 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("pub mod profiles;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod sample;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod scanout;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod step;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod stimulus;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod types;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
 
@@ -313,6 +315,22 @@ class PpuScaffoldTest(unittest.TestCase):
             "pub fn idle_ppu_mmio_resp() -> PpuMmioResp",
             "pub fn idle_ppu_semantic_commit() -> PpuSemanticCommit",
             "pub fn idle_dot_output() -> DotOutput",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_step_surface_matches_architecture_contract(self) -> None:
+        text = PPU_STEP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput",
+            "let _ = input;",
+            "DotOutput$(",
+            "next_state: state",
+            "mem_reqs: idle_ppu_mem_reqs()",
+            "mmio_resp: idle_ppu_mmio_resp()",
+            "irq_req: idle_ppu_irq_req()",
+            "scanout: Option::None",
+            "semantic: Option::None",
+            "line_summary: Option::None",
         ]:
             self.assertIn(symbol, text)
 

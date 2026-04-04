@@ -1,0 +1,19 @@
+use std::option::Option;
+
+use lib::ppu::sem::events::DotInput;
+use lib::ppu::sem::observe::{DotOutput, idle_ppu_mem_reqs, idle_ppu_mmio_resp};
+use lib::ppu::sem::types::{PpuState, idle_ppu_irq_req};
+
+pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
+    let _ = input;
+
+    DotOutput$(
+        next_state: state,
+        mem_reqs: idle_ppu_mem_reqs(),
+        mmio_resp: idle_ppu_mmio_resp(),
+        irq_req: idle_ppu_irq_req(),
+        scanout: Option::None,
+        semantic: Option::None,
+        line_summary: Option::None,
+    )
+}

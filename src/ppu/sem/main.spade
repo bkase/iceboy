@@ -4,5 +4,6 @@ pub mod observe;
 pub mod profiles;
 pub mod sample;
 pub mod scanout;
+pub mod step;
 pub mod stimulus;
 pub mod types;
