@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[2]
 ROOT_MAIN_PATH = ROOT / "src" / "main.spade"
 PPU_MAIN_PATH = ROOT / "src" / "ppu" / "main.spade"
 PPU_SEM_MAIN_PATH = ROOT / "src" / "ppu" / "sem" / "main.spade"
+PPU_RTL_MAIN_PATH = ROOT / "src" / "ppu" / "rtl" / "main.spade"
+PPU_RTL_REGS_PATH = ROOT / "src" / "ppu" / "rtl" / "regs.spade"
 PPU_EVENTS_PATH = ROOT / "src" / "ppu" / "sem" / "events.spade"
 PPU_MEMORY_PATH = ROOT / "src" / "ppu" / "sem" / "memory.spade"
 PPU_TYPES_PATH = ROOT / "src" / "ppu" / "sem" / "types.spade"
@@ -20,6 +22,8 @@ class PpuScaffoldTest(unittest.TestCase):
     def test_root_module_exports_ppu_tree(self) -> None:
         self.assertIn("mod ppu;", ROOT_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod sem;", PPU_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod rtl;", PPU_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod regs;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod events;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod memory;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod profiles;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
@@ -247,6 +251,31 @@ class PpuScaffoldTest(unittest.TestCase):
             "LineStart { y: uint<8> }",
             "pub fn zero_pixel_emit() -> PixelEmit",
             "pub fn blank_scanout_event(y: uint<8>, reason: BlankReason) -> ScanoutEvent",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_register_helpers_match_architecture_contract(self) -> None:
+        text = PPU_RTL_REGS_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub fn apply_mmio_write(regs: PpuRegs, event: MmioWrite) -> PpuRegs",
+            "MmioReg::Lcdc => replace_lcdc(regs, decode_lcdc(event.value))",
+            "MmioReg::Stat => replace_stat_select(regs, decode_stat_select(event.value))",
+            "MmioReg::Scy =>",
+            "MmioReg::Scx =>",
+            "MmioReg::Lyc =>",
+            "MmioReg::Wy =>",
+            "MmioReg::Wx =>",
+            "MmioReg::Bgp =>",
+            "MmioReg::Obp0 =>",
+            "MmioReg::Obp1 =>",
+            "pub fn read_stat(regs: PpuRegs, status: PpuStatusState, ly: uint<8>) -> uint<8>",
+            "0b1000_0000u8 | pack_stat_select(regs.stat_sel) | lyc_match | mode_bits(mode)",
+            "pub fn readback_register(addr: uint<8>, regs: PpuRegs, status: PpuStatusState, ly: uint<8>) -> uint<8>",
+            "0x40u8 => pack_lcdc(regs.lcdc)",
+            "0x41u8 => read_stat(regs, status, ly)",
+            "0x44u8 => ly",
+            "0x4Bu8 => regs.wx",
+            "_ => 0xffu8",
         ]:
             self.assertIn(symbol, text)
 

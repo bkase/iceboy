@@ -1,0 +1,124 @@
+use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
+use lib::ppu::sem::types::{Lcdc, PpuMode, PpuRegs, PpuStatusState, StatSelect, visible_mode};
+
+fn bool_bit(flag: bool) -> uint<8> {
+    if flag { 1u8 } else { 0u8 }
+}
+
+fn replace_lcdc(regs: PpuRegs, lcdc: Lcdc) -> PpuRegs {
+    PpuRegs$(
+        lcdc: lcdc,
+        stat_sel: regs.stat_sel,
+        scy: regs.scy,
+        scx: regs.scx,
+        lyc: regs.lyc,
+        wy: regs.wy,
+        wx: regs.wx,
+        bgp: regs.bgp,
+        obp0: regs.obp0,
+        obp1: regs.obp1,
+    )
+}
+
+fn replace_stat_select(regs: PpuRegs, stat_sel: StatSelect) -> PpuRegs {
+    PpuRegs$(
+        lcdc: regs.lcdc,
+        stat_sel: stat_sel,
+        scy: regs.scy,
+        scx: regs.scx,
+        lyc: regs.lyc,
+        wy: regs.wy,
+        wx: regs.wx,
+        bgp: regs.bgp,
+        obp0: regs.obp0,
+        obp1: regs.obp1,
+    )
+}
+
+fn pack_lcdc(lcdc: Lcdc) -> uint<8> {
+    (bool_bit(lcdc.lcd_enable) << 7)
+    | (bool_bit(lcdc.win_map_hi) << 6)
+    | (bool_bit(lcdc.win_enable) << 5)
+    | (bool_bit(lcdc.bgwin_data_hi) << 4)
+    | (bool_bit(lcdc.bg_map_hi) << 3)
+    | (bool_bit(lcdc.obj_size_8x16) << 2)
+    | (bool_bit(lcdc.obj_enable) << 1)
+    | bool_bit(lcdc.bg_enable)
+}
+
+fn decode_lcdc(value: uint<8>) -> Lcdc {
+    Lcdc$(
+        lcd_enable: ((value >> 7) & 1u8) == 1u8,
+        win_map_hi: ((value >> 6) & 1u8) == 1u8,
+        win_enable: ((value >> 5) & 1u8) == 1u8,
+        bgwin_data_hi: ((value >> 4) & 1u8) == 1u8,
+        bg_map_hi: ((value >> 3) & 1u8) == 1u8,
+        obj_size_8x16: ((value >> 2) & 1u8) == 1u8,
+        obj_enable: ((value >> 1) & 1u8) == 1u8,
+        bg_enable: (value & 1u8) == 1u8,
+    )
+}
+
+fn pack_stat_select(stat_sel: StatSelect) -> uint<8> {
+    (bool_bit(stat_sel.lyc_sel) << 6)
+    | (bool_bit(stat_sel.mode2_sel) << 5)
+    | (bool_bit(stat_sel.mode1_sel) << 4)
+    | (bool_bit(stat_sel.mode0_sel) << 3)
+}
+
+fn decode_stat_select(value: uint<8>) -> StatSelect {
+    StatSelect$(
+        lyc_sel: ((value >> 6) & 1u8) == 1u8,
+        mode2_sel: ((value >> 5) & 1u8) == 1u8,
+        mode1_sel: ((value >> 4) & 1u8) == 1u8,
+        mode0_sel: ((value >> 3) & 1u8) == 1u8,
+    )
+}
+
+fn mode_bits(mode: PpuMode) -> uint<8> {
+    match mode {
+        PpuMode::HBlank => 0u8,
+        PpuMode::VBlank => 1u8,
+        PpuMode::OamScan => 2u8,
+        PpuMode::PixelTransfer => 3u8,
+        PpuMode::LcdOff => 0u8,
+    }
+}
+
+pub fn apply_mmio_write(regs: PpuRegs, event: MmioWrite) -> PpuRegs {
+    match event.target {
+        MmioReg::Lcdc => replace_lcdc(regs, decode_lcdc(event.value)),
+        MmioReg::Stat => replace_stat_select(regs, decode_stat_select(event.value)),
+        MmioReg::Scy => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: event.value, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1),
+        MmioReg::Scx => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: event.value, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1),
+        MmioReg::Lyc => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: event.value, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1),
+        MmioReg::Wy => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: event.value, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1),
+        MmioReg::Wx => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: event.value, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1),
+        MmioReg::Bgp => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: event.value, obp0: regs.obp0, obp1: regs.obp1),
+        MmioReg::Obp0 => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: event.value, obp1: regs.obp1),
+        MmioReg::Obp1 => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: event.value),
+    }
+}
+
+pub fn read_stat(regs: PpuRegs, status: PpuStatusState, ly: uint<8>) -> uint<8> {
+    let mode = visible_mode(status);
+    let lyc_match = if ly == regs.lyc { 0b0000_0100u8 } else { 0u8 };
+    0b1000_0000u8 | pack_stat_select(regs.stat_sel) | lyc_match | mode_bits(mode)
+}
+
+pub fn readback_register(addr: uint<8>, regs: PpuRegs, status: PpuStatusState, ly: uint<8>) -> uint<8> {
+    match addr {
+        0x40u8 => pack_lcdc(regs.lcdc),
+        0x41u8 => read_stat(regs, status, ly),
+        0x42u8 => regs.scy,
+        0x43u8 => regs.scx,
+        0x44u8 => ly,
+        0x45u8 => regs.lyc,
+        0x47u8 => regs.bgp,
+        0x48u8 => regs.obp0,
+        0x49u8 => regs.obp1,
+        0x4Au8 => regs.wy,
+        0x4Bu8 => regs.wx,
+        _ => 0xffu8,
+    }
+}
