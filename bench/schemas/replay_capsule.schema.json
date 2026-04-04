@@ -43,6 +43,54 @@
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
+    "behavior_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "soc_revision", "features"],
+      "properties": {
+        "model": { "enum": ["DMG", "CGB"] },
+        "soc_revision": {
+          "type": ["string", "null"]
+        },
+        "features": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "raster_event_log": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["seq", "at", "kind"],
+        "properties": {
+          "seq": { "type": "integer", "minimum": 0 },
+          "at": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["frame", "line", "dot"],
+            "properties": {
+              "frame": { "type": "integer", "minimum": 0 },
+              "line": { "type": "integer", "minimum": 0 },
+              "dot": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "kind": { "type": "object" }
+        }
+      }
+    },
+    "first_bad_coord": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["frame", "line", "dot", "scope"],
+      "properties": {
+        "frame": { "type": "integer", "minimum": 0 },
+        "line": { "type": "integer", "minimum": 0 },
+        "dot": { "type": "integer", "minimum": 0 },
+        "scope": { "type": "string", "minLength": 1 }
+      }
+    },
     "first_divergence": {
       "type": ["object", "null"],
       "additionalProperties": true,
