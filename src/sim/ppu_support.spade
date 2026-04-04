@@ -128,6 +128,7 @@ pub fn ppu_debug_trace(at: VideoCoord, output: DotOutput) -> PpuDebugTrace {
     PpuDebugTrace$(
         at: at,
         ly_after: state.visible.ly,
+        dot_in_line_after: state.render.dot_in_line,
         mode_after: visible_mode(state.status),
         phase_after: state.status.phase,
         stat_line_after: state.status.stat_irq.line_high,
@@ -148,6 +149,7 @@ pub fn idle_trace_for_state(at: VideoCoord, state: PpuState) -> PpuDebugTrace {
     PpuDebugTrace$(
         at: at,
         ly_after: state.visible.ly,
+        dot_in_line_after: state.render.dot_in_line,
         mode_after: visible_mode(state.status),
         phase_after: state.status.phase,
         stat_line_after: state.status.stat_irq.line_high,

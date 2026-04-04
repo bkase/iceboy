@@ -1,19 +1,212 @@
 use std::option::Option;
 
 use lib::ppu::sem::events::DotInput;
-use lib::ppu::sem::observe::{DotOutput, idle_ppu_mem_reqs, idle_ppu_mmio_resp};
-use lib::ppu::sem::types::{PpuState, idle_ppu_irq_req};
+use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
+use lib::ppu::sem::events::{PpuEventKind, TimedPpuEvent};
+use lib::ppu::sem::observe::{DotOutput, PpuIrqEdge, PpuSemanticCommit, idle_ppu_mem_reqs, idle_ppu_mmio_resp};
+use lib::ppu::sem::profiles::dmg_behavior_config;
+use lib::ppu::sem::sample::sample_render_inputs;
+use lib::ppu::sem::types::{
+    LcdRunState,
+    Lcdc,
+    PpuIrqReq,
+    PpuPhase,
+    PpuRegs,
+    PpuRenderState,
+    PpuState,
+    PpuStatusState,
+    PpuVisibleState,
+    idle_ppu_irq_req,
+    visible_mode,
+};
+use lib::ppu::rtl::irq::irq_req;
+use lib::ppu::rtl::regs::apply_mmio_write;
+use lib::ppu::rtl::timing::{advance_run_state, advance_timing, handle_lcd_transition};
+
+fn set_lcd_enable(regs: PpuRegs, enabled: bool) -> PpuRegs {
+    PpuRegs$(
+        lcdc: Lcdc$(
+            lcd_enable: enabled,
+            win_map_hi: regs.lcdc.win_map_hi,
+            win_enable: regs.lcdc.win_enable,
+            bgwin_data_hi: regs.lcdc.bgwin_data_hi,
+            bg_map_hi: regs.lcdc.bg_map_hi,
+            obj_size_8x16: regs.lcdc.obj_size_8x16,
+            obj_enable: regs.lcdc.obj_enable,
+            bg_enable: regs.lcdc.bg_enable,
+        ),
+        stat_sel: regs.stat_sel,
+        scy: regs.scy,
+        scx: regs.scx,
+        lyc: regs.lyc,
+        wy: regs.wy,
+        wx: regs.wx,
+        bgp: regs.bgp,
+        obp0: regs.obp0,
+        obp1: regs.obp1,
+    )
+}
+
+fn is_stat_write(write: MmioWrite) -> bool {
+    match write.target {
+        MmioReg::Stat => true,
+        _ => false,
+    }
+}
+
+fn apply_event(regs: PpuRegs, event: TimedPpuEvent) -> (PpuRegs, bool, bool, bool) {
+    match event.kind {
+        PpuEventKind::MmioWrite$(write) => (apply_mmio_write(regs, write), is_stat_write(write), false, false),
+        PpuEventKind::DmaStart$(source_high) => {
+            let _ = source_high;
+            (regs, false, false, false)
+        },
+        PpuEventKind::ForceLcdPower$(enabled) =>
+            if enabled {
+                (regs, false, true, false)
+            } else {
+                (regs, false, false, true)
+            },
+    }
+}
+
+fn fold_events(input: DotInput, regs: PpuRegs) -> (PpuRegs, bool, bool, bool) {
+    let (regs0, stat0, enable0, disable0) =
+        if input.bus_event_count > 0u4 { apply_event(regs, input.bus_events[0]) } else { (regs, false, false, false) };
+    let (regs1, stat1, enable1, disable1) =
+        if input.bus_event_count > 1u4 { apply_event(regs0, input.bus_events[1]) } else { (regs0, false, false, false) };
+    let (regs2, stat2, enable2, disable2) =
+        if input.bus_event_count > 2u4 { apply_event(regs1, input.bus_events[2]) } else { (regs1, false, false, false) };
+    let (regs3, stat3, enable3, disable3) =
+        if input.bus_event_count > 3u4 { apply_event(regs2, input.bus_events[3]) } else { (regs2, false, false, false) };
+
+    (
+        regs3,
+        stat0 || stat1 || stat2 || stat3,
+        enable0 || enable1 || enable2 || enable3,
+        disable0 || disable1 || disable2 || disable3,
+    )
+}
+
+fn next_dot_in_line(run: LcdRunState, dot_in_line: uint<9>) -> uint<9> {
+    match run {
+        LcdRunState::Disabled => 0u9,
+        LcdRunState::WarmupBlankFrame =>
+            if dot_in_line == 455u9 { 0u9 } else { trunc(dot_in_line + 1u9) },
+        LcdRunState::Running =>
+            if dot_in_line == 455u9 { 0u9 } else { trunc(dot_in_line + 1u9) },
+    }
+}
+
+fn next_first_frame_blank(run: LcdRunState) -> bool {
+    match run {
+        LcdRunState::WarmupBlankFrame => true,
+        _ => false,
+    }
+}
+
+fn update_render_state(render: PpuRenderState, next_run: LcdRunState, next_phase: PpuPhase) -> PpuRenderState {
+    let next_dot = next_dot_in_line(next_run, render.dot_in_line);
+    let next_x_out = match next_phase {
+        PpuPhase::Transfer$(x_out, discard_scx) => {
+            let _ = discard_scx;
+            x_out
+        },
+        _ => 0u8,
+    };
+    PpuRenderState$(
+        dot_in_line: next_dot,
+        x_out: next_x_out,
+        window_state: render.window_state,
+        window_line: render.window_line,
+        oam_scan: render.oam_scan,
+        line_objs: render.line_objs,
+        fetcher: render.fetcher,
+        bg_fifo: render.bg_fifo,
+        obj_fifo: render.obj_fifo,
+        first_frame_blank: next_first_frame_blank(next_run),
+    )
+}
+
+fn irq_edge(req: PpuIrqReq) -> PpuIrqEdge {
+    match (req.vblank_req, req.stat_req) {
+        (false, false) => PpuIrqEdge::None,
+        (true, false) => PpuIrqEdge::VBlank,
+        (false, true) => PpuIrqEdge::Stat,
+        (true, true) => PpuIrqEdge::Both,
+    }
+}
 
 pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
-    let _ = input;
+    let (written_regs, stat_write_seen, force_enable, force_disable) = fold_events(input, state.visible.regs);
+    let requested_lcd_enable =
+        if force_disable {
+            false
+        } else if force_enable {
+            true
+        } else {
+            written_regs.lcdc.lcd_enable
+        };
+    let next_regs = set_lcd_enable(written_regs, requested_lcd_enable);
+    let state_with_regs = PpuState$(
+        visible: PpuVisibleState$(regs: next_regs, ly: state.visible.ly),
+        status: state.status,
+        sampled: state.sampled,
+        render: state.render,
+    );
+    let old_lcdc7 = state.visible.regs.lcdc.lcd_enable;
+    let transition_taken = old_lcdc7 != requested_lcd_enable;
+    let transition_state = handle_lcd_transition(state_with_regs, old_lcdc7, requested_lcd_enable);
+    let candidate_state =
+        if transition_taken {
+            transition_state
+        } else {
+            let (next_phase, next_ly, next_sampled, line_start, frame_start) = advance_timing(state_with_regs, input, next_regs);
+            let _ = line_start;
+            let next_run = advance_run_state(state.status.run, frame_start);
+            let next_visible = PpuVisibleState$(regs: next_regs, ly: next_ly);
+            let _ = sample_render_inputs(next_visible, next_sampled, next_phase);
+            PpuState$(
+                visible: next_visible,
+                status: PpuStatusState$(run: next_run, phase: next_phase, stat_irq: state.status.stat_irq),
+                sampled: next_sampled,
+                render: update_render_state(state.render, next_run, next_phase),
+            )
+        };
+    let (next_stat_irq, next_irq_req) = irq_req(
+        state.status,
+        candidate_state.status,
+        candidate_state.visible.regs,
+        candidate_state.visible.ly,
+        stat_write_seen,
+        dmg_behavior_config().features,
+    );
+    let final_status = PpuStatusState$(
+        run: candidate_state.status.run,
+        phase: candidate_state.status.phase,
+        stat_irq: next_stat_irq,
+    );
+    let final_state = PpuState$(
+        visible: candidate_state.visible,
+        status: final_status,
+        sampled: candidate_state.sampled,
+        render: candidate_state.render,
+    );
+    let semantic = PpuSemanticCommit$(
+        ly_after: final_state.visible.ly,
+        mode_after: visible_mode(final_status),
+        stat_line_after: next_stat_irq.line_high,
+        irq_edge: irq_edge(next_irq_req),
+        scanout: Option::None,
+    );
 
     DotOutput$(
-        next_state: state,
+        next_state: final_state,
         mem_reqs: idle_ppu_mem_reqs(),
         mmio_resp: idle_ppu_mmio_resp(),
-        irq_req: idle_ppu_irq_req(),
+        irq_req: next_irq_req,
         scanout: Option::None,
-        semantic: Option::None,
+        semantic: Option::Some(semantic),
         line_summary: Option::None,
     )
 }

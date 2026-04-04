@@ -9,6 +9,8 @@ ROOT_MAIN_PATH = ROOT / "src" / "main.spade"
 PPU_MAIN_PATH = ROOT / "src" / "ppu" / "main.spade"
 PPU_SEM_MAIN_PATH = ROOT / "src" / "ppu" / "sem" / "main.spade"
 PPU_RTL_MAIN_PATH = ROOT / "src" / "ppu" / "rtl" / "main.spade"
+PPU_RTL_CORE_PATH = ROOT / "src" / "ppu" / "rtl" / "core.spade"
+PPU_RTL_CORE_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "core_test_top.spade"
 PPU_RTL_IRQ_PATH = ROOT / "src" / "ppu" / "rtl" / "irq.spade"
 PPU_RTL_IRQ_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "irq_test_top.spade"
 PPU_RTL_REGS_PATH = ROOT / "src" / "ppu" / "rtl" / "regs.spade"
@@ -32,6 +34,8 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("mod ppu;", ROOT_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod sem;", PPU_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod rtl;", PPU_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod core;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod core_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod irq;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod irq_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod regs;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
@@ -92,6 +96,26 @@ class PpuScaffoldTest(unittest.TestCase):
             "pub fn idle_timed_ppu_event() -> TimedPpuEvent",
             "pub fn idle_oam_dma_state() -> OamDmaState",
             "pub fn idle_dot_input() -> DotInput",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_core_surface_matches_architecture_contract(self) -> None:
+        text = PPU_RTL_CORE_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub struct PpuCoreOut",
+            "trace: PpuDebugTrace",
+            "fn dmg_skipboot_regs() -> PpuRegs",
+            "fn dmg_skipboot_state() -> PpuState",
+            "pub entity ppu_core(",
+            "dot_ce: bool",
+            "video_now: VideoCoord",
+            "bus_events: [TimedPpuEvent; 4]",
+            "bus_event_count: uint<4>",
+            "mem_resp: PpuMemResp",
+            "dma_state: OamDmaState",
+            "let step = step_dot(",
+            "reg(clk) state_reg: PpuState reset(rst: dmg_skipboot_state()) = visible_state;",
+            "trace: if dot_ce { ppu_debug_trace(video_now, visible) } else { idle_trace_for_state(video_now, visible_state) },",
         ]:
             self.assertIn(symbol, text)
 
@@ -312,6 +336,7 @@ class PpuScaffoldTest(unittest.TestCase):
             "line_summary: Option<LineSummary>",
             "pub struct PpuDebugTrace",
             "at: VideoCoord",
+            "dot_in_line_after: uint<9>",
             "phase_after: PpuPhase",
             "fetcher: FetcherState",
             "bg_fifo: BgFifo",
@@ -332,15 +357,31 @@ class PpuScaffoldTest(unittest.TestCase):
         text = PPU_STEP_PATH.read_text(encoding="utf-8")
         for symbol in [
             "pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput",
-            "let _ = input;",
+            "fn fold_events(input: DotInput, regs: PpuRegs) -> (PpuRegs, bool, bool, bool)",
+            "let (written_regs, stat_write_seen, force_enable, force_disable) = fold_events(input, state.visible.regs);",
+            "let transition_state = handle_lcd_transition(state_with_regs, old_lcdc7, requested_lcd_enable);",
+            "let (next_stat_irq, next_irq_req) = irq_req(",
             "DotOutput$(",
-            "next_state: state",
+            "next_state: final_state",
             "mem_reqs: idle_ppu_mem_reqs()",
             "mmio_resp: idle_ppu_mmio_resp()",
-            "irq_req: idle_ppu_irq_req()",
+            "irq_req: next_irq_req",
             "scanout: Option::None",
-            "semantic: Option::None",
+            "semantic: Option::Some(semantic)",
             "line_summary: Option::None",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_core_test_top_provides_stable_projection(self) -> None:
+        text = PPU_RTL_CORE_TEST_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub entity core_test_top(clk_i: clock, rst_i: bool, dot_ce_i: bool) -> uint<26>",
+            "let core = inst ppu_core(",
+            "let trace = core.trace;",
+            "zext(encode_phase(trace.phase_after))",
+            "(zext(trace.ly_after) << 3)",
+            "(zext(trace.dot_in_line_after) << 11)",
+            "(zext(encode_mode(trace.mode_after)) << 20)",
         ]:
             self.assertIn(symbol, text)
 

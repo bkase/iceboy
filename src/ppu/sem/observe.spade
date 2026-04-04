@@ -89,6 +89,7 @@ pub struct DotOutput {
 pub struct PpuDebugTrace {
     at: VideoCoord,
     ly_after: uint<8>,
+    dot_in_line_after: uint<9>,
     mode_after: PpuMode,
     phase_after: PpuPhase,
     stat_line_after: bool,
@@ -172,6 +173,7 @@ pub fn idle_ppu_debug_trace() -> PpuDebugTrace {
     PpuDebugTrace$(
         at: zero_video_coord(),
         ly_after: state.visible.ly,
+        dot_in_line_after: state.render.dot_in_line,
         mode_after: visible_mode(state.status),
         phase_after: state.status.phase,
         stat_line_after: state.status.stat_irq.line_high,

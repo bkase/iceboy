@@ -1,0 +1,46 @@
+use lib::ppu::rtl::core::ppu_core;
+use lib::ppu::sem::events::{idle_oam_dma_state, idle_timed_ppu_event, zero_video_coord};
+use lib::ppu::sem::memory::idle_ppu_mem_resp;
+use lib::ppu::sem::types::{PpuMode, PpuPhase};
+
+fn encode_phase(phase: PpuPhase) -> uint<3> {
+    match phase {
+        PpuPhase::LcdOff => 0u3,
+        PpuPhase::OamScan$(index: _, found: _) => 1u3,
+        PpuPhase::Transfer$(x_out: _, discard_scx: _) => 2u3,
+        PpuPhase::HBlank$(dots_left: _) => 3u3,
+        PpuPhase::VBlank$(line: _, dots_left: _) => 4u3,
+    }
+}
+
+fn encode_mode(mode: PpuMode) -> uint<3> {
+    match mode {
+        PpuMode::LcdOff => 0u3,
+        PpuMode::OamScan => 1u3,
+        PpuMode::PixelTransfer => 2u3,
+        PpuMode::HBlank => 3u3,
+        PpuMode::VBlank => 4u3,
+    }
+}
+
+pub entity core_test_top(clk_i: clock, rst_i: bool, dot_ce_i: bool) -> uint<26> {
+    let core = inst ppu_core(
+        clk_i,
+        rst_i,
+        dot_ce_i,
+        zero_video_coord(),
+        [idle_timed_ppu_event(); 4],
+        0u4,
+        idle_ppu_mem_resp(),
+        idle_oam_dma_state(),
+    );
+    let trace = core.trace;
+
+    zext(encode_phase(trace.phase_after))
+        | (zext(trace.ly_after) << 3)
+        | (zext(trace.dot_in_line_after) << 11)
+        | (zext(encode_mode(trace.mode_after)) << 20)
+        | (zext(if trace.stat_line_after { 1u1 } else { 0u1 }) << 23)
+        | (zext(if core.irq_req.vblank_req { 1u1 } else { 0u1 }) << 24)
+        | (zext(if core.irq_req.stat_req { 1u1 } else { 0u1 }) << 25)
+}
