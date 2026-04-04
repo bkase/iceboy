@@ -1,0 +1,297 @@
+use std::option::Option;
+
+use lib::ppu::sem::scanout::{BlankReason, PixelEmit, PixelSource, ScanoutEvent};
+use lib::video::frame_sink::{
+    DiffSinkState,
+    FrameSinkState,
+    HashSinkState,
+    LineSinkState,
+    PixelReference,
+    advance_diff_sink,
+    advance_frame_sink,
+    advance_hash_sink,
+    advance_line_sink,
+    blank_reason_bits,
+    initial_diff_sink_state,
+    initial_frame_sink_state,
+    initial_hash_sink_state,
+    initial_line_sink_state,
+    line_boundary_summary,
+    zero_frame_summary,
+    zero_line_summary,
+};
+
+fn decode_source(source_i: uint<2>) -> PixelSource {
+    match source_i {
+        1u2 => PixelSource::Window,
+        2u2 => PixelSource::Object,
+        _ => PixelSource::Background,
+    }
+}
+
+fn decode_blank_reason(reason_i: uint<2>) -> BlankReason {
+    match reason_i {
+        1u2 => BlankReason::WarmupBlankFrame,
+        2u2 => BlankReason::NonVisibleLine,
+        3u2 => BlankReason::NonVisibleDot,
+        _ => BlankReason::LcdDisabled,
+    }
+}
+
+fn encode_source(source: PixelSource) -> uint<2> {
+    match source {
+        PixelSource::Background => 0u2,
+        PixelSource::Window => 1u2,
+        PixelSource::Object => 2u2,
+    }
+}
+
+fn build_event(
+    event_kind_i: uint<2>,
+    x_i: uint<8>,
+    y_i: uint<8>,
+    shade_i: uint<2>,
+    source_i: uint<2>,
+    blank_reason_i: uint<2>,
+) -> ScanoutEvent {
+    match event_kind_i {
+        0u2 => ScanoutEvent::FrameStart,
+        1u2 => ScanoutEvent::LineStart$(y: y_i),
+        2u2 => ScanoutEvent::Blank$(y: y_i, reason: decode_blank_reason(blank_reason_i)),
+        _ => ScanoutEvent::Pixel$(emit: PixelEmit$(x: x_i, y: y_i, shade: shade_i, source: decode_source(source_i))),
+    }
+}
+
+fn build_line_state(
+    frame_i: uint<32>,
+    frame_started_i: bool,
+    line_i: uint<8>,
+    active_i: bool,
+    pixel_count_i: uint<8>,
+    blank_count_i: uint<8>,
+    line_hash_i: uint<32>,
+    first_diff_valid_i: bool,
+    first_diff_x_i: uint<8>,
+    expected_shade_i: uint<2>,
+    actual_shade_i: uint<2>,
+    expected_source_i: uint<2>,
+    actual_source_i: uint<2>,
+) -> LineSinkState {
+    let _ = initial_line_sink_state();
+    LineSinkState$(
+        frame: frame_i,
+        frame_started: frame_started_i,
+        line: line_i,
+        active: active_i,
+        pixel_count: pixel_count_i,
+        blank_count: blank_count_i,
+        line_hash: line_hash_i,
+        first_diff_valid: first_diff_valid_i,
+        first_diff_x: first_diff_x_i,
+        expected_shade: expected_shade_i,
+        actual_shade: actual_shade_i,
+        expected_source: decode_source(expected_source_i),
+        actual_source: decode_source(actual_source_i),
+    )
+}
+
+fn build_frame_state(
+    frame_i: uint<32>,
+    started_i: bool,
+    line_count_i: uint<8>,
+    frame_hash_i: uint<32>,
+) -> FrameSinkState {
+    let _ = initial_frame_sink_state();
+    FrameSinkState$(frame: frame_i, started: started_i, line_count: line_count_i, frame_hash: frame_hash_i)
+}
+
+fn build_hash_state(sample_count_i: uint<16>, rolling_hash_i: uint<32>) -> HashSinkState {
+    let _ = initial_hash_sink_state();
+    HashSinkState$(sample_count: sample_count_i, rolling_hash: rolling_hash_i)
+}
+
+fn build_diff_state(
+    has_diff_i: bool,
+    frame_i: uint<32>,
+    line_i: uint<8>,
+    x_i: uint<8>,
+    expected_shade_i: uint<2>,
+    actual_shade_i: uint<2>,
+    expected_source_i: uint<2>,
+    actual_source_i: uint<2>,
+) -> DiffSinkState {
+    let _ = initial_diff_sink_state();
+    DiffSinkState$(
+        has_diff: has_diff_i,
+        frame: frame_i,
+        line: line_i,
+        x: x_i,
+        expected_shade: expected_shade_i,
+        actual_shade: actual_shade_i,
+        expected_source: decode_source(expected_source_i),
+        actual_source: decode_source(actual_source_i),
+    )
+}
+
+fn build_reference(ref_valid_i: bool, ref_shade_i: uint<2>, ref_source_i: uint<2>) -> PixelReference {
+    PixelReference$(valid: ref_valid_i, shade: ref_shade_i, source: decode_source(ref_source_i))
+}
+
+pub entity frame_sink_test_top(
+    line_frame_i: uint<32>,
+    line_frame_started_i: bool,
+    line_y_i: uint<8>,
+    line_active_i: bool,
+    line_pixel_count_i: uint<8>,
+    line_blank_count_i: uint<8>,
+    line_hash_i: uint<32>,
+    line_first_diff_valid_i: bool,
+    line_first_diff_x_i: uint<8>,
+    line_expected_shade_i: uint<2>,
+    line_actual_shade_i: uint<2>,
+    line_expected_source_i: uint<2>,
+    line_actual_source_i: uint<2>,
+    frame_frame_i: uint<32>,
+    frame_started_i: bool,
+    frame_line_count_i: uint<8>,
+    frame_hash_i: uint<32>,
+    hash_sample_count_i: uint<16>,
+    hash_value_i: uint<32>,
+    diff_has_diff_i: bool,
+    diff_frame_i: uint<32>,
+    diff_line_i: uint<8>,
+    diff_x_i: uint<8>,
+    diff_expected_shade_i: uint<2>,
+    diff_actual_shade_i: uint<2>,
+    diff_expected_source_i: uint<2>,
+    diff_actual_source_i: uint<2>,
+    event_kind_i: uint<2>,
+    pixel_x_i: uint<8>,
+    pixel_y_i: uint<8>,
+    pixel_shade_i: uint<2>,
+    pixel_source_i: uint<2>,
+    blank_reason_i: uint<2>,
+    ref_valid_i: bool,
+    ref_shade_i: uint<2>,
+    ref_source_i: uint<2>,
+) -> uint<466> {
+    let line_state = build_line_state(
+        line_frame_i,
+        line_frame_started_i,
+        line_y_i,
+        line_active_i,
+        line_pixel_count_i,
+        line_blank_count_i,
+        line_hash_i,
+        line_first_diff_valid_i,
+        line_first_diff_x_i,
+        line_expected_shade_i,
+        line_actual_shade_i,
+        line_expected_source_i,
+        line_actual_source_i,
+    );
+    let frame_state = build_frame_state(frame_frame_i, frame_started_i, frame_line_count_i, frame_hash_i);
+    let hash_state = build_hash_state(hash_sample_count_i, hash_value_i);
+    let diff_state = build_diff_state(
+        diff_has_diff_i,
+        diff_frame_i,
+        diff_line_i,
+        diff_x_i,
+        diff_expected_shade_i,
+        diff_actual_shade_i,
+        diff_expected_source_i,
+        diff_actual_source_i,
+    );
+    let event = build_event(
+        event_kind_i,
+        pixel_x_i,
+        pixel_y_i,
+        pixel_shade_i,
+        pixel_source_i,
+        blank_reason_i,
+    );
+    let reference = build_reference(ref_valid_i, ref_shade_i, ref_source_i);
+    let line_summary_opt = line_boundary_summary(line_state, event);
+    let next_line_state = advance_line_sink(line_state, event, reference);
+    let (next_frame_state, frame_summary_opt) = advance_frame_sink(frame_state, line_summary_opt, event);
+    let next_hash_state = advance_hash_sink(hash_state, event);
+    let raw_next_diff_state = advance_diff_sink(diff_state, event, reference);
+    let next_diff_state =
+        if raw_next_diff_state.has_diff && !diff_state.has_diff {
+            DiffSinkState$(
+                has_diff: true,
+                frame: line_state.frame,
+                line: raw_next_diff_state.line,
+                x: raw_next_diff_state.x,
+                expected_shade: raw_next_diff_state.expected_shade,
+                actual_shade: raw_next_diff_state.actual_shade,
+                expected_source: raw_next_diff_state.expected_source,
+                actual_source: raw_next_diff_state.actual_source,
+            )
+        } else {
+            raw_next_diff_state
+        };
+
+    let line_summary_valid = match line_summary_opt {
+        Option::Some(summary) => { let _ = summary; true },
+        Option::None => false,
+    };
+    let line_summary = match line_summary_opt {
+        Option::Some(summary) => summary,
+        Option::None => zero_line_summary(),
+    };
+    let frame_summary_valid = match frame_summary_opt {
+        Option::Some(summary) => { let _ = summary; true },
+        Option::None => false,
+    };
+    let frame_summary = match frame_summary_opt {
+        Option::Some(summary) => summary,
+        Option::None => zero_frame_summary(),
+    };
+
+    zext(next_line_state.frame)
+        | (zext(if next_line_state.frame_started { 1u1 } else { 0u1 }) << 32)
+        | (zext(next_line_state.line) << 33)
+        | (zext(if next_line_state.active { 1u1 } else { 0u1 }) << 41)
+        | (zext(next_line_state.pixel_count) << 42)
+        | (zext(next_line_state.blank_count) << 50)
+        | (zext(next_line_state.line_hash) << 58)
+        | (zext(if next_line_state.first_diff_valid { 1u1 } else { 0u1 }) << 90)
+        | (zext(next_line_state.first_diff_x) << 91)
+        | (zext(next_line_state.expected_shade) << 99)
+        | (zext(next_line_state.actual_shade) << 101)
+        | (zext(encode_source(next_line_state.expected_source)) << 103)
+        | (zext(encode_source(next_line_state.actual_source)) << 105)
+        | (zext(next_frame_state.frame) << 107)
+        | (zext(if next_frame_state.started { 1u1 } else { 0u1 }) << 139)
+        | (zext(next_frame_state.line_count) << 140)
+        | (zext(next_frame_state.frame_hash) << 148)
+        | (zext(next_hash_state.sample_count) << 180)
+        | (zext(next_hash_state.rolling_hash) << 196)
+        | (zext(if next_diff_state.has_diff { 1u1 } else { 0u1 }) << 228)
+        | (zext(next_diff_state.frame) << 229)
+        | (zext(next_diff_state.line) << 261)
+        | (zext(next_diff_state.x) << 269)
+        | (zext(next_diff_state.expected_shade) << 277)
+        | (zext(next_diff_state.actual_shade) << 279)
+        | (zext(encode_source(next_diff_state.expected_source)) << 281)
+        | (zext(encode_source(next_diff_state.actual_source)) << 283)
+        | (zext(if line_summary_valid { 1u1 } else { 0u1 }) << 285)
+        | (zext(line_summary.frame) << 286)
+        | (zext(line_summary.line) << 318)
+        | (zext(line_summary.pixel_count) << 326)
+        | (zext(line_summary.blank_count) << 334)
+        | (zext(line_summary.line_hash) << 342)
+        | (zext(if line_summary.full_width { 1u1 } else { 0u1 }) << 374)
+        | (zext(if line_summary.first_diff_valid { 1u1 } else { 0u1 }) << 375)
+        | (zext(line_summary.first_diff_x) << 376)
+        | (zext(line_summary.expected_shade) << 384)
+        | (zext(line_summary.actual_shade) << 386)
+        | (zext(encode_source(line_summary.expected_source)) << 388)
+        | (zext(encode_source(line_summary.actual_source)) << 390)
+        | (zext(if frame_summary_valid { 1u1 } else { 0u1 }) << 392)
+        | (zext(frame_summary.frame) << 393)
+        | (zext(frame_summary.line_count) << 425)
+        | (zext(frame_summary.frame_hash) << 433)
+        | (zext(if frame_summary.full_frame { 1u1 } else { 0u1 }) << 465)
+}

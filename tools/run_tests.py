@@ -129,6 +129,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("meta", "test_ppu_scaffold.py", "python", "tools.tests.test_ppu_scaffold"),
     SuiteDefinition("meta", "test_ppu_visibility.py", "python", "tools.tests.test_ppu_visibility"),
     SuiteDefinition("meta", "test_timebase_scaffold.py", "python", "tools.tests.test_timebase_scaffold"),
+    SuiteDefinition("meta", "test_video_scaffold.py", "python", "tools.tests.test_video_scaffold"),
     SuiteDefinition("unit", "test_sm83_opcodes.py", "python", "tools.tests.test_sm83_opcodes"),
     SuiteDefinition(
         "unit",
@@ -161,6 +162,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("unit", "test_event_bridge.py", "swim", "test/unit/test_event_bridge.py"),
     SuiteDefinition("unit", "test_membus.py", "swim", "test_membus"),
     SuiteDefinition("unit", "test_memory_map.py", "swim", "test/unit/test_memory_map.py"),
+    SuiteDefinition("unit", "test_frame_sink.py", "swim", "test/unit/test_frame_sink.py"),
     SuiteDefinition("unit", "test_ppu_irq.py", "swim", "test/unit/test_ppu_irq.py"),
     SuiteDefinition("unit", "test_ppu_timing.py", "swim", "test/unit/test_ppu_timing.py"),
     SuiteDefinition("unit", "test_oam_dma.py", "swim", "test_oam_dma"),

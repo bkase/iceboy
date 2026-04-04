@@ -5,3 +5,4 @@ mod mem;
 mod periph;
 mod ppu;
 mod sim;
+mod video;

@@ -1,0 +1,382 @@
+use std::option::Option;
+
+use lib::ppu::sem::scanout::{BlankReason, PixelEmit, PixelSource, ScanoutEvent};
+
+pub struct PixelReference {
+    valid: bool,
+    shade: uint<2>,
+    source: PixelSource,
+}
+
+pub struct LineSummary {
+    frame: uint<32>,
+    line: uint<8>,
+    pixel_count: uint<8>,
+    blank_count: uint<8>,
+    line_hash: uint<32>,
+    full_width: bool,
+    first_diff_valid: bool,
+    first_diff_x: uint<8>,
+    expected_shade: uint<2>,
+    actual_shade: uint<2>,
+    expected_source: PixelSource,
+    actual_source: PixelSource,
+}
+
+pub struct FrameSummary {
+    frame: uint<32>,
+    line_count: uint<8>,
+    frame_hash: uint<32>,
+    full_frame: bool,
+}
+
+pub struct LineSinkState {
+    frame: uint<32>,
+    frame_started: bool,
+    line: uint<8>,
+    active: bool,
+    pixel_count: uint<8>,
+    blank_count: uint<8>,
+    line_hash: uint<32>,
+    first_diff_valid: bool,
+    first_diff_x: uint<8>,
+    expected_shade: uint<2>,
+    actual_shade: uint<2>,
+    expected_source: PixelSource,
+    actual_source: PixelSource,
+}
+
+pub struct FrameSinkState {
+    frame: uint<32>,
+    started: bool,
+    line_count: uint<8>,
+    frame_hash: uint<32>,
+}
+
+pub struct HashSinkState {
+    sample_count: uint<16>,
+    rolling_hash: uint<32>,
+}
+
+pub struct DiffSinkState {
+    has_diff: bool,
+    frame: uint<32>,
+    line: uint<8>,
+    x: uint<8>,
+    expected_shade: uint<2>,
+    actual_shade: uint<2>,
+    expected_source: PixelSource,
+    actual_source: PixelSource,
+}
+
+fn source_bits(source: PixelSource) -> uint<2> {
+    match source {
+        PixelSource::Background => 0u2,
+        PixelSource::Window => 1u2,
+        PixelSource::Object => 2u2,
+    }
+}
+
+pub fn blank_reason_bits(reason: BlankReason) -> uint<2> {
+    match reason {
+        BlankReason::LcdDisabled => 0u2,
+        BlankReason::WarmupBlankFrame => 1u2,
+        BlankReason::NonVisibleLine => 2u2,
+        BlankReason::NonVisibleDot => 3u2,
+    }
+}
+
+pub fn zero_pixel_reference() -> PixelReference {
+    PixelReference$(valid: false, shade: 0u2, source: PixelSource::Background)
+}
+
+pub fn zero_line_summary() -> LineSummary {
+    LineSummary$(
+        frame: 0u32,
+        line: 0u8,
+        pixel_count: 0u8,
+        blank_count: 0u8,
+        line_hash: 0u32,
+        full_width: false,
+        first_diff_valid: false,
+        first_diff_x: 0u8,
+        expected_shade: 0u2,
+        actual_shade: 0u2,
+        expected_source: PixelSource::Background,
+        actual_source: PixelSource::Background,
+    )
+}
+
+pub fn zero_frame_summary() -> FrameSummary {
+    FrameSummary$(frame: 0u32, line_count: 0u8, frame_hash: 0u32, full_frame: false)
+}
+
+pub fn initial_line_sink_state() -> LineSinkState {
+    LineSinkState$(
+        frame: 0u32,
+        frame_started: false,
+        line: 0u8,
+        active: false,
+        pixel_count: 0u8,
+        blank_count: 0u8,
+        line_hash: 0u32,
+        first_diff_valid: false,
+        first_diff_x: 0u8,
+        expected_shade: 0u2,
+        actual_shade: 0u2,
+        expected_source: PixelSource::Background,
+        actual_source: PixelSource::Background,
+    )
+}
+
+pub fn initial_frame_sink_state() -> FrameSinkState {
+    FrameSinkState$(frame: 0u32, started: false, line_count: 0u8, frame_hash: 0u32)
+}
+
+pub fn initial_hash_sink_state() -> HashSinkState {
+    HashSinkState$(sample_count: 0u16, rolling_hash: 0u32)
+}
+
+pub fn initial_diff_sink_state() -> DiffSinkState {
+    DiffSinkState$(
+        has_diff: false,
+        frame: 0u32,
+        line: 0u8,
+        x: 0u8,
+        expected_shade: 0u2,
+        actual_shade: 0u2,
+        expected_source: PixelSource::Background,
+        actual_source: PixelSource::Background,
+    )
+}
+
+fn mix_hash32(hash: uint<32>, sample: uint<32>) -> uint<32> {
+    trunc((hash << 5) ^ hash ^ sample ^ 0x9e3779b9u32)
+}
+
+pub fn pixel_sample(emit: PixelEmit) -> uint<8> {
+    zext(emit.shade) | (zext(source_bits(emit.source)) << 2)
+}
+
+fn line_has_payload(state: LineSinkState) -> bool {
+    state.pixel_count != 0u8 || state.blank_count != 0u8 || state.first_diff_valid
+}
+
+fn reset_line_for_frame(state: LineSinkState, frame: uint<32>, frame_started: bool) -> LineSinkState {
+    LineSinkState$(
+        frame: frame,
+        frame_started: frame_started,
+        line: 0u8,
+        active: false,
+        pixel_count: 0u8,
+        blank_count: 0u8,
+        line_hash: 0u32,
+        first_diff_valid: false,
+        first_diff_x: 0u8,
+        expected_shade: 0u2,
+        actual_shade: 0u2,
+        expected_source: PixelSource::Background,
+        actual_source: PixelSource::Background,
+    )
+}
+
+fn start_line(state: LineSinkState, y: uint<8>) -> LineSinkState {
+    LineSinkState$(
+        frame: state.frame,
+        frame_started: state.frame_started,
+        line: y,
+        active: true,
+        pixel_count: 0u8,
+        blank_count: 0u8,
+        line_hash: 0u32,
+        first_diff_valid: false,
+        first_diff_x: 0u8,
+        expected_shade: 0u2,
+        actual_shade: 0u2,
+        expected_source: PixelSource::Background,
+        actual_source: PixelSource::Background,
+    )
+}
+
+pub fn line_summary_from_state(state: LineSinkState) -> LineSummary {
+    LineSummary$(
+        frame: state.frame,
+        line: state.line,
+        pixel_count: state.pixel_count,
+        blank_count: state.blank_count,
+        line_hash: state.line_hash,
+        full_width: state.pixel_count == 160u8,
+        first_diff_valid: state.first_diff_valid,
+        first_diff_x: state.first_diff_x,
+        expected_shade: state.expected_shade,
+        actual_shade: state.actual_shade,
+        expected_source: state.expected_source,
+        actual_source: state.actual_source,
+    )
+}
+
+pub fn line_boundary_summary(state: LineSinkState, event: ScanoutEvent) -> Option<LineSummary> {
+    let boundary = match event {
+        ScanoutEvent::FrameStart => true,
+        ScanoutEvent::LineStart$(y: _) => true,
+        _ => false,
+    };
+
+    if state.active && boundary && line_has_payload(state) {
+        Option::Some(line_summary_from_state(state))
+    } else {
+        Option::None
+    }
+}
+
+pub fn advance_line_sink(
+    state: LineSinkState,
+    event: ScanoutEvent,
+    reference: PixelReference,
+) -> LineSinkState {
+    match event {
+        ScanoutEvent::FrameStart => {
+            let next_frame = if state.frame_started { trunc(state.frame + 1u32) } else { state.frame };
+            reset_line_for_frame(state, next_frame, true)
+        },
+        ScanoutEvent::LineStart$(y) => start_line(state, y),
+        ScanoutEvent::Blank$(y, reason) => {
+            let _ = reason;
+            if state.active && state.line == y {
+                LineSinkState$(
+                    frame: state.frame,
+                    frame_started: state.frame_started,
+                    line: state.line,
+                    active: state.active,
+                    pixel_count: state.pixel_count,
+                    blank_count: trunc(state.blank_count + 1u8),
+                    line_hash: state.line_hash,
+                    first_diff_valid: state.first_diff_valid,
+                    first_diff_x: state.first_diff_x,
+                    expected_shade: state.expected_shade,
+                    actual_shade: state.actual_shade,
+                    expected_source: state.expected_source,
+                    actual_source: state.actual_source,
+                )
+            } else {
+                state
+            }
+        },
+        ScanoutEvent::Pixel$(emit) => {
+            let mismatch =
+                !reference.valid
+                || reference.shade != emit.shade
+                || source_bits(reference.source) != source_bits(emit.source);
+            let capture_diff = state.active && state.line == emit.y && !state.first_diff_valid && mismatch;
+            if state.active && state.line == emit.y {
+                LineSinkState$(
+                    frame: state.frame,
+                    frame_started: state.frame_started,
+                    line: state.line,
+                    active: state.active,
+                    pixel_count: trunc(state.pixel_count + 1u8),
+                    blank_count: state.blank_count,
+                    line_hash: mix_hash32(state.line_hash, zext(pixel_sample(emit))),
+                    first_diff_valid: state.first_diff_valid || capture_diff,
+                    first_diff_x: if capture_diff { emit.x } else { state.first_diff_x },
+                    expected_shade: if capture_diff { reference.shade } else { state.expected_shade },
+                    actual_shade: if capture_diff { emit.shade } else { state.actual_shade },
+                    expected_source: if capture_diff { reference.source } else { state.expected_source },
+                    actual_source: if capture_diff { emit.source } else { state.actual_source },
+                )
+            } else {
+                state
+            }
+        },
+    }
+}
+
+fn frame_summary_from_state(state: FrameSinkState) -> FrameSummary {
+    FrameSummary$(
+        frame: state.frame,
+        line_count: state.line_count,
+        frame_hash: state.frame_hash,
+        full_frame: state.line_count == 144u8,
+    )
+}
+
+fn absorb_line_summary(state: FrameSinkState, line_summary: Option<LineSummary>) -> FrameSinkState {
+    match line_summary {
+        Option::Some(summary) =>
+            if summary.line < 144u8 && summary.frame == state.frame {
+                FrameSinkState$(
+                    frame: state.frame,
+                    started: state.started,
+                    line_count: trunc(state.line_count + 1u8),
+                    frame_hash: mix_hash32(state.frame_hash, summary.line_hash),
+                )
+            } else {
+                state
+            },
+        Option::None => state,
+    }
+}
+
+pub fn advance_frame_sink(
+    state: FrameSinkState,
+    line_summary: Option<LineSummary>,
+    event: ScanoutEvent,
+) -> (FrameSinkState, Option<FrameSummary>) {
+    let after_line = absorb_line_summary(state, line_summary);
+    match event {
+        ScanoutEvent::FrameStart => {
+            let summary =
+                if after_line.started && after_line.line_count != 0u8 {
+                    Option::Some(frame_summary_from_state(after_line))
+                } else {
+                    Option::None
+                };
+            let next_frame = if after_line.started { trunc(after_line.frame + 1u32) } else { after_line.frame };
+            (
+                FrameSinkState$(frame: next_frame, started: true, line_count: 0u8, frame_hash: 0u32),
+                summary,
+            )
+        },
+        _ => (after_line, Option::None),
+    }
+}
+
+pub fn advance_hash_sink(state: HashSinkState, event: ScanoutEvent) -> HashSinkState {
+    match event {
+        ScanoutEvent::Pixel$(emit) => HashSinkState$(
+            sample_count: trunc(state.sample_count + 1u16),
+            rolling_hash: mix_hash32(state.rolling_hash, zext(pixel_sample(emit))),
+        ),
+        _ => state,
+    }
+}
+
+pub fn advance_diff_sink(
+    state: DiffSinkState,
+    event: ScanoutEvent,
+    reference: PixelReference,
+) -> DiffSinkState {
+    match event {
+        ScanoutEvent::Pixel$(emit) => {
+            let mismatch =
+                !reference.valid
+                || reference.shade != emit.shade
+                || source_bits(reference.source) != source_bits(emit.source);
+            if state.has_diff || !mismatch {
+                state
+            } else {
+                DiffSinkState$(
+                    has_diff: true,
+                    frame: 0u32,
+                    line: emit.y,
+                    x: emit.x,
+                    expected_shade: reference.shade,
+                    actual_shade: emit.shade,
+                    expected_source: reference.source,
+                    actual_source: emit.source,
+                )
+            }
+        },
+        _ => state,
+    }
+}
