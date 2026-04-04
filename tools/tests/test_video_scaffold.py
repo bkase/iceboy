@@ -9,6 +9,8 @@ ROOT_MAIN_PATH = ROOT / "src" / "main.spade"
 VIDEO_MAIN_PATH = ROOT / "src" / "video" / "main.spade"
 ACCESS_PATH = ROOT / "src" / "video" / "access.spade"
 ACCESS_TEST_TOP_PATH = ROOT / "src" / "video" / "access_test_top.spade"
+BACKEND_ADAPTER_PATH = ROOT / "src" / "video" / "backend_adapter.spade"
+BACKEND_ADAPTER_TEST_TOP_PATH = ROOT / "src" / "video" / "backend_adapter_test_top.spade"
 FRAME_SINK_PATH = ROOT / "src" / "video" / "frame_sink.spade"
 FRAME_SINK_TEST_TOP_PATH = ROOT / "src" / "video" / "frame_sink_test_top.spade"
 
@@ -19,6 +21,8 @@ class VideoScaffoldTest(unittest.TestCase):
         text = VIDEO_MAIN_PATH.read_text(encoding="utf-8")
         self.assertIn("pub mod access;", text)
         self.assertIn("pub mod access_test_top;", text)
+        self.assertIn("pub mod backend_adapter;", text)
+        self.assertIn("pub mod backend_adapter_test_top;", text)
         self.assertIn("pub mod frame_sink;", text)
         self.assertIn("pub mod frame_sink_test_top;", text)
 
@@ -52,6 +56,48 @@ class VideoScaffoldTest(unittest.TestCase):
             "PpuMemResult::Ok$(data: data) => (0u2, data, 0u3)",
             "PpuMemResult::Denied => (1u2, 0u8, 0u3)",
             "PpuMemResult::UndefinedRead$(reason: reason) => (2u2, 0u8, reason_bits(reason))",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_backend_adapter_surface_matches_contract(self) -> None:
+        text = BACKEND_ADAPTER_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub struct BackendStorageReq",
+            "vram_read: bool",
+            "vram_write: bool",
+            "vram_addr: uint<13>",
+            "oam_read: bool",
+            "oam_write: bool",
+            "oam_addr: uint<8>",
+            "pub struct BackendAdapterState",
+            "pending_valid: bool",
+            "pending_read: PendingRead",
+            "pub struct BackendAdapterOutput",
+            "next_state: BackendAdapterState",
+            "storage: BackendStorageReq",
+            "resp: Option<PpuMemResp>",
+            "pub fn vram_storage_addr(addr: uint<16>) -> uint<13>",
+            "pub fn oam_storage_addr(addr: uint<16>) -> uint<8>",
+            "pub fn idle_backend_storage_req() -> BackendStorageReq",
+            "pub fn initial_backend_adapter_state() -> BackendAdapterState",
+            "pub fn advance_backend_adapter(",
+            "PpuMemResult::Ok$(data: read_data_for_region(",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_backend_adapter_test_top_exposes_stable_projection(self) -> None:
+        text = BACKEND_ADAPTER_TEST_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub entity backend_adapter_test_top(",
+            "pending_valid_i: bool",
+            "req_valid_i: bool",
+            "req_addr_i: uint<16>",
+            "vram_read_data_i: uint<8>",
+            "oam_read_data_i: uint<8>",
+            ") -> uint<68>",
+            "let output = advance_backend_adapter(",
+            "zext(output.storage.vram_write_data)",
+            "zext(resp_bits(output.resp)) << 51",
         ]:
             self.assertIn(symbol, text)
 

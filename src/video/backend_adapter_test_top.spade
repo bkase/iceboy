@@ -1,0 +1,144 @@
+use std::option::Option;
+
+use lib::ppu::sem::memory::{MemClient, MemRegion, MemTxnTag, PendingRead, PpuMemKind, PpuMemReq, PpuMemResp};
+use lib::video::backend_adapter::{BackendAdapterState, advance_backend_adapter};
+
+fn decode_region(region_i: bool) -> MemRegion {
+    if region_i { MemRegion::Oam } else { MemRegion::Vram }
+}
+
+fn decode_client(client_i: uint<3>) -> MemClient {
+    match client_i {
+        1u3 => MemClient::BgFetcher,
+        2u3 => MemClient::ObjFetcher,
+        3u3 => MemClient::OamScanner,
+        4u3 => MemClient::Dma,
+        _ => MemClient::Cpu,
+    }
+}
+
+fn decode_kind(req_kind_i: bool, write_data_i: uint<8>) -> PpuMemKind {
+    if req_kind_i {
+        PpuMemKind::Write$(data: write_data_i)
+    } else {
+        PpuMemKind::Read
+    }
+}
+
+fn build_req(
+    req_region_i: bool,
+    req_client_i: uint<3>,
+    req_kind_i: bool,
+    req_id_i: uint<4>,
+    req_addr_i: uint<16>,
+    write_data_i: uint<8>,
+) -> PpuMemReq {
+    PpuMemReq$(
+        tag: MemTxnTag$(region: decode_region(req_region_i), client: decode_client(req_client_i), id: req_id_i),
+        kind: decode_kind(req_kind_i, write_data_i),
+        addr: req_addr_i,
+    )
+}
+
+fn build_state(
+    pending_valid_i: bool,
+    pending_region_i: bool,
+    pending_client_i: uint<3>,
+    pending_id_i: uint<4>,
+    pending_epoch_i: uint<4>,
+) -> BackendAdapterState {
+    BackendAdapterState$(
+        pending_valid: pending_valid_i,
+        pending_read: PendingRead$(
+            tag: MemTxnTag$(
+                region: decode_region(pending_region_i),
+                client: decode_client(pending_client_i),
+                id: pending_id_i,
+            ),
+            epoch: pending_epoch_i,
+        ),
+    )
+}
+
+fn region_bit(region: MemRegion) -> uint<1> {
+    match region {
+        MemRegion::Vram => 0u1,
+        MemRegion::Oam => 1u1,
+    }
+}
+
+fn resp_bits(resp_opt: Option<PpuMemResp>) -> uint<17> {
+    match resp_opt {
+        Option::Some(resp) => match resp.result {
+            lib::ppu::sem::memory::PpuMemResult::Ok$(data: data) => (
+                zext(data)
+                | (1u17 << 8)
+                | (zext(resp.tag.id) << 9)
+                | (zext(region_bit(resp.tag.region)) << 13)
+                | (zext(match resp.tag.client {
+                    MemClient::Cpu => 0u3,
+                    MemClient::BgFetcher => 1u3,
+                    MemClient::ObjFetcher => 2u3,
+                    MemClient::OamScanner => 3u3,
+                    MemClient::Dma => 4u3,
+                }) << 14)
+            ),
+            _ => 0u17,
+        },
+        Option::None => 0u17,
+    }
+}
+
+pub entity backend_adapter_test_top(
+    pending_valid_i: bool,
+    pending_region_i: bool,
+    pending_client_i: uint<3>,
+    pending_id_i: uint<4>,
+    pending_epoch_i: uint<4>,
+    req_valid_i: bool,
+    req_region_i: bool,
+    req_client_i: uint<3>,
+    req_kind_i: bool,
+    req_id_i: uint<4>,
+    req_addr_i: uint<16>,
+    req_epoch_i: uint<4>,
+    write_data_i: uint<8>,
+    vram_read_data_i: uint<8>,
+    oam_read_data_i: uint<8>,
+) -> uint<68> {
+    let output = advance_backend_adapter(
+        build_state(
+            pending_valid_i,
+            pending_region_i,
+            pending_client_i,
+            pending_id_i,
+            pending_epoch_i,
+        ),
+        req_valid_i,
+        build_req(
+            req_region_i,
+            req_client_i,
+            req_kind_i,
+            req_id_i,
+            req_addr_i,
+            write_data_i,
+        ),
+        req_epoch_i,
+        vram_read_data_i,
+        oam_read_data_i,
+    );
+
+    zext(output.storage.vram_write_data)
+        | (zext(output.storage.vram_addr) << 8)
+        | (zext(if output.storage.vram_read { 1u1 } else { 0u1 }) << 21)
+        | (zext(if output.storage.vram_write { 1u1 } else { 0u1 }) << 22)
+        | (zext(output.storage.oam_write_data) << 23)
+        | (zext(output.storage.oam_addr) << 31)
+        | (zext(if output.storage.oam_read { 1u1 } else { 0u1 }) << 39)
+        | (zext(if output.storage.oam_write { 1u1 } else { 0u1 }) << 40)
+        | (zext(if output.next_state.pending_valid { 1u1 } else { 0u1 }) << 41)
+        | (zext(output.next_state.pending_read.tag.id) << 42)
+        | (zext(region_bit(output.next_state.pending_read.tag.region)) << 46)
+        | (zext(output.next_state.pending_read.epoch) << 47)
+        | (zext(resp_bits(output.resp)) << 51)
+}
