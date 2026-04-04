@@ -1,0 +1,27 @@
+use lib::periph::serial::serial;
+
+pub entity serial_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    m_ce_i: bool,
+    write_en_i: bool,
+    write_addr_i: uint<16>,
+    write_data_i: uint<8>,
+    serial_inject_i: uint<8>,
+) -> uint<22> {
+    let serial_out = inst serial(
+        clk_i,
+        rst_i,
+        m_ce_i,
+        write_en_i,
+        write_addr_i,
+        write_data_i,
+        serial_inject_i,
+    );
+
+    (zext(serial_out.sb) << 14)
+    | (zext(serial_out.sc) << 6)
+    | (zext(if serial_out.serial_irq { 1u1 } else { 0u1 }) << 5)
+    | (zext(if serial_out.transfer_active { 1u1 } else { 0u1 }) << 4)
+    | zext(serial_out.cycles_left)
+}

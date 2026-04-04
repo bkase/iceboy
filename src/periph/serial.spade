@@ -1,0 +1,102 @@
+pub struct SerialOut {
+    sb: uint<8>,
+    sc: uint<8>,
+    serial_irq: bool,
+    transfer_active: bool,
+    cycles_left: uint<4>,
+}
+
+fn io_write(write_en: bool, write_addr: uint<16>, target: uint<16>) -> bool {
+    write_en && write_addr == target
+}
+
+fn internal_clock_start(value: uint<8>) -> bool {
+    (value & 0x81u8) == 0x81u8
+}
+
+fn visible_sc(sc_reg: uint<8>, transfer_active: bool) -> uint<8> {
+    if transfer_active { sc_reg | 0x80u8 } else { sc_reg }
+}
+
+pub entity serial(
+    clk: clock,
+    rst: bool,
+    m_ce: bool,
+    write_en: bool,
+    write_addr: uint<16>,
+    write_data: uint<8>,
+    serial_inject: uint<8>,
+) -> SerialOut {
+    let write_sb = io_write(write_en, write_addr, 0xFF01u16);
+    let write_sc = io_write(write_en, write_addr, 0xFF02u16);
+    let start_internal = write_sc && internal_clock_start(write_data);
+
+    decl sb_reg;
+    decl sc_reg;
+    decl transfer_active_reg;
+    decl cycles_left_reg;
+    decl serial_irq_reg;
+
+    let progress_transfer = m_ce && transfer_active_reg && !start_internal;
+    let complete_transfer = progress_transfer && cycles_left_reg == 1u4;
+
+    let next_sb_reg =
+        if write_sb {
+            write_data
+        } else {
+            if complete_transfer {
+                serial_inject
+            } else {
+                sb_reg
+            }
+        };
+
+    let next_sc_reg =
+        if write_sc {
+            write_data
+        } else {
+            if complete_transfer {
+                sc_reg & 0x7Fu8
+            } else {
+                sc_reg
+            }
+        };
+
+    let next_transfer_active_reg =
+        if start_internal {
+            true
+        } else {
+            if complete_transfer {
+                false
+            } else {
+                transfer_active_reg
+            }
+        };
+
+    let next_cycles_left_reg =
+        if start_internal {
+            8u4
+        } else {
+            if progress_transfer {
+                trunc(cycles_left_reg - 1u4)
+            } else {
+                cycles_left_reg
+            }
+        };
+
+    let next_serial_irq_reg = complete_transfer;
+
+    reg(clk) sb_reg: uint<8> reset(rst: 0u8) = next_sb_reg;
+    reg(clk) sc_reg: uint<8> reset(rst: 0u8) = next_sc_reg;
+    reg(clk) transfer_active_reg: bool reset(rst: false) = next_transfer_active_reg;
+    reg(clk) cycles_left_reg: uint<4> reset(rst: 0u4) = next_cycles_left_reg;
+    reg(clk) serial_irq_reg: bool reset(rst: false) = next_serial_irq_reg;
+
+    SerialOut$(
+        sb: sb_reg,
+        sc: visible_sc(sc_reg, transfer_active_reg),
+        serial_irq: serial_irq_reg,
+        transfer_active: transfer_active_reg,
+        cycles_left: cycles_left_reg,
+    )
+}

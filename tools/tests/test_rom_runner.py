@@ -148,6 +148,50 @@ class RomRunnerTest(unittest.TestCase):
         bus.write(0x0000, 0x00)
         self.assertEqual(bus.read(0xA000), 0xFF)
 
+    def test_external_memory_bus_models_serial_transfer_and_capture(self) -> None:
+        bus = ExternalMemoryBus(bytes(0x8000))
+        bus.write(0xFF01, 0x41)
+        bus.write(0xFF02, 0x81)
+
+        self.assertEqual(bus.read(0xFF01), 0x41)
+        self.assertEqual(bus.read(0xFF02), 0x81)
+        self.assertEqual(bus.serial_capture, [0x41])
+
+        for cycles_left in range(8, 0, -1):
+            if_set_bits = bus.next_if_set_bits(write_en=False, write_addr=0, write_data=0)
+            bus.advance_cycle(
+                write_en=False,
+                write_addr=0,
+                write_data=0,
+                if_set_bits=if_set_bits,
+                irq_ack_valid=False,
+                irq_ack_bit=0,
+            )
+            self.assertEqual(bus.serial_cycles_left, cycles_left - 1)
+
+        self.assertEqual(bus.read(0xFF01), 0xFF)
+        self.assertEqual(bus.read(0xFF02), 0x01)
+        self.assertEqual(bus.read(0xFF0F), 0x08)
+
+    def test_external_memory_bus_applies_serial_inject_value_on_completion(self) -> None:
+        bus = ExternalMemoryBus(bytes(0x8000))
+        bus.apply_stimulus(SimStimulus(serial_inject=0xA5))
+        bus.write(0xFF01, 0x99)
+        bus.write(0xFF02, 0x81)
+
+        for _ in range(8):
+            if_set_bits = bus.next_if_set_bits(write_en=False, write_addr=0, write_data=0)
+            bus.advance_cycle(
+                write_en=False,
+                write_addr=0,
+                write_data=0,
+                if_set_bits=if_set_bits,
+                irq_ack_valid=False,
+                irq_ack_bit=0,
+            )
+
+        self.assertEqual(bus.read(0xFF01), 0xA5)
+
     def test_external_memory_bus_models_joyp_selection_and_press_edges(self) -> None:
         bus = ExternalMemoryBus(bytes(0x8000))
         self.assertEqual(bus.read(0xFF00), 0xFF)

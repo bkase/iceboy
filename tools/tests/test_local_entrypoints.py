@@ -127,6 +127,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/unit/test_membus.py"', text)
         self.assertIn('"test/unit/test_memory_map.py"', text)
         self.assertIn('"test/unit/test_oam_dma.py"', text)
+        self.assertIn('"test/unit/test_serial.py"', text)
         self.assertIn('"test/lockstep/test_ei_halt_corners.py"', text)
         self.assertIn('"test/harness/test_arch_time_invariants.py"', text)
         self.assertIn('"test/power/test_duty_cycle_metrics.py"', text)

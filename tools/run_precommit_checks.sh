@@ -30,6 +30,7 @@ PRECOMMIT_SWIM_TESTS=(
     "test/unit/test_membus.py"
     "test/unit/test_memory_map.py"
     "test/unit/test_oam_dma.py"
+    "test/unit/test_serial.py"
     "test/unit/test_interrupt_service.py"
     "test/unit/test_interrupts_basic.py"
     "test/unit/test_timer.py"

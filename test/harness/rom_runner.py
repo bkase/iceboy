@@ -42,8 +42,11 @@ BUS_REQ_READ = 1
 BUS_REQ_WRITE = 2
 PYBOY_BATCH_TICKS = 40
 TIMER_IF_BIT = 0x04
+SERIAL_IF_BIT = 0x08
 JOYPAD_IF_BIT = 0x10
 JOYP_ADDR = 0xFF00
+SB_ADDR = 0xFF01
+SC_ADDR = 0xFF02
 DIV_ADDR = 0xFF04
 TIMA_ADDR = 0xFF05
 TMA_ADDR = 0xFF06
@@ -141,6 +144,11 @@ class ExternalMemoryBus:
         self.tima = 0
         self.tma = 0
         self.tac = 0
+        self.serial_sb = 0
+        self.serial_sc = 0
+        self.serial_cycles_left = 0
+        self.serial_inject_value = 0xFF
+        self.serial_capture: list[int] = []
         self.sampled_timer_enabled = False
         self.sampled_timer_bit = False
         self.overflow_delay = 0
@@ -277,6 +285,8 @@ class ExternalMemoryBus:
         return 0xC0 | ((self.joyp_select & 0x3) << 4) | self._joyp_low_nibble()
 
     def apply_stimulus(self, stimulus: SimStimulus) -> int:
+        if stimulus.serial_inject is not None:
+            self.serial_inject_value = stimulus.serial_inject & 0xFF
         if stimulus.joyp_buttons is None:
             return 0
         next_buttons = 0
@@ -296,6 +306,10 @@ class ExternalMemoryBus:
             return self.wram[addr - 0xC000]
         if addr == JOYP_ADDR:
             return self._joyp_visible()
+        if addr == SB_ADDR:
+            return self.serial_sb & 0xFF
+        if addr == SC_ADDR:
+            return self.serial_sc & 0xFF
         if addr == DIV_ADDR:
             return (self.sys_counter >> 8) & 0xFF
         if addr == TIMA_ADDR:
@@ -321,6 +335,13 @@ class ExternalMemoryBus:
             self.wram[addr - 0xC000] = value
         elif addr == JOYP_ADDR:
             self.joyp_select = (value >> 4) & 0x3
+        elif addr == SB_ADDR:
+            self.serial_sb = value & 0xFF
+        elif addr == SC_ADDR:
+            self.serial_sc = value & 0x83
+            if (self.serial_sc & 0x81) == 0x81:
+                self.serial_cycles_left = 8
+                self.serial_capture.append(self.serial_sb & 0xFF)
         elif 0xFF80 <= addr <= 0xFFFE:
             self.hram[addr - 0xFF80] = value
 
@@ -350,7 +371,8 @@ class ExternalMemoryBus:
             if self.overflow_delay == 0 and timer_tick and self.tima == 0xFF:
                 next_timer_irq = False
 
-        return TIMER_IF_BIT if next_timer_irq else 0
+        next_serial_irq = self.serial_cycles_left == 1 and (self.serial_sc & 0x81) == 0x81
+        return (TIMER_IF_BIT if next_timer_irq else 0) | (SERIAL_IF_BIT if next_serial_irq else 0)
 
     def advance_cycle(
         self,
@@ -404,6 +426,11 @@ class ExternalMemoryBus:
         self.tima = next_tima & 0xFF
         self.tma = next_tma & 0xFF
         self.tac = next_tac & 0x7
+        if self.serial_cycles_left > 0 and (self.serial_sc & 0x81) == 0x81:
+            self.serial_cycles_left -= 1
+            if self.serial_cycles_left == 0:
+                self.serial_sb = self.serial_inject_value & 0xFF
+                self.serial_sc &= 0x7F
         self.sampled_timer_enabled = next_sampled_timer_enabled
         self.sampled_timer_bit = next_sampled_timer_bit
         self.overflow_delay = next_overflow_delay
