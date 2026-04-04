@@ -47,6 +47,7 @@ PRECOMMIT_SWIM_TESTS_EXTENDED=(
     "test/lockstep/test_interrupt_injection.py"
     "test/power/test_duty_cycle_metrics.py"
     "test/power/test_halt_quiescence.py"
+    "test/rom/test_dma_oam_copy.py"
     "test/rom/test_ei_delay.py"
     "test/rom/test_alu16_sp.py"
     "test/rom/test_joy_diverge_persist.py"

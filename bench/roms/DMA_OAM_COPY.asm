@@ -1,7 +1,8 @@
 INCLUDE "template.inc"
 
 DEF rDMA EQU $FF46
-DEF DMA_TEST_FILL EQU $01
+DEF rLCDC EQU $FF40
+DEF DMA_TEST_HRAM EQU $01
 DEF DMA_TEST_VERIFY EQU $02
 
 ICEBOY_ROM_HEADER
@@ -14,6 +15,8 @@ Entry:
 
     ld a, $5A
     ld [wDebugCounters + 0], a
+    xor a
+    ld [rLCDC], a
     ld a, $C3
     ld [rIE], a
     ld a, $A5
@@ -21,13 +24,13 @@ Entry:
 
 __checkpoint_dma_trigger:
     call FillSourceBuffer
-    ld a, $C0
+    ld a, $C1
     ld [rDMA], a
     ld a, [$FF80]
     ld [wDebugCounters + 1], a
     cp $A5
     jr z, .wait_dma
-    ld b, DMA_TEST_FILL
+    ld b, DMA_TEST_HRAM
     ld d, $A5
     ld e, a
     ld c, $01
@@ -51,7 +54,7 @@ __checkpoint_oam_verify:
     jp __pass
 
 FillSourceBuffer:
-    ld hl, $C000
+    ld hl, $C100
     ld bc, $00A0
     xor a
 .loop:
@@ -86,15 +89,7 @@ VerifyOamCopy:
     ld a, d
     or e
     jr nz, .loop
-    ld a, [$FE9F]
-    ld [wDebugCounters + 2], a
-    cp $9F
-    ret z
-    ld b, DMA_TEST_VERIFY
-    ld d, $9F
-    ld e, a
-    ld c, $03
-    jp FailTest
+    ret
 
 FailTest:
     ICEBOY_LOG_CASE b, $00, ABI_LOG_STATUS_FAIL, d, e, c

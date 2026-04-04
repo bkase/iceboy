@@ -42,6 +42,19 @@ class RomRunnerTest(unittest.TestCase):
     def build_mbc3_rom(*, bank_count: int, cart_type: int = 0x13, ram_size_code: int = 0x03) -> bytes:
         return RomRunnerTest.build_banked_rom(bank_count=bank_count, cart_type=cart_type, ram_size_code=ram_size_code)
 
+    @staticmethod
+    def advance_idle_cycles(bus: ExternalMemoryBus, count: int) -> None:
+        for _ in range(count):
+            if_set_bits = bus.next_if_set_bits(write_en=False, write_addr=0, write_data=0)
+            bus.advance_cycle(
+                write_en=False,
+                write_addr=0,
+                write_data=0,
+                if_set_bits=if_set_bits,
+                irq_ack_valid=False,
+                irq_ack_bit=0,
+            )
+
     def test_external_memory_bus_maps_rom_wram_and_hram(self) -> None:
         bus = ExternalMemoryBus(bytes([value & 0xFF for value in range(0x8000)]))
         self.assertEqual(bus.read(0x0012), 0x12)
@@ -158,15 +171,7 @@ class RomRunnerTest(unittest.TestCase):
         self.assertEqual(bus.serial_capture, [0x41])
 
         for cycles_left in range(8, 0, -1):
-            if_set_bits = bus.next_if_set_bits(write_en=False, write_addr=0, write_data=0)
-            bus.advance_cycle(
-                write_en=False,
-                write_addr=0,
-                write_data=0,
-                if_set_bits=if_set_bits,
-                irq_ack_valid=False,
-                irq_ack_bit=0,
-            )
+            self.advance_idle_cycles(bus, 1)
             self.assertEqual(bus.serial_cycles_left, cycles_left - 1)
 
         self.assertEqual(bus.read(0xFF01), 0xFF)
@@ -179,18 +184,39 @@ class RomRunnerTest(unittest.TestCase):
         bus.write(0xFF01, 0x99)
         bus.write(0xFF02, 0x81)
 
-        for _ in range(8):
-            if_set_bits = bus.next_if_set_bits(write_en=False, write_addr=0, write_data=0)
-            bus.advance_cycle(
-                write_en=False,
-                write_addr=0,
-                write_data=0,
-                if_set_bits=if_set_bits,
-                irq_ack_valid=False,
-                irq_ack_bit=0,
-            )
+        self.advance_idle_cycles(bus, 8)
 
         self.assertEqual(bus.read(0xFF01), 0xA5)
+
+    def test_external_memory_bus_models_oam_dma_copy_and_cpu_restrictions(self) -> None:
+        bus = ExternalMemoryBus(bytes(0x8000), enforce_dma_cpu_restrictions=True)
+        bus.write(0xC100, 0x12)
+        bus.write(0xC101, 0x34)
+        bus.write(0xC123, 0x66)
+        bus.write(0xC19F, 0xAB)
+
+        bus.write(0xFF80, 0xC3)
+        bus.write(0xFF01, 0x41)
+        bus.write(0xFF46, 0xC1)
+
+        self.assertTrue(bus.dma_active)
+        self.assertEqual(bus.read(0xC100), 0xFF)
+        self.assertEqual(bus.read(0xFE00), 0xFF)
+        self.assertEqual(bus.read(0xFFFF), 0xFF)
+        self.assertEqual(bus.read(0xFF80), 0xC3)
+        self.assertEqual(bus.read(0xFF01), 0x41)
+
+        bus.write(0xC123, 0x99)
+        self.assertEqual(bus.read(0xC123), 0xFF)
+        self.advance_idle_cycles(bus, 158)
+        self.assertTrue(bus.dma_active)
+        self.advance_idle_cycles(bus, 1)
+
+        self.assertFalse(bus.dma_active)
+        self.assertEqual(bus.read(0xC123), 0x66)
+        self.assertEqual(bus.read(0xFE00), 0x12)
+        self.assertEqual(bus.read(0xFE01), 0x34)
+        self.assertEqual(bus.read(0xFE9F), 0xAB)
 
     def test_external_memory_bus_models_joyp_selection_and_press_edges(self) -> None:
         bus = ExternalMemoryBus(bytes(0x8000))
@@ -283,16 +309,7 @@ class RomRunnerTest(unittest.TestCase):
             irq_ack_bit=0,
         )
 
-        for _ in range(6):
-            if_set_bits = bus.next_if_set_bits(write_en=False, write_addr=0, write_data=0)
-            bus.advance_cycle(
-                write_en=False,
-                write_addr=0,
-                write_data=0,
-                if_set_bits=if_set_bits,
-                irq_ack_valid=False,
-                irq_ack_bit=0,
-            )
+        self.advance_idle_cycles(bus, 6)
 
         self.assertEqual(bus.read(0xFF07), 0x05)
         self.assertGreater(bus.read(0xFF05), 0x00)
@@ -324,6 +341,13 @@ class RomRunnerTest(unittest.TestCase):
         self.assertEqual(entry.rom_path.name, "timer_div_basic.gb")
         self.assertEqual(entry.sym_path.name, "timer_div_basic.sym")
         self.assertIn("__checkpoint_div_count", entry.checkpoint_symbols)
+
+    def test_load_manifest_entry_resolves_dma_rom(self) -> None:
+        entry = load_manifest_entry("DMA_OAM_COPY")
+        self.assertEqual(entry.rom_id, "DMA_OAM_COPY")
+        self.assertEqual(entry.rom_path.name, "DMA_OAM_COPY.gb")
+        self.assertEqual(entry.sym_path.name, "DMA_OAM_COPY.sym")
+        self.assertEqual(entry.manifest_entry["requires"], ["cpu", "dma"])
 
     def test_load_manifest_entry_resolves_joy_rom(self) -> None:
         entry = load_manifest_entry("JOY_DIVERGE_PERSIST")

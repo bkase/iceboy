@@ -51,8 +51,11 @@ DIV_ADDR = 0xFF04
 TIMA_ADDR = 0xFF05
 TMA_ADDR = 0xFF06
 TAC_ADDR = 0xFF07
+DMA_ADDR = 0xFF46
 IF_ADDR = 0xFF0F
 IE_ADDR = 0xFFFF
+OAM_BASE = 0xFE00
+OAM_SIZE = 0xA0
 CARTRIDGE_TYPE_ADDR = 0x0147
 CARTRIDGE_RAM_SIZE_ADDR = 0x0149
 MBC1_CART_TYPES = frozenset({0x01, 0x02, 0x03})
@@ -116,8 +119,9 @@ class DutTerminalState:
 
 
 class ExternalMemoryBus:
-    def __init__(self, rom_bytes: bytes) -> None:
+    def __init__(self, rom_bytes: bytes, *, enforce_dma_cpu_restrictions: bool = False) -> None:
         self.rom = bytes(rom_bytes)
+        self.enforce_dma_cpu_restrictions = enforce_dma_cpu_restrictions
         self.cartridge_type = self.rom[CARTRIDGE_TYPE_ADDR] if len(self.rom) > CARTRIDGE_TYPE_ADDR else 0x00
         self.is_mbc1 = self.cartridge_type in MBC1_CART_TYPES
         self.is_mbc3 = self.cartridge_type in MBC3_CART_TYPES
@@ -135,6 +139,7 @@ class ExternalMemoryBus:
         self.mbc3_latched_rtc_regs = dict(self.mbc3_rtc_regs)
         self.mbc3_latch_last = 0
         self.wram = bytearray(0x2000)
+        self.oam = bytearray(OAM_SIZE)
         self.hram = bytearray(0x7F)
         self.ie_reg = 0
         self.if_reg = 0
@@ -152,6 +157,80 @@ class ExternalMemoryBus:
         self.sampled_timer_enabled = False
         self.sampled_timer_bit = False
         self.overflow_delay = 0
+        self.dma_active = False
+        self.dma_source_high = 0
+        self.dma_next_index = 0
+
+    def _dma_blocks_cpu_addr(self, addr: int) -> bool:
+        if not self.enforce_dma_cpu_restrictions:
+            return False
+        if not self.dma_active:
+            return False
+        if addr < 0x8000:
+            return False
+        if 0xFF00 <= addr <= 0xFF7F:
+            return False
+        if 0xFF80 <= addr <= 0xFFFE:
+            return False
+        return True
+
+    def _raw_read(self, addr: int) -> int:
+        addr &= 0xFFFF
+        if addr < 0x8000:
+            return self._cart_rom_read(addr)
+        if 0xA000 <= addr <= 0xBFFF:
+            return self._cart_ram_read(addr)
+        if 0xC000 <= addr <= 0xDFFF:
+            return self.wram[addr - 0xC000]
+        if OAM_BASE <= addr < OAM_BASE + OAM_SIZE:
+            return self.oam[addr - OAM_BASE]
+        if addr == JOYP_ADDR:
+            return self._joyp_visible()
+        if addr == SB_ADDR:
+            return self.serial_sb & 0xFF
+        if addr == SC_ADDR:
+            return self.serial_sc & 0xFF
+        if addr == DIV_ADDR:
+            return (self.sys_counter >> 8) & 0xFF
+        if addr == TIMA_ADDR:
+            return self.tima
+        if addr == TMA_ADDR:
+            return self.tma
+        if addr == TAC_ADDR:
+            return self.tac & 0x7
+        if addr == DMA_ADDR:
+            return self.dma_source_high & 0xFF
+        if addr == IF_ADDR:
+            return self.if_reg & 0x1F
+        if 0xFF80 <= addr <= 0xFFFE:
+            return self.hram[addr - 0xFF80]
+        if addr == IE_ADDR:
+            return self.ie_reg & 0x1F
+        return 0xFF
+
+    def _dma_copy_byte(self, index: int) -> None:
+        source_addr = ((self.dma_source_high & 0xFF) << 8) | (index & 0xFF)
+        self.oam[index & 0xFF] = self._raw_read(source_addr)
+
+    def _start_dma(self, source_high: int) -> None:
+        self.dma_active = True
+        self.dma_source_high = source_high & 0xFF
+        self.dma_next_index = 0
+        self._dma_copy_byte(self.dma_next_index)
+        self.dma_next_index += 1
+
+    def _advance_dma(self) -> None:
+        if not self.dma_active:
+            return
+        if self.dma_next_index >= OAM_SIZE:
+            self.dma_active = False
+            self.dma_next_index = 0
+            return
+        self._dma_copy_byte(self.dma_next_index)
+        self.dma_next_index += 1
+        if self.dma_next_index >= OAM_SIZE:
+            self.dma_active = False
+            self.dma_next_index = 0
 
     def _rom_bank_value(self) -> int:
         bank = self.mbc1_rom_bank_low5 & 0x1F
@@ -298,41 +377,21 @@ class ExternalMemoryBus:
 
     def read(self, addr: int) -> int:
         addr &= 0xFFFF
-        if addr < 0x8000:
-            return self._cart_rom_read(addr)
-        if 0xA000 <= addr <= 0xBFFF:
-            return self._cart_ram_read(addr)
-        if 0xC000 <= addr <= 0xDFFF:
-            return self.wram[addr - 0xC000]
-        if addr == JOYP_ADDR:
-            return self._joyp_visible()
-        if addr == SB_ADDR:
-            return self.serial_sb & 0xFF
-        if addr == SC_ADDR:
-            return self.serial_sc & 0xFF
-        if addr == DIV_ADDR:
-            return (self.sys_counter >> 8) & 0xFF
-        if addr == TIMA_ADDR:
-            return self.tima
-        if addr == TMA_ADDR:
-            return self.tma
-        if addr == TAC_ADDR:
-            return self.tac & 0x7
-        if addr == IF_ADDR:
-            return self.if_reg & 0x1F
-        if 0xFF80 <= addr <= 0xFFFE:
-            return self.hram[addr - 0xFF80]
-        if addr == IE_ADDR:
-            return self.ie_reg & 0x1F
-        return 0xFF
+        if self._dma_blocks_cpu_addr(addr):
+            return 0xFF
+        return self._raw_read(addr)
 
     def write(self, addr: int, value: int) -> None:
         addr &= 0xFFFF
         value &= 0xFF
+        if self._dma_blocks_cpu_addr(addr):
+            return
         if (self.is_mbc1 or self.is_mbc3) and (addr < 0x8000 or 0xA000 <= addr <= 0xBFFF):
             self._cart_write(addr, value)
         elif 0xC000 <= addr <= 0xDFFF:
             self.wram[addr - 0xC000] = value
+        elif OAM_BASE <= addr < OAM_BASE + OAM_SIZE:
+            self.oam[addr - OAM_BASE] = value
         elif addr == JOYP_ADDR:
             self.joyp_select = (value >> 4) & 0x3
         elif addr == SB_ADDR:
@@ -342,6 +401,8 @@ class ExternalMemoryBus:
             if (self.serial_sc & 0x81) == 0x81:
                 self.serial_cycles_left = 8
                 self.serial_capture.append(self.serial_sb & 0xFF)
+        elif addr == DMA_ADDR:
+            self._start_dma(value)
         elif 0xFF80 <= addr <= 0xFFFE:
             self.hram[addr - 0xFF80] = value
 
@@ -435,6 +496,7 @@ class ExternalMemoryBus:
         self.sampled_timer_bit = next_sampled_timer_bit
         self.overflow_delay = next_overflow_delay
         self.sys_counter = 0 if write_div else (self.sys_counter + 4) & 0xFFFF_FFFF
+        self._advance_dma()
 
         cpu_written_ie = (write_data & 0x1F) if write_ie else self.ie_reg
         cpu_written_if = (write_data & 0x1F) if write_if else self.if_reg
