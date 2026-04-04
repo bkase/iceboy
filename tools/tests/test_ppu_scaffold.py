@@ -20,6 +20,7 @@ PPU_TYPES_PATH = ROOT / "src" / "ppu" / "sem" / "types.spade"
 PPU_PROFILES_PATH = ROOT / "src" / "ppu" / "sem" / "profiles.spade"
 PPU_SAMPLE_PATH = ROOT / "src" / "ppu" / "sem" / "sample.spade"
 PPU_SCANOUT_PATH = ROOT / "src" / "ppu" / "sem" / "scanout.spade"
+PPU_STIMULUS_PATH = ROOT / "src" / "ppu" / "sem" / "stimulus.spade"
 
 
 class PpuScaffoldTest(unittest.TestCase):
@@ -37,6 +38,7 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("pub mod profiles;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod sample;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod scanout;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod stimulus;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod types;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
 
     def test_ppu_event_bridge_surface_matches_architecture_contract(self) -> None:
@@ -268,6 +270,42 @@ class PpuScaffoldTest(unittest.TestCase):
             "phase: PpuPhase",
             "PpuPhase::Transfer$(x_out: _, discard_scx: _)",
             "lyc_eq_live: visible.ly == visible.regs.lyc",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_stimulus_surface_matches_architecture_contract(self) -> None:
+        text = PPU_STIMULUS_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub struct VideoPatch",
+            "addr: uint<16>",
+            "len: uint<5>",
+            "bytes: [uint<8>; 16]",
+            "pub struct PpuSimSnapshot",
+            "frame: uint<32>",
+            "state: PpuState",
+            "pub enum VideoAnchor",
+            "FrameLineDot { frame: uint<32>, line: uint<8>, dot: uint<9> }",
+            "LineStart { line: uint<8> }",
+            "ModeEnter { line: uint<8>, mode: PpuMode }",
+            "WindowStart { line: uint<8> }",
+            "ObjFetchStart { line: uint<8>, oam_index: uint<6> }",
+            "PixelX { line: uint<8>, x: uint<8> }",
+            "pub struct RasterStimulus",
+            "reg_write: Option<MmioWrite>",
+            "dma_start: Option<uint<8>>",
+            "vram_patch: Option<VideoPatch>",
+            "oam_patch: Option<VideoPatch>",
+            "state_import: Option<PpuSimSnapshot>",
+            "state_export: bool",
+            "freeze_dot_ce: bool",
+            "break_on_line: Option<uint<8>>",
+            "break_on_anchor: Option<VideoAnchor>",
+            "pub fn zero_video_patch() -> VideoPatch",
+            "pub fn initial_ppu_sim_snapshot() -> PpuSimSnapshot",
+            "pub fn zero_video_anchor() -> VideoAnchor",
+            "pub fn idle_raster_stimulus() -> RasterStimulus",
+            "pub fn single_reg_write_stimulus(write: MmioWrite) -> RasterStimulus",
+            "pub fn single_dma_start_stimulus(source_high: uint<8>) -> RasterStimulus",
         ]:
             self.assertIn(symbol, text)
 

@@ -1,0 +1,90 @@
+use std::option::Option;
+
+use lib::ppu::sem::events::mmio::MmioWrite;
+use lib::ppu::sem::types::{PpuMode, PpuState, initial_ppu_state};
+
+pub struct VideoPatch {
+    addr: uint<16>,
+    len: uint<5>,
+    bytes: [uint<8>; 16],
+}
+
+pub struct PpuSimSnapshot {
+    frame: uint<32>,
+    state: PpuState,
+}
+
+pub enum VideoAnchor {
+    FrameLineDot { frame: uint<32>, line: uint<8>, dot: uint<9> },
+    LineStart { line: uint<8> },
+    ModeEnter { line: uint<8>, mode: PpuMode },
+    WindowStart { line: uint<8> },
+    ObjFetchStart { line: uint<8>, oam_index: uint<6> },
+    PixelX { line: uint<8>, x: uint<8> },
+}
+
+pub struct RasterStimulus {
+    reg_write: Option<MmioWrite>,
+    dma_start: Option<uint<8>>,
+    vram_patch: Option<VideoPatch>,
+    oam_patch: Option<VideoPatch>,
+    state_import: Option<PpuSimSnapshot>,
+    state_export: bool,
+    freeze_dot_ce: bool,
+    break_on_line: Option<uint<8>>,
+    break_on_anchor: Option<VideoAnchor>,
+}
+
+pub fn zero_video_patch() -> VideoPatch {
+    VideoPatch$(addr: 0u16, len: 0u5, bytes: [0u8; 16])
+}
+
+pub fn initial_ppu_sim_snapshot() -> PpuSimSnapshot {
+    PpuSimSnapshot$(frame: 0u32, state: initial_ppu_state())
+}
+
+pub fn zero_video_anchor() -> VideoAnchor {
+    VideoAnchor::FrameLineDot$(frame: 0u32, line: 0u8, dot: 0u9)
+}
+
+pub fn idle_raster_stimulus() -> RasterStimulus {
+    RasterStimulus$(
+        reg_write: Option::None,
+        dma_start: Option::None,
+        vram_patch: Option::None,
+        oam_patch: Option::None,
+        state_import: Option::None,
+        state_export: false,
+        freeze_dot_ce: false,
+        break_on_line: Option::None,
+        break_on_anchor: Option::None,
+    )
+}
+
+pub fn single_reg_write_stimulus(write: MmioWrite) -> RasterStimulus {
+    RasterStimulus$(
+        reg_write: Option::Some(write),
+        dma_start: Option::None,
+        vram_patch: Option::None,
+        oam_patch: Option::None,
+        state_import: Option::None,
+        state_export: false,
+        freeze_dot_ce: false,
+        break_on_line: Option::None,
+        break_on_anchor: Option::None,
+    )
+}
+
+pub fn single_dma_start_stimulus(source_high: uint<8>) -> RasterStimulus {
+    RasterStimulus$(
+        reg_write: Option::None,
+        dma_start: Option::Some(source_high),
+        vram_patch: Option::None,
+        oam_patch: Option::None,
+        state_import: Option::None,
+        state_export: false,
+        freeze_dot_ce: false,
+        break_on_line: Option::None,
+        break_on_anchor: Option::None,
+    )
+}
