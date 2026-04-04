@@ -1,0 +1,141 @@
+use lib::bus::types::BusReq;
+use lib::ppu::sem::events::{
+    PpuEventKind,
+    TimedPpuEvent,
+    VideoCoord,
+    idle_timed_ppu_event,
+    mmio::{MmioReg, MmioWrite},
+};
+
+fn video_coord(frame: uint<32>, line: uint<8>, dot: uint<9>) -> VideoCoord {
+    VideoCoord$(frame: frame, line: line, dot: dot)
+}
+
+fn current_frame_index(frame_index: uint<32>, prev_frame_start: bool, frame_start: bool) -> uint<32> {
+    if !prev_frame_start && frame_start {
+        trunc(frame_index + 1u32)
+    } else {
+        frame_index
+    }
+}
+
+fn decode_mmio_target(addr: uint<16>) -> (bool, MmioReg) {
+    match addr {
+        0xff40u16 => (true, MmioReg::Lcdc),
+        0xff41u16 => (true, MmioReg::Stat),
+        0xff42u16 => (true, MmioReg::Scy),
+        0xff43u16 => (true, MmioReg::Scx),
+        0xff45u16 => (true, MmioReg::Lyc),
+        0xff47u16 => (true, MmioReg::Bgp),
+        0xff48u16 => (true, MmioReg::Obp0),
+        0xff49u16 => (true, MmioReg::Obp1),
+        0xff4au16 => (true, MmioReg::Wy),
+        0xff4bu16 => (true, MmioReg::Wx),
+        _ => (false, MmioReg::Lcdc),
+    }
+}
+
+fn write_fields(rst: bool, m_ce: bool, req: BusReq) -> (bool, uint<16>, uint<8>) {
+    if rst || !m_ce {
+        (false, 0u16, 0u8)
+    } else {
+        match req {
+            BusReq::Write$(addr: addr, data: data) => (true, addr, data),
+            _ => (false, 0u16, 0u8),
+        }
+    }
+}
+
+fn lcdc_enabled_bit(data: uint<8>) -> bool {
+    ((data >> 7) & 1u8) == 1u8
+}
+
+fn mmio_event(seq: uint<64>, at: VideoCoord, target: MmioReg, value: uint<8>) -> TimedPpuEvent {
+    TimedPpuEvent$(seq: seq, at: at, kind: PpuEventKind::MmioWrite$(write: MmioWrite$(target: target, value: value)))
+}
+
+fn dma_start_event(seq: uint<64>, at: VideoCoord, source_high: uint<8>) -> TimedPpuEvent {
+    TimedPpuEvent$(seq: seq, at: at, kind: PpuEventKind::DmaStart$(source_high: source_high))
+}
+
+fn force_lcd_power_event(seq: uint<64>, at: VideoCoord, enabled: bool) -> TimedPpuEvent {
+    TimedPpuEvent$(seq: seq, at: at, kind: PpuEventKind::ForceLcdPower$(enabled: enabled))
+}
+
+fn event_count(write_valid: bool, addr: uint<16>, data: uint<8>, lcdc7_shadow: bool) -> uint<4> {
+    let (is_mmio, target) = decode_mmio_target(addr);
+    let _ = target;
+    if !write_valid {
+        0u4
+    } else if addr == 0xff46u16 {
+        1u4
+    } else if is_mmio && addr == 0xff40u16 && lcdc_enabled_bit(data) != lcdc7_shadow {
+        2u4
+    } else if is_mmio {
+        1u4
+    } else {
+        0u4
+    }
+}
+
+fn build_events(
+    write_valid: bool,
+    addr: uint<16>,
+    data: uint<8>,
+    lcdc7_shadow: bool,
+    seq_counter: uint<64>,
+    at: VideoCoord,
+) -> [TimedPpuEvent; 4] {
+    let idle = idle_timed_ppu_event();
+    let (is_mmio, target) = decode_mmio_target(addr);
+    if !write_valid {
+        [idle, idle, idle, idle]
+    } else if addr == 0xff46u16 {
+        [dma_start_event(seq_counter, at, data), idle, idle, idle]
+    } else if is_mmio && addr == 0xff40u16 && lcdc_enabled_bit(data) != lcdc7_shadow {
+        [
+            mmio_event(seq_counter, at, target, data),
+            force_lcd_power_event(trunc(seq_counter + 1u64), at, lcdc_enabled_bit(data)),
+            idle,
+            idle,
+        ]
+    } else if is_mmio {
+        [mmio_event(seq_counter, at, target, data), idle, idle, idle]
+    } else {
+        [idle, idle, idle, idle]
+    }
+}
+
+pub entity ppu_event_bridge(
+    clk: clock,
+    rst: bool,
+    m_ce: bool,
+    req: BusReq,
+    frame_start: bool,
+    line_index: uint<8>,
+    dot_in_line: uint<9>,
+) -> ([TimedPpuEvent; 4], uint<4>) {
+    reg(clk) prev_frame_start: bool reset(rst: true) = frame_start;
+    reg(clk) frame_index: uint<32> reset(rst: 0u32) =
+        current_frame_index(frame_index, prev_frame_start, frame_start);
+
+    let (write_valid, addr, data) = write_fields(rst, m_ce, req);
+    reg(clk) lcdc7_shadow: bool reset(rst: false) =
+        if write_valid && addr == 0xff40u16 {
+            lcdc_enabled_bit(data)
+        } else {
+            lcdc7_shadow
+        };
+
+    let at = video_coord(
+        current_frame_index(frame_index, prev_frame_start, frame_start),
+        line_index,
+        dot_in_line,
+    );
+    let count = event_count(write_valid, addr, data, lcdc7_shadow);
+    reg(clk) seq_counter: uint<64> reset(rst: 0u64) = trunc(seq_counter + zext(count));
+    reg(clk) emitted_events: [TimedPpuEvent; 4] reset(rst: [idle_timed_ppu_event(); 4]) =
+        build_events(write_valid, addr, data, lcdc7_shadow, seq_counter, at);
+    reg(clk) emitted_count: uint<4> reset(rst: 0u4) = count;
+    (emitted_events, emitted_count)
+}

@@ -1,0 +1,97 @@
+use lib::bus::ppu_event_bridge::ppu_event_bridge;
+use lib::bus::types::BusReq;
+use lib::ppu::sem::events::{PpuEventKind, TimedPpuEvent, mmio::MmioReg};
+
+fn event_kind_code(kind: PpuEventKind) -> uint<2> {
+    match kind {
+        PpuEventKind::MmioWrite$(write: _) => 1u2,
+        PpuEventKind::DmaStart$(source_high: _) => 2u2,
+        PpuEventKind::ForceLcdPower$(enabled: _) => 3u2,
+    }
+}
+
+fn mmio_target_code(target: MmioReg) -> uint<4> {
+    match target {
+        MmioReg::Lcdc => 0u4,
+        MmioReg::Stat => 1u4,
+        MmioReg::Scy => 2u4,
+        MmioReg::Scx => 3u4,
+        MmioReg::Lyc => 4u4,
+        MmioReg::Wy => 5u4,
+        MmioReg::Wx => 6u4,
+        MmioReg::Bgp => 7u4,
+        MmioReg::Obp0 => 8u4,
+        MmioReg::Obp1 => 9u4,
+    }
+}
+
+fn seq_low8(seq: uint<64>) -> uint<8> {
+    trunc(seq)
+}
+
+fn frame_low8(frame: uint<32>) -> uint<8> {
+    trunc(frame)
+}
+
+fn encode_slot(event: TimedPpuEvent, present: bool) -> uint<24> {
+    if present {
+        encode_event(event)
+    } else {
+        0u24
+    }
+}
+
+fn encode_event(event: TimedPpuEvent) -> uint<24> {
+    match event.kind {
+        PpuEventKind::MmioWrite$(write: write) => {
+            (zext(seq_low8(event.seq)) << 14)
+                | (zext(event_kind_code(event.kind)) << 12)
+                | (zext(mmio_target_code(write.target)) << 8)
+                | zext(write.value)
+        },
+        PpuEventKind::DmaStart$(source_high: source_high) => {
+            (zext(seq_low8(event.seq)) << 14)
+                | (zext(event_kind_code(event.kind)) << 12)
+                | zext(source_high)
+        },
+        PpuEventKind::ForceLcdPower$(enabled: enabled) => {
+            (zext(seq_low8(event.seq)) << 14)
+                | (zext(event_kind_code(event.kind)) << 12)
+                | zext(if enabled { 1u1 } else { 0u1 })
+        },
+    }
+}
+
+pub entity ppu_event_bridge_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    m_ce_i: bool,
+    req_kind_i: uint<2>,
+    addr_i: uint<16>,
+    data_i: uint<8>,
+    frame_start_i: bool,
+    line_index_i: uint<8>,
+    dot_in_line_i: uint<9>,
+) -> uint<77> {
+    let req = match req_kind_i {
+        1u2 => BusReq::Read$(addr: addr_i),
+        2u2 => BusReq::Write$(addr: addr_i, data: data_i),
+        _ => BusReq::Idle,
+    };
+    let (events, count) = inst ppu_event_bridge(
+        clk_i,
+        rst_i,
+        m_ce_i,
+        req,
+        frame_start_i,
+        line_index_i,
+        dot_in_line_i,
+    );
+
+    zext(count)
+        | (zext(frame_low8(events[0].at.frame)) << 4)
+        | (zext(events[0].at.line) << 12)
+        | (zext(events[0].at.dot) << 20)
+        | (zext(encode_slot(events[0], count != 0u4)) << 29)
+        | (zext(encode_slot(events[1], count > 1u4)) << 53)
+}

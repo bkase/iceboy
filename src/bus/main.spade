@@ -1,4 +1,6 @@
 pub mod membus;
 pub mod membus_test_top;
 pub mod observe_req_test_top;
+pub mod ppu_event_bridge;
+pub mod ppu_event_bridge_test_top;
 pub mod types;

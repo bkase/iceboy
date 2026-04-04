@@ -9,6 +9,8 @@ BUS_MAIN_PATH = ROOT / "src" / "bus" / "main.spade"
 MEMBUS_PATH = ROOT / "src" / "bus" / "membus.spade"
 MEMBUS_TEST_TOP_PATH = ROOT / "src" / "bus" / "membus_test_top.spade"
 OBSERVE_REQ_TEST_TOP_PATH = ROOT / "src" / "bus" / "observe_req_test_top.spade"
+PPU_EVENT_BRIDGE_PATH = ROOT / "src" / "bus" / "ppu_event_bridge.spade"
+PPU_EVENT_BRIDGE_TEST_TOP_PATH = ROOT / "src" / "bus" / "ppu_event_bridge_test_top.spade"
 
 
 class MembusScaffoldTest(unittest.TestCase):
@@ -17,6 +19,8 @@ class MembusScaffoldTest(unittest.TestCase):
         self.assertIn("pub mod membus;", text)
         self.assertIn("pub mod membus_test_top;", text)
         self.assertIn("pub mod observe_req_test_top;", text)
+        self.assertIn("pub mod ppu_event_bridge;", text)
+        self.assertIn("pub mod ppu_event_bridge_test_top;", text)
 
     def test_membus_contract_matches_wave_a_memory_map(self) -> None:
         text = MEMBUS_PATH.read_text(encoding="utf-8")
@@ -76,6 +80,40 @@ class MembusScaffoldTest(unittest.TestCase):
             "pub entity observe_req_test_top(",
             "let obs = observe_req(",
             ") -> uint<7>",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_event_bridge_contract_matches_wave_a_event_replay_surface(self) -> None:
+        text = PPU_EVENT_BRIDGE_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub entity ppu_event_bridge(",
+            "req: BusReq",
+            "frame_start: bool",
+            "line_index: uint<8>",
+            "dot_in_line: uint<9>",
+            ") -> ([TimedPpuEvent; 4], uint<4>)",
+            "fn decode_mmio_target(addr: uint<16>) -> (bool, MmioReg)",
+            "0xff40u16 => (true, MmioReg::Lcdc)",
+            "addr == 0xff46u16",
+            "PpuEventKind::DmaStart$(source_high: source_high)",
+            "PpuEventKind::ForceLcdPower$(enabled: enabled)",
+            "reg(clk) lcdc7_shadow: bool",
+            "reg(clk) seq_counter: uint<64>",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_event_bridge_test_top_provides_stable_projection(self) -> None:
+        text = PPU_EVENT_BRIDGE_TEST_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub entity ppu_event_bridge_test_top(",
+            "req_kind_i: uint<2>",
+            "frame_start_i: bool",
+            "line_index_i: uint<8>",
+            "dot_in_line_i: uint<9>",
+            ") -> uint<77>",
+            "let (events, count) = inst ppu_event_bridge(",
+            "encode_slot(events[0], count != 0u4)",
+            "encode_slot(events[1], count > 1u4)",
         ]:
             self.assertIn(symbol, text)
 
