@@ -16,9 +16,13 @@ verification:
     - SimStimulus
     - BusObs
     - SocLockstepTopOut
+  baseline:
+    script: tools/run_hardware_baseline.sh
+    report: docs/hardware/icebreaker_up5k_baseline.json
 resource_budget:
   audience: hardware
   expected_overhead: none
   notes:
     - Keep synthesis outputs free of PPU semantic/debug buses.
     - Prefer the existing src/board top path for hardware builds.
+    - Record constrained synth and nextpnr results in the checked-in hardware baseline JSON.

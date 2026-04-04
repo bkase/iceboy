@@ -124,6 +124,21 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("CommitTrace", completed.stdout)
         self.assertIn("BusObs", completed.stdout)
 
+    def test_hardware_baseline_dry_run_emits_synth_and_pnr_steps(self) -> None:
+        completed = self.run_script("run_hardware_baseline.sh", "--dry-run")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
+        self.assertIn("[tool] nextpnr-ice40: nextpnr-0.10-15-g77ccf518", completed.stdout)
+        self.assertIn("DRY RUN: /", completed.stdout)
+        self.assertIn("read_verilog -sv", completed.stdout)
+        self.assertIn("synth_ice40 -top icebreaker_top", completed.stdout)
+        self.assertIn("--freq 12", completed.stdout)
+        self.assertIn("icebreaker.pcf", completed.stdout)
+        self.assertIn("docs/hardware/icebreaker_up5k_baseline.json", completed.stdout)
+        self.assertTrue((ROOT / "tools" / "run_hardware_baseline.sh").exists())
+
     def test_oracle_wrapper_targets_direct_smoke_tool(self) -> None:
         completed = self.run_script("oracle.sh", "--dry-run")
         self.assertEqual(completed.returncode, 0, completed.stderr)

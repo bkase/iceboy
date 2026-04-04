@@ -1,0 +1,54 @@
+{
+  "artifacts": {
+    "asc": "/Users/bkase/Documents/iceboy/build/hw_baseline/icebreaker.asc",
+    "nextpnr_log": "/Users/bkase/Documents/iceboy/build/hw_baseline/nextpnr.log",
+    "nextpnr_report": "/Users/bkase/Documents/iceboy/build/hw_baseline/nextpnr-report.json",
+    "yosys_stat": "/Users/bkase/Documents/iceboy/build/hw_baseline/synth/yosys-stat.txt"
+  },
+  "board": "iCEBreaker",
+  "captured_on": "2026-04-04",
+  "clock_constraint": {
+    "achieved_mhz": null,
+    "clock_name": "CLK",
+    "constraint_mhz": 12.0,
+    "target_mhz": 12.0,
+    "timing_met": null
+  },
+  "clock_enable": {
+    "board_top_loads": 3,
+    "method": "source_occurrence_count",
+    "signal": "tb.m_ce"
+  },
+  "debug_free": {
+    "forbidden_debug_symbols_present": false,
+    "verified_by": "tools/run_hardware_baseline.sh"
+  },
+  "device": "iCE40UP5K-SG48",
+  "pin_constraints": "icebreaker.pcf",
+  "pnr": {
+    "error": "ERROR: Unable to place cell 'hardware_core_0.membus_0.wram_spram_0.mem[5316]_SB_DFFE_Q_3_DFFLC', no BELs remaining to implement cell type 'ICESTORM_LC'",
+    "status": "failed",
+    "timing_report_available": false
+  },
+  "tool_versions": {
+    "nextpnr-ice40": "\"nextpnr-ice40\" -- Next Generation Place and Route (Version nextpnr-0.10-15-g77ccf518)",
+    "swim": "swim v0.17.0-r314-a9f0731",
+    "yosys": "Yosys 0.63+188 (git sha1 cede13a74-dirty, aarch64-apple-darwin23.5-clang++ 18.1.8 -fPIC -O3)"
+  },
+  "top": "board::icebreaker_top::icebreaker_top",
+  "utilization": {
+    "carry_used": 413,
+    "dff_available": 1024,
+    "dff_used": 68099,
+    "ebr_available": 30,
+    "ebr_used": 0,
+    "fits_up5k_dff": false,
+    "fits_up5k_lut4": false,
+    "logic_cells_available": 5280,
+    "logic_cells_used": 140235,
+    "lut4_available": 5280,
+    "lut4_used": 72190,
+    "spram_available": 4,
+    "spram_used": 0
+  }
+}

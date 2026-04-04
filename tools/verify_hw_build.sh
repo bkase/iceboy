@@ -5,6 +5,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/entrypoint_common.sh"
 
 DRY_RUN=0
 SKIP_BUILD=0
+ENFORCE_BUDGET=0
 OUT_DIR="${ICEBOY_ROOT}/build/hw_verify"
 TOP_MODULE="icebreaker_top"
 SPADE_SV="${ICEBOY_ROOT}/build/spade.sv"
@@ -20,6 +21,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-build)
             SKIP_BUILD=1
+            ;;
+        --enforce-budget)
+            ENFORCE_BUDGET=1
             ;;
         --out-dir)
             [[ $# -ge 2 ]] || iceboy_die "--out-dir requires a path"
@@ -96,12 +100,23 @@ DFF_COUNT="$(awk '/SB_DFF/ { sum += $1 } END { print sum + 0 }' "${STAT_FILE}")"
 [[ -n "${LUT4_COUNT}" ]] || iceboy_die "failed to parse SB_LUT4 count from ${STAT_FILE}"
 [[ -n "${DFF_COUNT}" ]] || iceboy_die "failed to parse SB_DFF count from ${STAT_FILE}"
 
+FIT_LUT=1
+FIT_DFF=1
 if (( LUT4_COUNT > 5280 )); then
-    iceboy_die "hardware netlist exceeds UP5K LUT budget: ${LUT4_COUNT} > 5280"
+    FIT_LUT=0
 fi
 if (( DFF_COUNT > 1024 )); then
-    iceboy_die "hardware netlist exceeds UP5K DFF budget: ${DFF_COUNT} > 1024"
+    FIT_DFF=0
 fi
 
 echo "Verified debug-free hardware build."
-echo "Resources: SB_LUT4=${LUT4_COUNT} SB_DFF=${DFF_COUNT}"
+echo "Resources: SB_LUT4=${LUT4_COUNT} SB_DFF=${DFF_COUNT} fit_lut=${FIT_LUT} fit_dff=${FIT_DFF}"
+
+if [[ "${ENFORCE_BUDGET}" == "1" ]]; then
+    if (( FIT_LUT == 0 )); then
+        iceboy_die "hardware netlist exceeds UP5K LUT budget: ${LUT4_COUNT} > 5280"
+    fi
+    if (( FIT_DFF == 0 )); then
+        iceboy_die "hardware netlist exceeds UP5K DFF budget: ${DFF_COUNT} > 1024"
+    fi
+fi

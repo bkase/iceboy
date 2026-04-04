@@ -39,6 +39,11 @@ class BuildProfilesTest(unittest.TestCase):
             synth["verification"]["forbids_debug_symbols"],
             ["CommitTrace", "DebugTrace", "PpuDebugTrace", "SimStimulus", "BusObs", "SocLockstepTopOut"],
         )
+        self.assertEqual(synth["verification"]["baseline"]["script"], "tools/run_hardware_baseline.sh")
+        self.assertEqual(
+            synth["verification"]["baseline"]["report"],
+            "docs/hardware/icebreaker_up5k_baseline.json",
+        )
 
         self.assertIn("sim::semantic_observe_top::semantic_observe_top", semantic["simulation_tops"])
         self.assertIn("PpuSemanticCommit", semantic["output_ports"])
