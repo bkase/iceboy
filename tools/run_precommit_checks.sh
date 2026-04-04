@@ -12,6 +12,7 @@ export PATH="/opt/homebrew/bin:$PATH"
 ACTIVE_PID=""
 RUN_FORMAL="${ICEBOY_PRECOMMIT_INCLUDE_FORMAL:-0}"
 RUN_EXTENDED="${ICEBOY_PRECOMMIT_EXTENDED:-0}"
+RUN_SYNTH="${ICEBOY_PRECOMMIT_INCLUDE_SYNTH:-0}"
 
 SKIP_PYTHON_MODULES=(
     "tools.tests.test_spade_cocotb_pipeline"
@@ -21,6 +22,7 @@ SKIP_PYTHON_MODULES=(
 
 PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/harness/test_e2e_smoke.py"
+    "test/unit/test_main.py"
     "test/unit/test_alu.py"
     "test/unit/test_decode.py"
     "test/unit/test_decode_cb.py"
@@ -239,8 +241,12 @@ fi
 echo -n "Compiling... "
 run_checked "$SWIM" build
 
-echo -n "Synthesizing... "
-run_checked "$SWIM" synth
+if [[ "$RUN_SYNTH" == "1" ]]; then
+    echo -n "Synthesizing... "
+    run_checked "$SWIM" synth
+else
+    echo -e "Hardware synthesis: ${YELLOW}skipped in pre-commit (set ICEBOY_PRECOMMIT_INCLUDE_SYNTH=1 to enable)${NC}"
+fi
 
 if [[ "$RUN_FORMAL" == "1" ]]; then
     echo -n "Running formal checks... "

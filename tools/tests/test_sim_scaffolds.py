@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SIM_TYPES_PATH = ROOT / "src" / "sim" / "types.spade"
 SIM_MAIN_PATH = ROOT / "src" / "sim" / "main.spade"
 CPU_TOP_PATH = ROOT / "src" / "sim" / "cpu_test_top.spade"
+BOARD_TOP_PATH = ROOT / "src" / "board" / "icebreaker_top.spade"
 PPU_TEST_TOP_PATH = ROOT / "src" / "sim" / "ppu_test_top.spade"
 PPU_STATE_TOP_PATH = ROOT / "src" / "sim" / "ppu_state_top.spade"
 SEMANTIC_OBSERVE_TOP_PATH = ROOT / "src" / "sim" / "semantic_observe_top.spade"
@@ -16,6 +17,30 @@ TRACE_OBSERVE_TOP_PATH = ROOT / "src" / "sim" / "trace_observe_top.spade"
 
 
 class SimScaffoldTest(unittest.TestCase):
+    def test_hardware_top_stays_debug_free(self) -> None:
+        text = BOARD_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "#[no_mangle(all)]",
+            "entity icebreaker_top(",
+            "entity hardware_core(",
+            "let tb = inst timebase(",
+            "let cpu = inst cpu_core(",
+            "let (bus_resp_next, bus_obs) = inst membus(",
+            "MemoryBehaviorProfile::DmgConservative",
+            "set LEDR_N = heartbeat_led(tb.sys_counter);",
+            "set LEDG_N = cpu_running_led(cpu.halt_state);",
+        ]:
+            self.assertIn(symbol, text)
+        for forbidden in [
+            "SimStimulus",
+            "CommitTrace",
+            "DebugTrace",
+            "PpuDebugTrace",
+            "BusObs$(",
+            "SocLockstepTopOut",
+        ]:
+            self.assertNotIn(forbidden, text)
+
     def test_sim_stimulus_fields_match_architecture_contract(self) -> None:
         text = SIM_TYPES_PATH.read_text(encoding="utf-8")
         for field in [

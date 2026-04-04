@@ -167,6 +167,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('tools.tests.test_spade_cocotb_pipeline', text)
         self.assertIn('tools.tests.test_verilator_backend', text)
         self.assertIn('tools.tests.test_alu_generated_vectors', text)
+        self.assertIn('ICEBOY_PRECOMMIT_INCLUDE_SYNTH', text)
         self.assertIn('ICEBOY_PRECOMMIT_INCLUDE_FORMAL', text)
         self.assertIn('ICEBOY_PRECOMMIT_EXTENDED', text)
         self.assertIn('Running fast Python spec tests...', text)
