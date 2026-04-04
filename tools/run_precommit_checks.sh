@@ -33,6 +33,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/rom/test_loads_basic.py"
     "test/rom/test_mbc1_ram.py"
     "test/rom/test_mbc1_switch.py"
+    "test/rom/test_mbc3_switch.py"
     "test/rom/test_timer_irq_halt.py"
 )
 
