@@ -16,6 +16,8 @@ REGION_HRAM = 8
 REGION_IE = 9
 
 OWNER_CPU = 0
+OWNER_OAM_DMA = 1
+OWNER_PPU = 2
 OWNER_IDLE = 3
 
 REQ_IDLE = 0
@@ -38,25 +40,53 @@ async def prepare_dut(dut) -> None:
     dut.req_kind_i.value = REQ_IDLE
     dut.addr_i.value = 0
     dut.data_i.value = 0
+    dut.oam_dma_active_i.value = 0
+    dut.ppu_vram_active_i.value = 0
+    dut.ppu_oam_active_i.value = 0
     await RisingEdge(dut.clk)
     await Timer(1, units="ns")
 
 
-async def sample(dut, *, req_kind: int, addr: int, data: int = 0, m_ce: bool = True) -> dict[str, int | bool]:
+async def sample(
+    dut,
+    *,
+    req_kind: int,
+    addr: int,
+    data: int = 0,
+    m_ce: bool = True,
+    oam_dma_active: bool = False,
+    ppu_vram_active: bool = False,
+    ppu_oam_active: bool = False,
+) -> dict[str, int | bool]:
     dut.m_ce_i.value = int(m_ce)
     dut.req_kind_i.value = req_kind & 0x3
     dut.addr_i.value = addr & 0xFFFF
     dut.data_i.value = data & 0xFF
+    dut.oam_dma_active_i.value = int(oam_dma_active)
+    dut.ppu_vram_active_i.value = int(ppu_vram_active)
+    dut.ppu_oam_active_i.value = int(ppu_oam_active)
     await RisingEdge(dut.clk)
     await Timer(1, units="ns")
     return decode_output(int(dut.output__.value))
 
 
-async def write_then_read(dut, *, addr: int, value: int, m_ce: bool = True) -> tuple[dict[str, int | bool], dict[str, int | bool]]:
+async def write_then_read(
+    dut,
+    *,
+    addr: int,
+    value: int,
+    m_ce: bool = True,
+    oam_dma_active: bool = False,
+    ppu_vram_active: bool = False,
+    ppu_oam_active: bool = False,
+) -> tuple[dict[str, int | bool], dict[str, int | bool]]:
     dut.m_ce_i.value = int(m_ce)
     dut.req_kind_i.value = REQ_WRITE
     dut.addr_i.value = addr & 0xFFFF
     dut.data_i.value = value & 0xFF
+    dut.oam_dma_active_i.value = int(oam_dma_active)
+    dut.ppu_vram_active_i.value = int(ppu_vram_active)
+    dut.ppu_oam_active_i.value = int(ppu_oam_active)
     await RisingEdge(dut.clk)
     await Timer(1, units="ns")
     write_snapshot = decode_output(int(dut.output__.value))
@@ -191,3 +221,92 @@ async def test_io_and_unimplemented_regions_read_ff_and_ignore_writes(dut):
         _, after = await write_then_read(dut, addr=addr, value=0x77)
         assert after["data"] == 0xFF
         assert after["region"] == region
+
+
+@cocotb.test()
+async def test_oam_dma_blocks_non_hram_accesses_and_preserves_existing_contents(dut):
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    await prepare_dut(dut)
+
+    _, seeded = await write_then_read(dut, addr=0xC123, value=0x5A)
+    assert seeded["data"] == 0x5A
+
+    blocked = await sample(dut, req_kind=REQ_READ, addr=0xC123, oam_dma_active=True)
+    assert blocked["data"] == 0xFF
+    assert blocked["region"] == REGION_WRAM
+    assert blocked["owner"] == OWNER_OAM_DMA
+    assert blocked["blocked"] is True
+
+    _, after_write = await write_then_read(dut, addr=0xC123, value=0x99, oam_dma_active=True)
+    assert after_write["data"] == 0xFF
+    assert after_write["owner"] == OWNER_OAM_DMA
+    assert after_write["blocked"] is True
+
+    final = await sample(dut, req_kind=REQ_READ, addr=0xC123)
+    assert final["data"] == 0x5A
+    assert final["blocked"] is False
+
+
+@cocotb.test()
+async def test_oam_dma_keeps_hram_accessible(dut):
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    await prepare_dut(dut)
+
+    _, readback = await write_then_read(dut, addr=0xFF80, value=0xC3, oam_dma_active=True)
+    assert readback["data"] == 0xC3
+    assert readback["region"] == REGION_HRAM
+    assert readback["owner"] == OWNER_CPU
+    assert readback["blocked"] is False
+
+
+@cocotb.test()
+async def test_ppu_pixel_transfer_blocks_vram_but_not_wram(dut):
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    await prepare_dut(dut)
+
+    vram = await sample(dut, req_kind=REQ_READ, addr=0x8000, ppu_vram_active=True)
+    assert vram["data"] == 0xFF
+    assert vram["region"] == REGION_VRAM
+    assert vram["owner"] == OWNER_PPU
+    assert vram["blocked"] is True
+
+    wram = await sample(dut, req_kind=REQ_READ, addr=0xC100, ppu_vram_active=True)
+    assert wram["region"] == REGION_WRAM
+    assert wram["owner"] == OWNER_CPU
+    assert wram["blocked"] is False
+
+
+@cocotb.test()
+async def test_ppu_oam_search_blocks_oam_and_ignores_writes(dut):
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    await prepare_dut(dut)
+
+    blocked = await sample(dut, req_kind=REQ_READ, addr=0xFE00, ppu_oam_active=True)
+    assert blocked["data"] == 0xFF
+    assert blocked["region"] == REGION_OAM
+    assert blocked["owner"] == OWNER_PPU
+    assert blocked["blocked"] is True
+
+    _, after_write = await write_then_read(dut, addr=0xFE00, value=0x77, ppu_oam_active=True)
+    assert after_write["data"] == 0xFF
+    assert after_write["owner"] == OWNER_PPU
+    assert after_write["blocked"] is True
+
+
+@cocotb.test()
+async def test_oam_dma_takes_precedence_over_ppu_ownership(dut):
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    await prepare_dut(dut)
+
+    vram = await sample(dut, req_kind=REQ_READ, addr=0x8000, oam_dma_active=True, ppu_vram_active=True)
+    assert vram["owner"] == OWNER_OAM_DMA
+    assert vram["blocked"] is True
+
+    oam = await sample(dut, req_kind=REQ_READ, addr=0xFE00, oam_dma_active=True, ppu_oam_active=True)
+    assert oam["owner"] == OWNER_OAM_DMA
+    assert oam["blocked"] is True

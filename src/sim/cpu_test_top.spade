@@ -143,7 +143,7 @@ entity cpu_test_top(
     let combined_pending = controller_pending | irq_pending;
     let cpu_irq_pending = IrqPending$(pending: combined_pending);
     let cpu = inst cpu_core(clk, rst, cpu_m_ce, cpu_bus_resp, cpu_irq_pending);
-    let bus_obs = observe_req(rst, cpu_m_ce, cpu_bus_req(cpu.bus_req_kind, cpu.bus_req_addr, cpu.bus_req_data));
+    let bus_obs = observe_req(rst, cpu_m_ce, cpu_bus_req(cpu.bus_req_kind, cpu.bus_req_addr, cpu.bus_req_data), false, false, false);
     let bus_active = cpu.bus_req_kind != 0u2;
     let halted_cycle = halt_is_halted(cpu.halt_state) && phase_is_halted(cpu.phase);
     let halt_quiescent = halted_cycle && !bus_active && !cpu.alu_active && !cpu.delta_active && !cpu.irq_ack_valid;

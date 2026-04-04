@@ -52,12 +52,67 @@ fn req_owner(req: BusReq) -> BusOwner {
     }
 }
 
-pub fn observe_req(rst: bool, m_ce: bool, req: BusReq) -> BusObs {
+fn region_is_hram(region: BusRegion) -> bool {
+    match region {
+        BusRegion::Hram => true,
+        _ => false,
+    }
+}
+
+fn region_is_vram(region: BusRegion) -> bool {
+    match region {
+        BusRegion::Vram => true,
+        _ => false,
+    }
+}
+
+fn region_is_oam(region: BusRegion) -> bool {
+    match region {
+        BusRegion::Oam => true,
+        _ => false,
+    }
+}
+
+fn owner_is_cpu(owner: BusOwner) -> bool {
+    match owner {
+        BusOwner::Cpu => true,
+        _ => false,
+    }
+}
+
+fn region_owner(region: BusRegion, oam_dma_active: bool, ppu_vram_active: bool, ppu_oam_active: bool) -> BusOwner {
+    if oam_dma_active && !region_is_hram(region) {
+        BusOwner::OamDma
+    } else if ppu_vram_active && region_is_vram(region) {
+        BusOwner::Ppu
+    } else if ppu_oam_active && region_is_oam(region) {
+        BusOwner::Ppu
+    } else {
+        BusOwner::Cpu
+    }
+}
+
+fn blocked_req(req: BusReq, owner: BusOwner) -> bool {
+    match req {
+        BusReq::Idle => false,
+        _ => !owner_is_cpu(owner),
+    }
+}
+
+pub fn observe_req(
+    rst: bool,
+    m_ce: bool,
+    req: BusReq,
+    oam_dma_active: bool,
+    ppu_vram_active: bool,
+    ppu_oam_active: bool,
+) -> BusObs {
     let req = active_req(rst, m_ce, req);
     let region = req_region(req);
+    let owner = region_owner(region, oam_dma_active, ppu_vram_active, ppu_oam_active);
     match req {
         BusReq::Idle => idle_bus_obs(),
-        _ => BusObs$(region: region, blocked: false, owner: req_owner(req)),
+        _ => BusObs$(region: region, blocked: blocked_req(req, owner), owner: owner),
     }
 }
 
@@ -116,20 +171,24 @@ pub entity membus(
     rst: bool,
     m_ce: bool,
     req: BusReq,
+    oam_dma_active: bool,
+    ppu_vram_active: bool,
+    ppu_oam_active: bool,
 ) -> (BusResp, BusObs) {
     let req = active_req(rst, m_ce, req);
     let addr = req_addr(req);
     let region = req_region(req);
-    let obs = observe_req(rst, m_ce, req);
+    let obs = observe_req(rst, m_ce, req, oam_dma_active, ppu_vram_active, ppu_oam_active);
 
     let rom_mem = inst clocked_memory_init::<32768, 1, 15, uint<8>>(clk, [(false, 0u15, 0u8)], [0u8; 32768]);
-    let (wram_we, wram_waddr, wram_wdata) = wram_write(req);
+    let write_req = if obs.blocked { BusReq::Idle } else { req };
+    let (wram_we, wram_waddr, wram_wdata) = wram_write(write_req);
     let wram_mem = inst clocked_memory_init::<8192, 1, 13, uint<8>>(
         clk,
         [(wram_we, wram_waddr, wram_wdata)],
         [0u8; 8192],
     );
-    let (hram_we, hram_waddr, hram_wdata) = hram_write(req);
+    let (hram_we, hram_waddr, hram_wdata) = hram_write(write_req);
     let hram_mem = inst clocked_memory_init::<127, 1, 7, uint<8>>(
         clk,
         [(hram_we, hram_waddr, hram_wdata)],
@@ -141,7 +200,7 @@ pub entity membus(
     let hram_data = inst read_memory(hram_mem, hram_addr(region, addr));
 
     let resp = match req {
-        BusReq::Read$(addr: _) => BusResp$(data: read_data(region, rom_data, wram_data, hram_data)),
+        BusReq::Read$(addr: _) => BusResp$(data: if obs.blocked { 0xffu8 } else { read_data(region, rom_data, wram_data, hram_data) }),
         _ => idle_bus_resp(),
     };
 

@@ -117,7 +117,7 @@ entity soc_lockstep_top(
     let cpu_bus_resp = BusResp$(data: bus_read_data);
     let cpu_irq_pending = IrqPending$(pending: irq_pending);
     let cpu = inst cpu_core(clk, rst, cpu_m_ce, cpu_bus_resp, cpu_irq_pending);
-    let bus_obs = observe_req(rst, cpu_m_ce, cpu_bus_req(cpu.bus_req_kind, cpu.bus_req_addr, cpu.bus_req_data));
+    let bus_obs = observe_req(rst, cpu_m_ce, cpu_bus_req(cpu.bus_req_kind, cpu.bus_req_addr, cpu.bus_req_data), false, false, false);
     let bus_active = cpu.bus_req_kind != 0u2;
     let halted_cycle = halt_is_halted(cpu.halt_state) && phase_is_halted(cpu.phase);
     let halt_quiescent = halted_cycle && !bus_active && !cpu.alu_active && !cpu.delta_active && !cpu.irq_ack_valid;

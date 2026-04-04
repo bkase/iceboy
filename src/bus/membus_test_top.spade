@@ -39,13 +39,16 @@ pub entity membus_test_top(
     req_kind_i: uint<2>,
     addr_i: uint<16>,
     data_i: uint<8>,
+    oam_dma_active_i: bool,
+    ppu_vram_active_i: bool,
+    ppu_oam_active_i: bool,
 ) -> uint<15> {
     let req = match req_kind_i {
         1u2 => BusReq::Read$(addr: addr_i),
         2u2 => BusReq::Write$(addr: addr_i, data: data_i),
         _ => BusReq::Idle,
     };
-    let (resp, obs) = inst membus(clk, rst, m_ce_i, req);
+    let (resp, obs) = inst membus(clk, rst, m_ce_i, req, oam_dma_active_i, ppu_vram_active_i, ppu_oam_active_i);
 
     encode_output(resp, obs)
 }
