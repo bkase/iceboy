@@ -12,6 +12,8 @@ pub struct PpuRenderInputs {
     lyc_eq_live: bool,
 }
 
+// Mode-2 boundary sampling captures the state that should remain fixed for the
+// scanline start: SCX low discard bits, WY arming, and window-enable-at-start.
 pub fn sample_mode2_state(visible: PpuVisibleState, sampled: PpuSamplingState) -> PpuSamplingState {
     PpuSamplingState$(
         scx_low3_line: trunc(visible.regs.scx),
@@ -20,6 +22,8 @@ pub fn sample_mode2_state(visible: PpuVisibleState, sampled: PpuSamplingState) -
     )
 }
 
+// Fetch/pop sampling keeps the live-read registers separate from mode-2 sampled
+// state so SCX[7:3], SCY, WX, and palette bytes can update mid-line.
 pub fn sample_render_inputs(
     visible: PpuVisibleState,
     sampled: PpuSamplingState,
