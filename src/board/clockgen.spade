@@ -4,6 +4,11 @@ pub struct TimebaseOut {
     sys_counter: uint<32>,
     t_index: uint<2>,
     m_index: uint<30>,
+    dot_ce: bool,
+    line_start: bool,
+    frame_start: bool,
+    line_index: uint<8>,
+    dot_in_line: uint<9>,
 }
 
 fn next_sys_counter(sys_counter: uint<32>) -> uint<32> {
@@ -22,8 +27,22 @@ fn m_cycle_enable(sys_counter: uint<32>) -> bool {
     t_cycle_index(sys_counter) == 3u2
 }
 
+fn next_dot_in_line(dot_in_line: uint<9>) -> uint<9> {
+    if dot_in_line == 455u9 { 0u9 } else { trunc(dot_in_line + 1u9) }
+}
+
+fn next_line_index(dot_in_line: uint<9>, line_index: uint<8>) -> uint<8> {
+    if dot_in_line == 455u9 {
+        if line_index == 153u8 { 0u8 } else { trunc(line_index + 1u8) }
+    } else {
+        line_index
+    }
+}
+
 pub entity timebase(clk: clock, rst: bool) -> TimebaseOut {
     reg(clk) sys_counter: uint<32> reset(rst: 0) = next_sys_counter(sys_counter);
+    reg(clk) dot_in_line: uint<9> reset(rst: 0u9) = next_dot_in_line(dot_in_line);
+    reg(clk) line_index: uint<8> reset(rst: 0u8) = next_line_index(dot_in_line, line_index);
 
     TimebaseOut$(
         t_ce: true,
@@ -31,5 +50,10 @@ pub entity timebase(clk: clock, rst: bool) -> TimebaseOut {
         sys_counter: sys_counter,
         t_index: t_cycle_index(sys_counter),
         m_index: m_cycle_index(sys_counter),
+        dot_ce: true,
+        line_start: dot_in_line == 0u9,
+        frame_start: dot_in_line == 0u9 && line_index == 0u8,
+        line_index: line_index,
+        dot_in_line: dot_in_line,
     )
 }

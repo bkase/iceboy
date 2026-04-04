@@ -12,11 +12,16 @@ LONG_RUN_BOARD_CLOCKS = 1024
 
 def decode_timebase(output_value: int) -> dict[str, int | bool]:
     return {
-        "t_ce": bool((output_value >> 65) & 0x1),
-        "m_ce": bool((output_value >> 64) & 0x1),
-        "sys_counter": (output_value >> 32) & 0xFFFF_FFFF,
-        "t_index": (output_value >> 30) & 0x3,
-        "m_index": output_value & 0x3FFF_FFFF,
+        "t_ce": bool((output_value >> 85) & 0x1),
+        "m_ce": bool((output_value >> 84) & 0x1),
+        "sys_counter": (output_value >> 52) & 0xFFFF_FFFF,
+        "t_index": (output_value >> 50) & 0x3,
+        "m_index": (output_value >> 20) & 0x3FFF_FFFF,
+        "dot_ce": bool((output_value >> 19) & 0x1),
+        "line_start": bool((output_value >> 18) & 0x1),
+        "frame_start": bool((output_value >> 17) & 0x1),
+        "line_index": (output_value >> 9) & 0xFF,
+        "dot_in_line": output_value & 0x1FF,
     }
 
 
@@ -56,6 +61,11 @@ async def test_timebase_reset_behavior(dut):
         "sys_counter": 0,
         "t_index": 0,
         "m_index": 0,
+        "dot_ce": True,
+        "line_start": True,
+        "frame_start": True,
+        "line_index": 0,
+        "dot_in_line": 0,
     }, snapshot
 
 
@@ -75,6 +85,11 @@ async def test_timebase_enable_patterns_and_indices(dut):
     assert t_indices == [1, 2, 3, 0] * 4, t_indices
     assert sys_counters == list(range(1, 17)), sys_counters
     assert m_indices == [0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4], m_indices
+    assert all(sample["dot_ce"] for sample in samples), samples
+    assert [sample["dot_in_line"] for sample in samples[:6]] == [1, 2, 3, 4, 5, 6]
+    assert [sample["line_index"] for sample in samples[:6]] == [0, 0, 0, 0, 0, 0]
+    assert sum(1 for sample in samples if sample["line_start"]) == 0
+    assert sum(1 for sample in samples if sample["frame_start"]) == 0
 
 
 @cocotb.test()
@@ -104,6 +119,9 @@ async def test_timebase_m_cycle_pattern(dut):
     assert all(t_index == T_CYCLES_PER_M_CYCLE - 1 for t_index in m_ce_t_indices), m_ce_t_indices
     assert final_snapshot["sys_counter"] == SHORT_RUN_BOARD_CLOCKS
     assert final_snapshot["m_index"] == expected_m_ce_count(SHORT_RUN_BOARD_CLOCKS)
+    assert final_snapshot["line_index"] == 0
+    assert final_snapshot["dot_in_line"] == SHORT_RUN_BOARD_CLOCKS
+    assert final_snapshot["dot_ce"] == final_snapshot["t_ce"]
 
 
 @cocotb.test()
@@ -145,3 +163,46 @@ async def test_timebase_long_run_consistency(dut):
     assert t_ce_count == m_ce_count * T_CYCLES_PER_M_CYCLE
     assert last_sys_counter == LONG_RUN_BOARD_CLOCKS
     assert last_m_index == expected_m_ce_count(LONG_RUN_BOARD_CLOCKS)
+
+
+@cocotb.test()
+async def test_video_dot_counters_wrap_each_scanline(dut):
+    await reset_dut(dut)
+    samples = await sample_cycles(dut, 456)
+    final_snapshot = samples[-1]
+
+    dut._log.info(
+        "[timebase] test_video_dot_counters_wrap_each_scanline: final dot=%d line=%d line_start=%s",
+        final_snapshot["dot_in_line"],
+        final_snapshot["line_index"],
+        final_snapshot["line_start"],
+    )
+
+    assert final_snapshot["dot_in_line"] == 0
+    assert final_snapshot["line_index"] == 1
+    assert final_snapshot["line_start"]
+    assert not final_snapshot["frame_start"]
+    assert sum(1 for sample in samples if sample["line_start"]) == 1
+    assert sum(1 for sample in samples if sample["frame_start"]) == 0
+
+
+@cocotb.test()
+async def test_video_dot_counters_wrap_each_frame(dut):
+    await reset_dut(dut)
+    frame_dots = 456 * 154
+    samples = await sample_cycles(dut, frame_dots)
+    final_snapshot = samples[-1]
+
+    dut._log.info(
+        "[timebase] test_video_dot_counters_wrap_each_frame: final dot=%d line=%d frame_start=%s",
+        final_snapshot["dot_in_line"],
+        final_snapshot["line_index"],
+        final_snapshot["frame_start"],
+    )
+
+    assert final_snapshot["dot_in_line"] == 0
+    assert final_snapshot["line_index"] == 0
+    assert final_snapshot["line_start"]
+    assert final_snapshot["frame_start"]
+    assert sum(1 for sample in samples if sample["line_start"]) == 154
+    assert sum(1 for sample in samples if sample["frame_start"]) == 1
