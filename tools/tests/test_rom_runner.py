@@ -24,6 +24,16 @@ from test.harness.rom_runner import (
 
 
 class RomRunnerTest(unittest.TestCase):
+    @staticmethod
+    def build_mbc1_rom(*, bank_count: int, cart_type: int = 0x03, ram_size_code: int = 0x03) -> bytes:
+        rom = bytearray(bank_count * 0x4000)
+        for bank in range(bank_count):
+            start = bank * 0x4000
+            rom[start : start + 0x4000] = bytes([bank & 0xFF]) * 0x4000
+        rom[0x0147] = cart_type & 0xFF
+        rom[0x0149] = ram_size_code & 0xFF
+        return bytes(rom)
+
     def test_external_memory_bus_maps_rom_wram_and_hram(self) -> None:
         bus = ExternalMemoryBus(bytes([value & 0xFF for value in range(0x8000)]))
         self.assertEqual(bus.read(0x0012), 0x12)
@@ -36,6 +46,51 @@ class RomRunnerTest(unittest.TestCase):
         self.assertEqual(bus.read(0xC123), 0x5A)
         self.assertEqual(bus.read(0xFF80), 0xC3)
         self.assertEqual(bus.read(0x0150), 0x50)
+
+    def test_external_memory_bus_models_mbc1_rom_bank_switching(self) -> None:
+        bus = ExternalMemoryBus(self.build_mbc1_rom(bank_count=64, cart_type=0x01, ram_size_code=0x00))
+
+        self.assertEqual(bus.read(0x0150), 0x00)
+        self.assertEqual(bus.read(0x4000), 0x01)
+
+        bus.write(0x2000, 0x00)
+        self.assertEqual(bus.read(0x4000), 0x01)
+
+        bus.write(0x2000, 0x02)
+        self.assertEqual(bus.read(0x4000), 0x02)
+
+        bus.write(0x4000, 0x01)
+        bus.write(0x2000, 0x00)
+        self.assertEqual(bus.read(0x4000), 0x21)
+
+        bus.write(0x6000, 0x01)
+        self.assertEqual(bus.read(0x0150), 0x20)
+        self.assertEqual(bus.read(0x4000), 0x21)
+
+    def test_external_memory_bus_models_mbc1_ram_enable_and_banking(self) -> None:
+        bus = ExternalMemoryBus(self.build_mbc1_rom(bank_count=8, cart_type=0x03, ram_size_code=0x03))
+
+        self.assertEqual(bus.read(0xA000), 0xFF)
+        bus.write(0xA000, 0x11)
+        self.assertEqual(bus.read(0xA000), 0xFF)
+
+        bus.write(0x0000, 0x0A)
+        bus.write(0xA000, 0x12)
+        self.assertEqual(bus.read(0xA000), 0x12)
+
+        bus.write(0x6000, 0x01)
+        bus.write(0x4000, 0x02)
+        bus.write(0xA000, 0x34)
+        self.assertEqual(bus.read(0xA000), 0x34)
+
+        bus.write(0x4000, 0x00)
+        self.assertEqual(bus.read(0xA000), 0x12)
+
+        bus.write(0x4000, 0x02)
+        self.assertEqual(bus.read(0xA000), 0x34)
+
+        bus.write(0x0000, 0x00)
+        self.assertEqual(bus.read(0xA000), 0xFF)
 
     def test_external_memory_bus_models_joyp_selection_and_press_edges(self) -> None:
         bus = ExternalMemoryBus(bytes(0x8000))

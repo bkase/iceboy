@@ -50,6 +50,20 @@ TMA_ADDR = 0xFF06
 TAC_ADDR = 0xFF07
 IF_ADDR = 0xFF0F
 IE_ADDR = 0xFFFF
+CARTRIDGE_TYPE_ADDR = 0x0147
+CARTRIDGE_RAM_SIZE_ADDR = 0x0149
+MBC1_CART_TYPES = frozenset({0x01, 0x02, 0x03})
+MBC1_RAM_BANK_SIZE = 0x2000
+
+
+def _cartridge_ram_size_bytes(size_code: int) -> int:
+    return {
+        0x00: 0,
+        0x02: 0x2000,
+        0x03: 0x8000,
+        0x04: 0x20000,
+        0x05: 0x10000,
+    }.get(size_code & 0xFF, 0)
 
 
 def _ack_mask(valid: bool, ack_bit: int) -> int:
@@ -99,6 +113,15 @@ class DutTerminalState:
 class ExternalMemoryBus:
     def __init__(self, rom_bytes: bytes) -> None:
         self.rom = bytes(rom_bytes)
+        self.cartridge_type = self.rom[CARTRIDGE_TYPE_ADDR] if len(self.rom) > CARTRIDGE_TYPE_ADDR else 0x00
+        self.is_mbc1 = self.cartridge_type in MBC1_CART_TYPES
+        self.rom_bank_count = max(1, (len(self.rom) + 0x3FFF) // 0x4000)
+        ram_size_code = self.rom[CARTRIDGE_RAM_SIZE_ADDR] if len(self.rom) > CARTRIDGE_RAM_SIZE_ADDR else 0x00
+        self.cart_ram = bytearray(_cartridge_ram_size_bytes(ram_size_code))
+        self.mbc1_ram_enabled = False
+        self.mbc1_rom_bank_low5 = 1
+        self.mbc1_bank_high2 = 0
+        self.mbc1_mode = 0
         self.wram = bytearray(0x2000)
         self.hram = bytearray(0x7F)
         self.ie_reg = 0
@@ -112,6 +135,68 @@ class ExternalMemoryBus:
         self.sampled_timer_enabled = False
         self.sampled_timer_bit = False
         self.overflow_delay = 0
+
+    def _rom_bank_value(self) -> int:
+        bank = self.mbc1_rom_bank_low5 & 0x1F
+        return bank if bank != 0 else 1
+
+    def _rom_bank_index(self, bank: int) -> int:
+        return bank % self.rom_bank_count if self.rom_bank_count > 0 else 0
+
+    def _mbc1_lower_rom_bank(self) -> int:
+        if not self.is_mbc1:
+            return 0
+        if self.mbc1_mode == 0:
+            return 0
+        return self._rom_bank_index((self.mbc1_bank_high2 & 0x03) << 5)
+
+    def _mbc1_upper_rom_bank(self) -> int:
+        if not self.is_mbc1:
+            return self._rom_bank_index(1)
+        raw_bank = ((self.mbc1_bank_high2 & 0x03) << 5) | self._rom_bank_value()
+        return self._rom_bank_index(raw_bank)
+
+    def _mbc1_ram_bank(self) -> int:
+        if not self.is_mbc1 or len(self.cart_ram) == 0:
+            return 0
+        bank_count = max(1, len(self.cart_ram) // MBC1_RAM_BANK_SIZE)
+        raw_bank = (self.mbc1_bank_high2 & 0x03) if self.mbc1_mode == 1 else 0
+        return raw_bank % bank_count
+
+    def _cart_rom_read(self, addr: int) -> int:
+        if not self.is_mbc1:
+            return self.rom[addr] if addr < len(self.rom) else 0xFF
+
+        if addr < 0x4000:
+            bank = self._mbc1_lower_rom_bank()
+            rom_addr = (bank * 0x4000) + addr
+            return self.rom[rom_addr] if rom_addr < len(self.rom) else 0xFF
+
+        bank = self._mbc1_upper_rom_bank()
+        rom_addr = (bank * 0x4000) + (addr - 0x4000)
+        return self.rom[rom_addr] if rom_addr < len(self.rom) else 0xFF
+
+    def _cart_ram_read(self, addr: int) -> int:
+        if len(self.cart_ram) == 0 or not self.mbc1_ram_enabled:
+            return 0xFF
+        ram_addr = (self._mbc1_ram_bank() * MBC1_RAM_BANK_SIZE) + (addr - 0xA000)
+        return self.cart_ram[ram_addr] if ram_addr < len(self.cart_ram) else 0xFF
+
+    def _cart_write(self, addr: int, value: int) -> None:
+        if not self.is_mbc1:
+            return
+        if 0x0000 <= addr <= 0x1FFF:
+            self.mbc1_ram_enabled = (value & 0x0F) == 0x0A
+        elif 0x2000 <= addr <= 0x3FFF:
+            self.mbc1_rom_bank_low5 = value & 0x1F
+        elif 0x4000 <= addr <= 0x5FFF:
+            self.mbc1_bank_high2 = value & 0x03
+        elif 0x6000 <= addr <= 0x7FFF:
+            self.mbc1_mode = value & 0x01
+        elif 0xA000 <= addr <= 0xBFFF and len(self.cart_ram) > 0 and self.mbc1_ram_enabled:
+            ram_addr = (self._mbc1_ram_bank() * MBC1_RAM_BANK_SIZE) + (addr - 0xA000)
+            if ram_addr < len(self.cart_ram):
+                self.cart_ram[ram_addr] = value
 
     def _joyp_low_nibble(self) -> int:
         low_nibble = 0x0F
@@ -151,7 +236,9 @@ class ExternalMemoryBus:
     def read(self, addr: int) -> int:
         addr &= 0xFFFF
         if addr < 0x8000:
-            return self.rom[addr] if addr < len(self.rom) else 0xFF
+            return self._cart_rom_read(addr)
+        if 0xA000 <= addr <= 0xBFFF:
+            return self._cart_ram_read(addr)
         if 0xC000 <= addr <= 0xDFFF:
             return self.wram[addr - 0xC000]
         if addr == JOYP_ADDR:
@@ -175,7 +262,9 @@ class ExternalMemoryBus:
     def write(self, addr: int, value: int) -> None:
         addr &= 0xFFFF
         value &= 0xFF
-        if 0xC000 <= addr <= 0xDFFF:
+        if self.is_mbc1 and (addr < 0x8000 or 0xA000 <= addr <= 0xBFFF):
+            self._cart_write(addr, value)
+        elif 0xC000 <= addr <= 0xDFFF:
             self.wram[addr - 0xC000] = value
         elif addr == JOYP_ADDR:
             self.joyp_select = (value >> 4) & 0x3
