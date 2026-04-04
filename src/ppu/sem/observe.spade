@@ -1,0 +1,126 @@
+use std::option::Option;
+
+use lib::ppu::sem::memory::{PpuMemReq, idle_ppu_mem_req};
+use lib::ppu::sem::scanout::ScanoutEvent;
+use lib::ppu::sem::types::{PpuIrqReq, PpuMode, PpuState, idle_ppu_irq_req, initial_ppu_state};
+
+pub enum PpuIrqEdge {
+    None,
+    VBlank,
+    Stat,
+    Both,
+}
+
+pub struct PpuSemanticCommit {
+    ly_after: uint<8>,
+    mode_after: PpuMode,
+    stat_line_after: bool,
+    irq_edge: PpuIrqEdge,
+    scanout: Option<ScanoutEvent>,
+}
+
+pub enum TransferEvent {
+    BgWarmup,
+    ScxDiscard { count: uint<3> },
+    WindowRestart,
+    ObjFetchStart { oam_index: uint<6> },
+    ObjFetchCancel,
+    PixelPop { x: uint<8> },
+}
+
+pub struct TransferDigest {
+    event_count: uint<16>,
+    event_hash: uint<64>,
+    window_restart_count: uint<2>,
+    obj_fetch_count: uint<4>,
+}
+
+pub enum StrictnessTier {
+    Stable,
+    ResearchBacked,
+    Hypothesis,
+}
+
+pub struct LineSummary {
+    frame: uint<32>,
+    ly: uint<8>,
+    mode3_len: uint<9>,
+    window_start_x: Option<uint<8>>,
+    window_line_after: uint<8>,
+    obj_count: uint<4>,
+    selected_objs: [Option<uint<6>>; 10],
+    transfer: TransferDigest,
+    line_hash: uint<64>,
+}
+
+pub struct PpuMemReqs {
+    count: uint<3>,
+    slots: [PpuMemReq; 4],
+}
+
+pub struct PpuMmioResp {
+    read_valid: bool,
+    read_data: uint<8>,
+}
+
+pub struct DotOutput {
+    next_state: PpuState,
+    mem_reqs: PpuMemReqs,
+    mmio_resp: PpuMmioResp,
+    irq_req: PpuIrqReq,
+    scanout: Option<ScanoutEvent>,
+    semantic: Option<PpuSemanticCommit>,
+    line_summary: Option<LineSummary>,
+}
+
+pub fn idle_ppu_irq_edge() -> PpuIrqEdge {
+    PpuIrqEdge::None
+}
+
+pub fn zero_transfer_digest() -> TransferDigest {
+    TransferDigest$(event_count: 0u16, event_hash: 0u64, window_restart_count: 0u2, obj_fetch_count: 0u4)
+}
+
+pub fn empty_line_summary() -> LineSummary {
+    LineSummary$(
+        frame: 0u32,
+        ly: 0u8,
+        mode3_len: 0u9,
+        window_start_x: Option::None,
+        window_line_after: 0u8,
+        obj_count: 0u4,
+        selected_objs: [Option::None; 10],
+        transfer: zero_transfer_digest(),
+        line_hash: 0u64,
+    )
+}
+
+pub fn idle_ppu_mem_reqs() -> PpuMemReqs {
+    PpuMemReqs$(count: 0u3, slots: [idle_ppu_mem_req(); 4])
+}
+
+pub fn idle_ppu_mmio_resp() -> PpuMmioResp {
+    PpuMmioResp$(read_valid: false, read_data: 0xffu8)
+}
+
+pub fn idle_ppu_semantic_commit() -> PpuSemanticCommit {
+    PpuSemanticCommit$(
+        ly_after: 0u8,
+        mode_after: PpuMode::LcdOff,
+        stat_line_after: false,
+        irq_edge: idle_ppu_irq_edge(),
+        scanout: Option::None,
+    )
+}
+
+pub fn idle_dot_output() -> DotOutput {
+    DotOutput$(
+        next_state: initial_ppu_state(),
+        mem_reqs: idle_ppu_mem_reqs(),
+        mmio_resp: idle_ppu_mmio_resp(),
+        irq_req: idle_ppu_irq_req(),
+        scanout: Option::None,
+        semantic: Option::None,
+        line_summary: Option::None,
+    )
+}

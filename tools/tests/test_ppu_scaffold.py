@@ -17,6 +17,7 @@ PPU_RTL_TIMING_PATH = ROOT / "src" / "ppu" / "rtl" / "timing.spade"
 PPU_RTL_TIMING_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "timing_test_top.spade"
 PPU_EVENTS_PATH = ROOT / "src" / "ppu" / "sem" / "events.spade"
 PPU_MEMORY_PATH = ROOT / "src" / "ppu" / "sem" / "memory.spade"
+PPU_OBSERVE_PATH = ROOT / "src" / "ppu" / "sem" / "observe.spade"
 PPU_TYPES_PATH = ROOT / "src" / "ppu" / "sem" / "types.spade"
 PPU_PROFILES_PATH = ROOT / "src" / "ppu" / "sem" / "profiles.spade"
 PPU_SAMPLE_PATH = ROOT / "src" / "ppu" / "sem" / "sample.spade"
@@ -37,6 +38,7 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("pub mod timing_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod events;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod memory;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod observe;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod profiles;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod sample;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod scanout;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
@@ -248,6 +250,69 @@ class PpuScaffoldTest(unittest.TestCase):
             "pub fn idle_ppu_mem_req() -> PpuMemReq",
             "pub fn idle_ppu_mem_resp() -> PpuMemResp",
             "pub fn idle_pending_read() -> PendingRead",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_observability_surface_matches_architecture_contract(self) -> None:
+        text = PPU_OBSERVE_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub enum PpuIrqEdge",
+            "None,",
+            "VBlank,",
+            "Stat,",
+            "Both,",
+            "pub struct PpuSemanticCommit",
+            "ly_after: uint<8>",
+            "mode_after: PpuMode",
+            "stat_line_after: bool",
+            "irq_edge: PpuIrqEdge",
+            "scanout: Option<ScanoutEvent>",
+            "pub enum TransferEvent",
+            "BgWarmup,",
+            "ScxDiscard { count: uint<3> }",
+            "WindowRestart,",
+            "ObjFetchStart { oam_index: uint<6> }",
+            "ObjFetchCancel,",
+            "PixelPop { x: uint<8> }",
+            "pub struct TransferDigest",
+            "event_count: uint<16>",
+            "event_hash: uint<64>",
+            "window_restart_count: uint<2>",
+            "obj_fetch_count: uint<4>",
+            "pub enum StrictnessTier",
+            "Stable,",
+            "ResearchBacked,",
+            "Hypothesis,",
+            "pub struct LineSummary",
+            "frame: uint<32>",
+            "ly: uint<8>",
+            "mode3_len: uint<9>",
+            "window_start_x: Option<uint<8>>",
+            "window_line_after: uint<8>",
+            "obj_count: uint<4>",
+            "selected_objs: [Option<uint<6>>; 10]",
+            "transfer: TransferDigest",
+            "line_hash: uint<64>",
+            "pub struct PpuMemReqs",
+            "count: uint<3>",
+            "slots: [PpuMemReq; 4]",
+            "pub struct PpuMmioResp",
+            "read_valid: bool",
+            "read_data: uint<8>",
+            "pub struct DotOutput",
+            "next_state: PpuState",
+            "mem_reqs: PpuMemReqs",
+            "mmio_resp: PpuMmioResp",
+            "irq_req: PpuIrqReq",
+            "semantic: Option<PpuSemanticCommit>",
+            "line_summary: Option<LineSummary>",
+            "pub fn idle_ppu_irq_edge() -> PpuIrqEdge",
+            "pub fn zero_transfer_digest() -> TransferDigest",
+            "pub fn empty_line_summary() -> LineSummary",
+            "pub fn idle_ppu_mem_reqs() -> PpuMemReqs",
+            "pub fn idle_ppu_mmio_resp() -> PpuMmioResp",
+            "pub fn idle_ppu_semantic_commit() -> PpuSemanticCommit",
+            "pub fn idle_dot_output() -> DotOutput",
         ]:
             self.assertIn(symbol, text)
 
