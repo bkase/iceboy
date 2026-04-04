@@ -11,6 +11,7 @@ UV_BIN="$(command -v uv || true)"
 export PATH="/opt/homebrew/bin:$PATH"
 ACTIVE_PID=""
 RUN_FORMAL="${ICEBOY_PRECOMMIT_INCLUDE_FORMAL:-0}"
+RUN_EXTENDED="${ICEBOY_PRECOMMIT_EXTENDED:-0}"
 
 SKIP_PYTHON_MODULES=(
     "tools.tests.test_spade_cocotb_pipeline"
@@ -18,35 +19,38 @@ SKIP_PYTHON_MODULES=(
     "tools.tests.test_alu_generated_vectors"
 )
 
-PRECOMMIT_SWIM_TESTS=(
-    "test/harness/test_spade_cocotb_integration.py"
+PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/harness/test_e2e_smoke.py"
-    "test/harness/test_reset_profile.py"
-    "test/unit/test_main.py"
     "test/unit/test_alu.py"
     "test/unit/test_decode.py"
     "test/unit/test_decode_cb.py"
-    "test/unit/test_halt_bug.py"
-    "test/unit/test_membus.py"
     "test/unit/test_memory_map.py"
-    "test/unit/test_oam_dma.py"
     "test/unit/test_serial.py"
     "test/unit/test_interrupt_service.py"
-    "test/unit/test_interrupts_basic.py"
     "test/unit/test_timer.py"
+    "test/lockstep/test_ei_halt_corners.py"
+    "test/harness/test_arch_time_invariants.py"
+    "test/rom/test_loads_basic.py"
+    "test/rom/test_timer_irq_halt.py"
+)
+
+PRECOMMIT_SWIM_TESTS_EXTENDED=(
+    "test/harness/test_spade_cocotb_integration.py"
+    "test/harness/test_reset_profile.py"
+    "test/unit/test_main.py"
+    "test/unit/test_halt_bug.py"
+    "test/unit/test_membus.py"
+    "test/unit/test_oam_dma.py"
+    "test/unit/test_interrupts_basic.py"
     "test/unit/test_timebase.py"
     "test/lockstep/test_cpu_lockstep.py"
     "test/lockstep/test_interrupt_injection.py"
-    "test/lockstep/test_ei_halt_corners.py"
-    "test/harness/test_arch_time_invariants.py"
     "test/power/test_duty_cycle_metrics.py"
     "test/power/test_halt_quiescence.py"
     "test/rom/test_ei_delay.py"
-    "test/rom/test_loads_basic.py"
     "test/rom/test_alu16_sp.py"
     "test/rom/test_joy_diverge_persist.py"
     "test/rom/test_timer_div_basic.py"
-    "test/rom/test_timer_irq_halt.py"
 )
 
 if [[ ! -x "$SWIM" ]]; then
@@ -122,14 +126,14 @@ run_checked() {
     ACTIVE_PID=""
     set -e
 
-    output="$(cat "$output_file")"
-    rm -f "$output_file"
-
     if [[ $rc -eq 0 ]]; then
+        rm -f "$output_file"
         echo -e "${GREEN}OK${NC}"
         return 0
     fi
 
+    output="$(cat "$output_file")"
+    rm -f "$output_file"
     echo -e "${RED}FAILED${NC}"
     [[ -n "$output" ]] && echo "$output"
     exit "$rc"
@@ -237,6 +241,13 @@ if find test -type f -name 'test_*.py' -print -quit | grep -q .; then
     if command -v iverilog >/dev/null 2>&1 || command -v verilator >/dev/null 2>&1 || [[ -x /opt/homebrew/bin/verilator ]]; then
         echo -n "Provisioning simulator Python deps... "
         run_checked tools/ensure_swim_python_deps.sh
+
+        PRECOMMIT_SWIM_TESTS=("${PRECOMMIT_SWIM_TESTS_DEFAULT[@]}")
+        if [[ "$RUN_EXTENDED" == "1" ]]; then
+            PRECOMMIT_SWIM_TESTS+=("${PRECOMMIT_SWIM_TESTS_EXTENDED[@]}")
+        else
+            echo -e "Extended simulator suites: ${YELLOW}skipped in pre-commit (set ICEBOY_PRECOMMIT_EXTENDED=1 to enable)${NC}"
+        fi
 
         echo "Running curated simulator suites..."
         for test_file in "${PRECOMMIT_SWIM_TESTS[@]}"; do
