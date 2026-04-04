@@ -125,6 +125,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/unit/test_main.py"', text)
         self.assertIn('"test/unit/test_halt_bug.py"', text)
         self.assertIn('"test/lockstep/test_ei_halt_corners.py"', text)
+        self.assertIn('"test/power/test_halt_quiescence.py"', text)
         self.assertIn('"test/harness/test_reset_profile.py"', text)
         self.assertIn('"test/rom/test_ei_delay.py"', text)
         self.assertIn('"test/rom/test_alu16_sp.py"', text)

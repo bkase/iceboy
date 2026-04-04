@@ -34,6 +34,7 @@ PRECOMMIT_SWIM_TESTS=(
     "test/lockstep/test_cpu_lockstep.py"
     "test/lockstep/test_interrupt_injection.py"
     "test/lockstep/test_ei_halt_corners.py"
+    "test/power/test_halt_quiescence.py"
     "test/rom/test_ei_delay.py"
     "test/rom/test_loads_basic.py"
     "test/rom/test_alu16_sp.py"

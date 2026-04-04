@@ -57,6 +57,12 @@ class CoverageTrackerTest(unittest.TestCase):
         self.assertTrue(any("gaps:" in line for line in lines))
         self.assertTrue(any("Opcode families" in line for line in lines))
 
+    def test_power_halt_quiescence_suite_contributes_timer_and_rom_bus_coverage(self) -> None:
+        snapshot = build_coverage_snapshot(["test_halt_quiescence.py"])
+        self.assertIn("timer", snapshot.dimensions["interrupt_causes"].covered)
+        self.assertIn("rom", snapshot.dimensions["bus_regions"].covered)
+        self.assertIn("DMG/SkipBoot/DmgConservative", snapshot.dimensions["profile_triples"].covered)
+
     def test_write_snapshot_persists_json_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             destination = Path(tmpdir) / "coverage.json"

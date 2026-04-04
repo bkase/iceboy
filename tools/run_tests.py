@@ -189,6 +189,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("invariant", "test_cpu_invariants_flow.py", "swim", "test_cpu_invariants_flow"),
     SuiteDefinition("invariant", "test_arch_time_invariants.py", "swim", "test_arch_time_invariants"),
     SuiteDefinition("invariant", "test_write_enable_hold.py", "swim", "test_write_enable_hold"),
+    SuiteDefinition("power", "test_halt_quiescence.py", "swim", "test_halt_quiescence"),
 )
 
 
