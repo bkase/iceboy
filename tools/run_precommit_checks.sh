@@ -31,6 +31,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/lockstep/test_ei_halt_corners.py"
     "test/harness/test_arch_time_invariants.py"
     "test/rom/test_loads_basic.py"
+    "test/rom/test_mbc1_ram.py"
     "test/rom/test_mbc1_switch.py"
     "test/rom/test_timer_irq_halt.py"
 )

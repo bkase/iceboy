@@ -137,6 +137,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/rom/test_dma_oam_copy.py"', text)
         self.assertIn('"test/rom/test_alu16_sp.py"', text)
         self.assertIn('"test/rom/test_joy_diverge_persist.py"', text)
+        self.assertIn('"test/rom/test_mbc1_ram.py"', text)
         self.assertIn('"test/rom/test_mbc1_switch.py"', text)
         self.assertIn('"test/rom/test_timer_div_basic.py"', text)
         self.assertIn('"test/rom/test_timer_irq_halt.py"', text)
