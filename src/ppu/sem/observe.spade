@@ -1,8 +1,21 @@
 use std::option::Option;
 
+use lib::ppu::sem::events::{VideoCoord, zero_video_coord};
 use lib::ppu::sem::memory::{PpuMemReq, idle_ppu_mem_req};
 use lib::ppu::sem::scanout::ScanoutEvent;
-use lib::ppu::sem::types::{PpuIrqReq, PpuMode, PpuState, idle_ppu_irq_req, initial_ppu_state};
+use lib::ppu::sem::types::{
+    BgFifo,
+    FetcherState,
+    ObjFifo,
+    PpuIrqReq,
+    PpuMode,
+    PpuPhase,
+    PpuState,
+    idle_ppu_irq_req,
+    initial_fetcher_state,
+    initial_ppu_state,
+    visible_mode,
+};
 
 pub enum PpuIrqEdge {
     None,
@@ -73,6 +86,23 @@ pub struct DotOutput {
     line_summary: Option<LineSummary>,
 }
 
+pub struct PpuDebugTrace {
+    at: VideoCoord,
+    ly_after: uint<8>,
+    mode_after: PpuMode,
+    phase_after: PpuPhase,
+    stat_line_after: bool,
+    mem_reqs: PpuMemReqs,
+    mmio_resp: PpuMmioResp,
+    irq_req: PpuIrqReq,
+    scanout: Option<ScanoutEvent>,
+    semantic: Option<PpuSemanticCommit>,
+    line_summary: Option<LineSummary>,
+    fetcher: FetcherState,
+    bg_fifo: BgFifo,
+    obj_fifo: ObjFifo,
+}
+
 pub fn idle_ppu_irq_edge() -> PpuIrqEdge {
     PpuIrqEdge::None
 }
@@ -122,5 +152,37 @@ pub fn idle_dot_output() -> DotOutput {
         scanout: Option::None,
         semantic: Option::None,
         line_summary: Option::None,
+    )
+}
+
+pub fn idle_dot_output_for_state(state: PpuState) -> DotOutput {
+    DotOutput$(
+        next_state: state,
+        mem_reqs: idle_ppu_mem_reqs(),
+        mmio_resp: idle_ppu_mmio_resp(),
+        irq_req: idle_ppu_irq_req(),
+        scanout: Option::None,
+        semantic: Option::None,
+        line_summary: Option::None,
+    )
+}
+
+pub fn idle_ppu_debug_trace() -> PpuDebugTrace {
+    let state = initial_ppu_state();
+    PpuDebugTrace$(
+        at: zero_video_coord(),
+        ly_after: state.visible.ly,
+        mode_after: visible_mode(state.status),
+        phase_after: state.status.phase,
+        stat_line_after: state.status.stat_irq.line_high,
+        mem_reqs: idle_ppu_mem_reqs(),
+        mmio_resp: idle_ppu_mmio_resp(),
+        irq_req: idle_ppu_irq_req(),
+        scanout: Option::None,
+        semantic: Option::None,
+        line_summary: Option::None,
+        fetcher: initial_fetcher_state(),
+        bg_fifo: state.render.bg_fifo,
+        obj_fifo: state.render.obj_fifo,
     )
 }

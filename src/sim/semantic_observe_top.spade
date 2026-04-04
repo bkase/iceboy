@@ -1,0 +1,69 @@
+use lib::ppu::sem::events::{DotInput, OamDmaState, TimedPpuEvent, VideoCoord};
+use lib::ppu::sem::memory::PpuMemResp;
+use lib::ppu::sem::observe::{LineSummary, PpuSemanticCommit};
+use lib::ppu::sem::scanout::ScanoutEvent;
+use lib::ppu::sem::step::step_dot;
+use lib::ppu::sem::types::{PpuState, PpuIrqReq, initial_ppu_state, visible_mode};
+use lib::sim::ppu_support::{
+    encode_ppu_mode,
+    encode_ppu_phase,
+    held_dot_output,
+    line_summary_or_empty,
+    line_summary_valid,
+    scanout_or_blank,
+    semantic_or_idle,
+    semantic_valid,
+};
+
+struct SemanticObserveTopOut {
+    commit_seq: uint<64>,
+    dot_in_line: uint<9>,
+    line_index: uint<8>,
+    phase_kind: uint<3>,
+    mode_kind: uint<3>,
+    irq_req: PpuIrqReq,
+    scanout: ScanoutEvent,
+    semantic_valid: bool,
+    semantic: PpuSemanticCommit,
+    line_summary_valid: bool,
+    line_summary: LineSummary,
+    state_after: PpuState,
+}
+
+entity semantic_observe_top(
+    clk: clock,
+    rst: bool,
+    dot_ce: bool,
+    video_now: VideoCoord,
+    bus_events: [TimedPpuEvent; 4],
+    bus_event_count: uint<4>,
+    mem_resp: PpuMemResp,
+    dma_state: OamDmaState,
+) -> SemanticObserveTopOut {
+    decl state_reg;
+    decl commit_seq;
+    let step = step_dot(
+        state_reg,
+        DotInput$(bus_events: bus_events, bus_event_count: bus_event_count, mem_resp: mem_resp, dma_state: dma_state),
+    );
+    let visible = held_dot_output(state_reg, dot_ce, step);
+    let visible_state = visible.next_state;
+    let _ = video_now;
+    reg(clk) state_reg: PpuState reset(rst: initial_ppu_state()) = visible_state;
+    reg(clk) commit_seq: uint<64> reset(rst: 0u64) = if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq };
+
+    SemanticObserveTopOut$(
+        commit_seq: if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq },
+        dot_in_line: visible_state.render.dot_in_line,
+        line_index: visible_state.visible.ly,
+        phase_kind: encode_ppu_phase(visible_state.status.phase),
+        mode_kind: encode_ppu_mode(visible_mode(visible_state.status)),
+        irq_req: visible.irq_req,
+        scanout: scanout_or_blank(visible.scanout, visible_state.visible.ly),
+        semantic_valid: semantic_valid(visible.semantic),
+        semantic: semantic_or_idle(visible.semantic),
+        line_summary_valid: line_summary_valid(visible.line_summary),
+        line_summary: line_summary_or_empty(visible.line_summary),
+        state_after: visible_state,
+    )
+}

@@ -308,6 +308,12 @@ class PpuScaffoldTest(unittest.TestCase):
             "irq_req: PpuIrqReq",
             "semantic: Option<PpuSemanticCommit>",
             "line_summary: Option<LineSummary>",
+            "pub struct PpuDebugTrace",
+            "at: VideoCoord",
+            "phase_after: PpuPhase",
+            "fetcher: FetcherState",
+            "bg_fifo: BgFifo",
+            "obj_fifo: ObjFifo",
             "pub fn idle_ppu_irq_edge() -> PpuIrqEdge",
             "pub fn zero_transfer_digest() -> TransferDigest",
             "pub fn empty_line_summary() -> LineSummary",
@@ -315,6 +321,8 @@ class PpuScaffoldTest(unittest.TestCase):
             "pub fn idle_ppu_mmio_resp() -> PpuMmioResp",
             "pub fn idle_ppu_semantic_commit() -> PpuSemanticCommit",
             "pub fn idle_dot_output() -> DotOutput",
+            "pub fn idle_dot_output_for_state(state: PpuState) -> DotOutput",
+            "pub fn idle_ppu_debug_trace() -> PpuDebugTrace",
         ]:
             self.assertIn(symbol, text)
 

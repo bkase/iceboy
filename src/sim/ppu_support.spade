@@ -1,0 +1,164 @@
+use std::option::Option;
+
+use lib::ppu::sem::events::{PpuEventKind, TimedPpuEvent, VideoCoord, idle_timed_ppu_event, mmio::MmioWrite};
+use lib::ppu::sem::observe::{
+    DotOutput,
+    LineSummary,
+    PpuDebugTrace,
+    PpuSemanticCommit,
+    empty_line_summary,
+    idle_dot_output_for_state,
+    idle_ppu_debug_trace,
+    idle_ppu_semantic_commit,
+};
+use lib::ppu::sem::scanout::{BlankReason, ScanoutEvent, blank_scanout_event};
+use lib::ppu::sem::stimulus::RasterStimulus;
+use lib::ppu::sem::types::{PpuMode, PpuPhase, PpuState, visible_mode};
+
+pub fn encode_ppu_phase(phase: PpuPhase) -> uint<3> {
+    match phase {
+        PpuPhase::LcdOff => 0u3,
+        PpuPhase::OamScan$(index: _, found: _) => 1u3,
+        PpuPhase::Transfer$(x_out: _, discard_scx: _) => 2u3,
+        PpuPhase::HBlank$(dots_left: _) => 3u3,
+        PpuPhase::VBlank$(line: _, dots_left: _) => 4u3,
+    }
+}
+
+pub fn encode_ppu_mode(mode: PpuMode) -> uint<3> {
+    match mode {
+        PpuMode::LcdOff => 0u3,
+        PpuMode::OamScan => 1u3,
+        PpuMode::PixelTransfer => 2u3,
+        PpuMode::HBlank => 3u3,
+        PpuMode::VBlank => 4u3,
+    }
+}
+
+fn mmio_event(seq: uint<64>, at: VideoCoord, write: MmioWrite) -> TimedPpuEvent {
+    TimedPpuEvent$(seq: seq, at: at, kind: PpuEventKind::MmioWrite$(write: write))
+}
+
+fn dma_event(seq: uint<64>, at: VideoCoord, source_high: uint<8>) -> TimedPpuEvent {
+    TimedPpuEvent$(seq: seq, at: at, kind: PpuEventKind::DmaStart$(source_high: source_high))
+}
+
+pub fn timed_events_from_direct(
+    at: VideoCoord,
+    seq_counter: uint<64>,
+    reg_write: Option<MmioWrite>,
+    dma_start: Option<uint<8>>,
+) -> ([TimedPpuEvent; 4], uint<4>) {
+    let idle = idle_timed_ppu_event();
+    match reg_write {
+        Option::Some(write) => match dma_start {
+            Option::Some(source_high) => (
+                [
+                    mmio_event(seq_counter, at, write),
+                    dma_event(trunc(seq_counter + 1u64), at, source_high),
+                    idle,
+                    idle,
+                ],
+                2u4,
+            ),
+            Option::None => ([mmio_event(seq_counter, at, write), idle, idle, idle], 1u4),
+        },
+        Option::None => match dma_start {
+            Option::Some(source_high) => ([dma_event(seq_counter, at, source_high), idle, idle, idle], 1u4),
+            Option::None => ([idle, idle, idle, idle], 0u4),
+        },
+    }
+}
+
+pub fn timed_events_from_stimulus(
+    at: VideoCoord,
+    seq_counter: uint<64>,
+    stimulus: RasterStimulus,
+) -> ([TimedPpuEvent; 4], uint<4>) {
+    timed_events_from_direct(at, seq_counter, stimulus.reg_write, stimulus.dma_start)
+}
+
+pub fn held_dot_output(state: PpuState, dot_ce: bool, stepped: DotOutput) -> DotOutput {
+    if dot_ce { stepped } else { idle_dot_output_for_state(state) }
+}
+
+pub fn semantic_valid(semantic: Option<PpuSemanticCommit>) -> bool {
+    match semantic {
+        Option::Some(commit) => {
+            let _ = commit;
+            true
+        },
+        Option::None => false,
+    }
+}
+
+pub fn semantic_or_idle(semantic: Option<PpuSemanticCommit>) -> PpuSemanticCommit {
+    match semantic {
+        Option::Some(commit) => commit,
+        Option::None => idle_ppu_semantic_commit(),
+    }
+}
+
+pub fn line_summary_valid(summary: Option<LineSummary>) -> bool {
+    match summary {
+        Option::Some(line) => {
+            let _ = line;
+            true
+        },
+        Option::None => false,
+    }
+}
+
+pub fn line_summary_or_empty(summary: Option<LineSummary>) -> LineSummary {
+    match summary {
+        Option::Some(line) => line,
+        Option::None => empty_line_summary(),
+    }
+}
+
+pub fn scanout_or_blank(scanout: Option<ScanoutEvent>, ly: uint<8>) -> ScanoutEvent {
+    match scanout {
+        Option::Some(event) => event,
+        Option::None => blank_scanout_event(ly, BlankReason::NonVisibleDot),
+    }
+}
+
+pub fn ppu_debug_trace(at: VideoCoord, output: DotOutput) -> PpuDebugTrace {
+    let state = output.next_state;
+    PpuDebugTrace$(
+        at: at,
+        ly_after: state.visible.ly,
+        mode_after: visible_mode(state.status),
+        phase_after: state.status.phase,
+        stat_line_after: state.status.stat_irq.line_high,
+        mem_reqs: output.mem_reqs,
+        mmio_resp: output.mmio_resp,
+        irq_req: output.irq_req,
+        scanout: output.scanout,
+        semantic: output.semantic,
+        line_summary: output.line_summary,
+        fetcher: state.render.fetcher,
+        bg_fifo: state.render.bg_fifo,
+        obj_fifo: state.render.obj_fifo,
+    )
+}
+
+pub fn idle_trace_for_state(at: VideoCoord, state: PpuState) -> PpuDebugTrace {
+    let idle = idle_ppu_debug_trace();
+    PpuDebugTrace$(
+        at: at,
+        ly_after: state.visible.ly,
+        mode_after: visible_mode(state.status),
+        phase_after: state.status.phase,
+        stat_line_after: state.status.stat_irq.line_high,
+        mem_reqs: idle.mem_reqs,
+        mmio_resp: idle.mmio_resp,
+        irq_req: idle.irq_req,
+        scanout: idle.scanout,
+        semantic: idle.semantic,
+        line_summary: idle.line_summary,
+        fetcher: state.render.fetcher,
+        bg_fifo: state.render.bg_fifo,
+        obj_fifo: state.render.obj_fifo,
+    )
+}

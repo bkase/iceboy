@@ -1,0 +1,40 @@
+use lib::ppu::sem::events::{DotInput, OamDmaState, TimedPpuEvent, VideoCoord};
+use lib::ppu::sem::memory::PpuMemResp;
+use lib::ppu::sem::observe::PpuDebugTrace;
+use lib::ppu::sem::step::step_dot;
+use lib::ppu::sem::types::{PpuState, initial_ppu_state};
+use lib::sim::ppu_support::{held_dot_output, idle_trace_for_state, ppu_debug_trace};
+
+struct TraceObserveTopOut {
+    commit_seq: uint<64>,
+    trace_valid: bool,
+    trace: PpuDebugTrace,
+}
+
+entity trace_observe_top(
+    clk: clock,
+    rst: bool,
+    dot_ce: bool,
+    video_now: VideoCoord,
+    bus_events: [TimedPpuEvent; 4],
+    bus_event_count: uint<4>,
+    mem_resp: PpuMemResp,
+    dma_state: OamDmaState,
+) -> TraceObserveTopOut {
+    decl state_reg;
+    decl commit_seq;
+    let step = step_dot(
+        state_reg,
+        DotInput$(bus_events: bus_events, bus_event_count: bus_event_count, mem_resp: mem_resp, dma_state: dma_state),
+    );
+    let visible = held_dot_output(state_reg, dot_ce, step);
+    let visible_state = visible.next_state;
+    reg(clk) state_reg: PpuState reset(rst: initial_ppu_state()) = visible_state;
+    reg(clk) commit_seq: uint<64> reset(rst: 0u64) = if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq };
+
+    TraceObserveTopOut$(
+        commit_seq: if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq },
+        trace_valid: dot_ce,
+        trace: if dot_ce { ppu_debug_trace(video_now, visible) } else { idle_trace_for_state(video_now, visible_state) },
+    )
+}

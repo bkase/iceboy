@@ -1,0 +1,84 @@
+use lib::ppu::sem::events::{DotInput, OamDmaState, VideoCoord};
+use lib::ppu::sem::memory::PpuMemResp;
+use lib::ppu::sem::observe::{LineSummary, PpuMemReqs, PpuMmioResp, PpuSemanticCommit};
+use lib::ppu::sem::scanout::ScanoutEvent;
+use lib::ppu::sem::step::step_dot;
+use lib::ppu::sem::stimulus::{PpuSimSnapshot, RasterStimulus};
+use lib::ppu::sem::types::{PpuIrqReq, PpuState, initial_ppu_state, visible_mode};
+use lib::sim::ppu_support::{
+    encode_ppu_mode,
+    encode_ppu_phase,
+    held_dot_output,
+    line_summary_or_empty,
+    line_summary_valid,
+    scanout_or_blank,
+    semantic_or_idle,
+    semantic_valid,
+    timed_events_from_stimulus,
+};
+
+struct PpuTestTopOut {
+    commit_seq: uint<64>,
+    dot_in_line: uint<9>,
+    line_index: uint<8>,
+    phase_kind: uint<3>,
+    mode_kind: uint<3>,
+    state: PpuState,
+    mem_reqs: PpuMemReqs,
+    mmio_resp: PpuMmioResp,
+    irq_req: PpuIrqReq,
+    scanout: ScanoutEvent,
+    semantic_valid: bool,
+    semantic: PpuSemanticCommit,
+    line_summary_valid: bool,
+    line_summary: LineSummary,
+    state_export_valid: bool,
+    state_export: PpuSimSnapshot,
+}
+
+entity ppu_test_top(
+    clk: clock,
+    rst: bool,
+    dot_ce: bool,
+    video_now: VideoCoord,
+    stimulus: RasterStimulus,
+    mem_resp: PpuMemResp,
+    dma_state: OamDmaState,
+) -> PpuTestTopOut {
+    decl state_reg;
+    decl commit_seq;
+    let imported_state = match stimulus.state_import {
+        std::option::Option::Some(snapshot) => snapshot.state,
+        std::option::Option::None => state_reg,
+    };
+    let (bus_events, bus_event_count) = timed_events_from_stimulus(video_now, commit_seq, stimulus);
+    let step = step_dot(
+        imported_state,
+        DotInput$(bus_events: bus_events, bus_event_count: bus_event_count, mem_resp: mem_resp, dma_state: dma_state),
+    );
+    let visible = held_dot_output(imported_state, dot_ce, step);
+    let committed_state = visible.next_state;
+    reg(clk) state_reg: PpuState reset(rst: initial_ppu_state()) = committed_state;
+    reg(clk) commit_seq: uint<64> reset(rst: 0u64) = if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq };
+    let visible_seq = if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq };
+    let visible_state = committed_state;
+
+    PpuTestTopOut$(
+        commit_seq: visible_seq,
+        dot_in_line: visible_state.render.dot_in_line,
+        line_index: visible_state.visible.ly,
+        phase_kind: encode_ppu_phase(visible_state.status.phase),
+        mode_kind: encode_ppu_mode(visible_mode(visible_state.status)),
+        state: visible_state,
+        mem_reqs: visible.mem_reqs,
+        mmio_resp: visible.mmio_resp,
+        irq_req: visible.irq_req,
+        scanout: scanout_or_blank(visible.scanout, visible_state.visible.ly),
+        semantic_valid: semantic_valid(visible.semantic),
+        semantic: semantic_or_idle(visible.semantic),
+        line_summary_valid: line_summary_valid(visible.line_summary),
+        line_summary: line_summary_or_empty(visible.line_summary),
+        state_export_valid: stimulus.state_export,
+        state_export: PpuSimSnapshot$(frame: video_now.frame, state: visible_state),
+    )
+}

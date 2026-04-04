@@ -1,0 +1,55 @@
+use lib::ppu::sem::events::{DotInput, OamDmaState, VideoCoord};
+use lib::ppu::sem::memory::PpuMemResp;
+use lib::ppu::sem::observe::{LineSummary, PpuSemanticCommit};
+use lib::ppu::sem::step::step_dot;
+use lib::ppu::sem::stimulus::{PpuSimSnapshot, RasterStimulus};
+use lib::ppu::sem::types::{PpuState, initial_ppu_state};
+use lib::sim::ppu_support::{held_dot_output, line_summary_or_empty, line_summary_valid, semantic_or_idle, semantic_valid, timed_events_from_stimulus};
+
+struct PpuStateTopOut {
+    commit_seq: uint<64>,
+    state: PpuState,
+    semantic_valid: bool,
+    semantic: PpuSemanticCommit,
+    line_summary_valid: bool,
+    line_summary: LineSummary,
+    snapshot_export_valid: bool,
+    snapshot_export: PpuSimSnapshot,
+}
+
+entity ppu_state_top(
+    clk: clock,
+    rst: bool,
+    dot_ce: bool,
+    video_now: VideoCoord,
+    stimulus: RasterStimulus,
+    mem_resp: PpuMemResp,
+    dma_state: OamDmaState,
+) -> PpuStateTopOut {
+    decl state_reg;
+    decl commit_seq;
+    let imported_state = match stimulus.state_import {
+        std::option::Option::Some(snapshot) => snapshot.state,
+        std::option::Option::None => state_reg,
+    };
+    let (bus_events, bus_event_count) = timed_events_from_stimulus(video_now, commit_seq, stimulus);
+    let step = step_dot(
+        imported_state,
+        DotInput$(bus_events: bus_events, bus_event_count: bus_event_count, mem_resp: mem_resp, dma_state: dma_state),
+    );
+    let visible = held_dot_output(imported_state, dot_ce, step);
+    let visible_state = visible.next_state;
+    reg(clk) state_reg: PpuState reset(rst: initial_ppu_state()) = visible_state;
+    reg(clk) commit_seq: uint<64> reset(rst: 0u64) = if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq };
+
+    PpuStateTopOut$(
+        commit_seq: if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq },
+        state: visible_state,
+        semantic_valid: semantic_valid(visible.semantic),
+        semantic: semantic_or_idle(visible.semantic),
+        line_summary_valid: line_summary_valid(visible.line_summary),
+        line_summary: line_summary_or_empty(visible.line_summary),
+        snapshot_export_valid: stimulus.state_export,
+        snapshot_export: PpuSimSnapshot$(frame: video_now.frame, state: visible_state),
+    )
+}
