@@ -25,7 +25,7 @@ from test.harness.rom_runner import (
 
 class RomRunnerTest(unittest.TestCase):
     @staticmethod
-    def build_mbc1_rom(*, bank_count: int, cart_type: int = 0x03, ram_size_code: int = 0x03) -> bytes:
+    def build_banked_rom(*, bank_count: int, cart_type: int, ram_size_code: int) -> bytes:
         rom = bytearray(bank_count * 0x4000)
         for bank in range(bank_count):
             start = bank * 0x4000
@@ -33,6 +33,14 @@ class RomRunnerTest(unittest.TestCase):
         rom[0x0147] = cart_type & 0xFF
         rom[0x0149] = ram_size_code & 0xFF
         return bytes(rom)
+
+    @staticmethod
+    def build_mbc1_rom(*, bank_count: int, cart_type: int = 0x03, ram_size_code: int = 0x03) -> bytes:
+        return RomRunnerTest.build_banked_rom(bank_count=bank_count, cart_type=cart_type, ram_size_code=ram_size_code)
+
+    @staticmethod
+    def build_mbc3_rom(*, bank_count: int, cart_type: int = 0x13, ram_size_code: int = 0x03) -> bytes:
+        return RomRunnerTest.build_banked_rom(bank_count=bank_count, cart_type=cart_type, ram_size_code=ram_size_code)
 
     def test_external_memory_bus_maps_rom_wram_and_hram(self) -> None:
         bus = ExternalMemoryBus(bytes([value & 0xFF for value in range(0x8000)]))
@@ -88,6 +96,54 @@ class RomRunnerTest(unittest.TestCase):
 
         bus.write(0x4000, 0x02)
         self.assertEqual(bus.read(0xA000), 0x34)
+
+        bus.write(0x0000, 0x00)
+        self.assertEqual(bus.read(0xA000), 0xFF)
+
+    def test_external_memory_bus_models_mbc3_rom_bank_switching(self) -> None:
+        bus = ExternalMemoryBus(self.build_mbc3_rom(bank_count=128, cart_type=0x11, ram_size_code=0x00))
+
+        self.assertEqual(bus.read(0x0150), 0x00)
+        self.assertEqual(bus.read(0x4000), 0x01)
+
+        bus.write(0x2000, 0x00)
+        self.assertEqual(bus.read(0x4000), 0x01)
+
+        bus.write(0x2000, 0x20)
+        self.assertEqual(bus.read(0x4000), 0x20)
+
+        bus.write(0x2000, 0x40)
+        self.assertEqual(bus.read(0x4000), 0x40)
+
+        bus.write(0x2000, 0x7F)
+        self.assertEqual(bus.read(0x4000), 0x7F)
+
+    def test_external_memory_bus_models_mbc3_ram_enable_banking_and_stub_rtc(self) -> None:
+        bus = ExternalMemoryBus(self.build_mbc3_rom(bank_count=16, cart_type=0x13, ram_size_code=0x03))
+
+        self.assertEqual(bus.read(0xA000), 0xFF)
+        bus.write(0xA000, 0x11)
+        self.assertEqual(bus.read(0xA000), 0xFF)
+
+        bus.write(0x0000, 0x0A)
+        bus.write(0x4000, 0x00)
+        bus.write(0xA000, 0x12)
+        self.assertEqual(bus.read(0xA000), 0x12)
+
+        bus.write(0x4000, 0x03)
+        bus.write(0xA000, 0x34)
+        self.assertEqual(bus.read(0xA000), 0x34)
+
+        bus.write(0x4000, 0x00)
+        self.assertEqual(bus.read(0xA000), 0x12)
+
+        bus.write(0x4000, 0x08)
+        self.assertEqual(bus.read(0xA000), 0x00)
+        bus.write(0xA000, 0x56)
+        self.assertEqual(bus.read(0xA000), 0x00)
+        bus.write(0x6000, 0x00)
+        bus.write(0x6000, 0x01)
+        self.assertEqual(bus.read(0xA000), 0x56)
 
         bus.write(0x0000, 0x00)
         self.assertEqual(bus.read(0xA000), 0xFF)
@@ -233,6 +289,13 @@ class RomRunnerTest(unittest.TestCase):
         self.assertEqual(entry.checkpoint_symbols, ("__checkpoint_poll",))
         self.assertEqual(entry.manifest_entry["action_script"], "bench/actions/joy_diverge_persist.yaml")
         self.assertIsNone(entry.manifest_entry["action_gen"])
+
+    def test_load_manifest_entry_resolves_mbc3_rom(self) -> None:
+        entry = load_manifest_entry("MBC3_SWITCH")
+        self.assertEqual(entry.rom_id, "MBC3_SWITCH")
+        self.assertEqual(entry.rom_path.name, "MBC3_SWITCH.gb")
+        self.assertEqual(entry.sym_path.name, "MBC3_SWITCH.sym")
+        self.assertEqual(entry.manifest_entry["requires"], ["cpu", "mbc3"])
 
     def test_assert_rom_matches_pyboy_signature_uses_manifest_timeout(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

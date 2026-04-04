@@ -53,7 +53,9 @@ IE_ADDR = 0xFFFF
 CARTRIDGE_TYPE_ADDR = 0x0147
 CARTRIDGE_RAM_SIZE_ADDR = 0x0149
 MBC1_CART_TYPES = frozenset({0x01, 0x02, 0x03})
+MBC3_CART_TYPES = frozenset({0x0F, 0x10, 0x11, 0x12, 0x13})
 MBC1_RAM_BANK_SIZE = 0x2000
+MBC3_RTC_SELECTS = frozenset({0x08, 0x09, 0x0A, 0x0B, 0x0C})
 
 
 def _cartridge_ram_size_bytes(size_code: int) -> int:
@@ -115,6 +117,7 @@ class ExternalMemoryBus:
         self.rom = bytes(rom_bytes)
         self.cartridge_type = self.rom[CARTRIDGE_TYPE_ADDR] if len(self.rom) > CARTRIDGE_TYPE_ADDR else 0x00
         self.is_mbc1 = self.cartridge_type in MBC1_CART_TYPES
+        self.is_mbc3 = self.cartridge_type in MBC3_CART_TYPES
         self.rom_bank_count = max(1, (len(self.rom) + 0x3FFF) // 0x4000)
         ram_size_code = self.rom[CARTRIDGE_RAM_SIZE_ADDR] if len(self.rom) > CARTRIDGE_RAM_SIZE_ADDR else 0x00
         self.cart_ram = bytearray(_cartridge_ram_size_bytes(ram_size_code))
@@ -122,6 +125,12 @@ class ExternalMemoryBus:
         self.mbc1_rom_bank_low5 = 1
         self.mbc1_bank_high2 = 0
         self.mbc1_mode = 0
+        self.mbc3_ram_rtc_enabled = False
+        self.mbc3_rom_bank = 1
+        self.mbc3_ram_rtc_select = 0
+        self.mbc3_rtc_regs = {selector: 0 for selector in MBC3_RTC_SELECTS}
+        self.mbc3_latched_rtc_regs = dict(self.mbc3_rtc_regs)
+        self.mbc3_latch_last = 0
         self.wram = bytearray(0x2000)
         self.hram = bytearray(0x7F)
         self.ie_reg = 0
@@ -164,8 +173,16 @@ class ExternalMemoryBus:
         return raw_bank % bank_count
 
     def _cart_rom_read(self, addr: int) -> int:
-        if not self.is_mbc1:
+        if not self.is_mbc1 and not self.is_mbc3:
             return self.rom[addr] if addr < len(self.rom) else 0xFF
+
+        if self.is_mbc3:
+            if addr < 0x4000:
+                rom_addr = addr
+            else:
+                bank = self._rom_bank_index(self.mbc3_rom_bank & 0x7F)
+                rom_addr = (bank * 0x4000) + (addr - 0x4000)
+            return self.rom[rom_addr] if rom_addr < len(self.rom) else 0xFF
 
         if addr < 0x4000:
             bank = self._mbc1_lower_rom_bank()
@@ -177,12 +194,48 @@ class ExternalMemoryBus:
         return self.rom[rom_addr] if rom_addr < len(self.rom) else 0xFF
 
     def _cart_ram_read(self, addr: int) -> int:
+        if self.is_mbc3:
+            if not self.mbc3_ram_rtc_enabled:
+                return 0xFF
+            if self.mbc3_ram_rtc_select in MBC3_RTC_SELECTS:
+                return self.mbc3_latched_rtc_regs[self.mbc3_ram_rtc_select] & 0xFF
+            if len(self.cart_ram) == 0:
+                return 0xFF
+            bank_count = max(1, len(self.cart_ram) // MBC1_RAM_BANK_SIZE)
+            ram_bank = (self.mbc3_ram_rtc_select & 0x03) % bank_count
+            ram_addr = (ram_bank * MBC1_RAM_BANK_SIZE) + (addr - 0xA000)
+            return self.cart_ram[ram_addr] if ram_addr < len(self.cart_ram) else 0xFF
+
         if len(self.cart_ram) == 0 or not self.mbc1_ram_enabled:
             return 0xFF
         ram_addr = (self._mbc1_ram_bank() * MBC1_RAM_BANK_SIZE) + (addr - 0xA000)
         return self.cart_ram[ram_addr] if ram_addr < len(self.cart_ram) else 0xFF
 
     def _cart_write(self, addr: int, value: int) -> None:
+        if self.is_mbc3:
+            if 0x0000 <= addr <= 0x1FFF:
+                self.mbc3_ram_rtc_enabled = (value & 0x0F) == 0x0A
+            elif 0x2000 <= addr <= 0x3FFF:
+                bank = value & 0x7F
+                self.mbc3_rom_bank = bank if bank != 0 else 1
+            elif 0x4000 <= addr <= 0x5FFF:
+                self.mbc3_ram_rtc_select = value & 0x0F
+            elif 0x6000 <= addr <= 0x7FFF:
+                next_latch = value & 0x01
+                if self.mbc3_latch_last == 0 and next_latch == 1:
+                    self.mbc3_latched_rtc_regs = dict(self.mbc3_rtc_regs)
+                self.mbc3_latch_last = next_latch
+            elif 0xA000 <= addr <= 0xBFFF and self.mbc3_ram_rtc_enabled:
+                if self.mbc3_ram_rtc_select in MBC3_RTC_SELECTS:
+                    self.mbc3_rtc_regs[self.mbc3_ram_rtc_select] = value & 0xFF
+                elif len(self.cart_ram) > 0:
+                    bank_count = max(1, len(self.cart_ram) // MBC1_RAM_BANK_SIZE)
+                    ram_bank = (self.mbc3_ram_rtc_select & 0x03) % bank_count
+                    ram_addr = (ram_bank * MBC1_RAM_BANK_SIZE) + (addr - 0xA000)
+                    if ram_addr < len(self.cart_ram):
+                        self.cart_ram[ram_addr] = value
+            return
+
         if not self.is_mbc1:
             return
         if 0x0000 <= addr <= 0x1FFF:
@@ -262,7 +315,7 @@ class ExternalMemoryBus:
     def write(self, addr: int, value: int) -> None:
         addr &= 0xFFFF
         value &= 0xFF
-        if self.is_mbc1 and (addr < 0x8000 or 0xA000 <= addr <= 0xBFFF):
+        if (self.is_mbc1 or self.is_mbc3) and (addr < 0x8000 or 0xA000 <= addr <= 0xBFFF):
             self._cart_write(addr, value)
         elif 0xC000 <= addr <= 0xDFFF:
             self.wram[addr - 0xC000] = value
