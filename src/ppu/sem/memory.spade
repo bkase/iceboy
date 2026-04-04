@@ -1,0 +1,68 @@
+pub enum MemRegion {
+    Vram,
+    Oam,
+}
+
+pub enum MemClient {
+    Cpu,
+    BgFetcher,
+    ObjFetcher,
+    OamScanner,
+    Dma,
+}
+
+pub enum PpuMemKind {
+    Read,
+    Write { data: uint<8> },
+}
+
+pub struct MemTxnTag {
+    region: MemRegion,
+    client: MemClient,
+    id: uint<4>,
+}
+
+pub enum VideoBlockReason {
+    CpuBlockedByMode2,
+    CpuBlockedByMode3,
+    CpuBlockedByOamDma,
+    PpuBlockedByOwnership,
+}
+
+pub enum PpuMemResult {
+    Ok { data: uint<8> },
+    Denied,
+    UndefinedRead { reason: VideoBlockReason },
+}
+
+pub struct PpuMemReq {
+    tag: MemTxnTag,
+    kind: PpuMemKind,
+    addr: uint<16>,
+}
+
+pub struct PpuMemResp {
+    tag: MemTxnTag,
+    result: PpuMemResult,
+}
+
+pub struct PendingRead {
+    tag: MemTxnTag,
+    epoch: uint<4>,
+}
+
+pub fn zero_mem_txn_tag() -> MemTxnTag {
+    MemTxnTag$(region: MemRegion::Vram, client: MemClient::Cpu, id: 0u4)
+}
+
+pub fn idle_ppu_mem_req() -> PpuMemReq {
+    PpuMemReq$(tag: zero_mem_txn_tag(), kind: PpuMemKind::Read, addr: 0u16)
+}
+
+pub fn idle_ppu_mem_resp() -> PpuMemResp {
+    PpuMemResp$(tag: zero_mem_txn_tag(), result: PpuMemResult::Denied)
+}
+
+pub fn idle_pending_read() -> PendingRead {
+    PendingRead$(tag: zero_mem_txn_tag(), epoch: 0u4)
+}
