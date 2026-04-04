@@ -62,7 +62,7 @@ pub entity core_test_top(
     write_valid_i: bool,
     write_target_i: uint<4>,
     write_value_i: uint<8>,
-) -> uint<29> {
+) -> uint<37> {
     let bus_events =
         if write_valid_i {
             [single_write_event(write_target_i, write_value_i), idle_timed_ppu_event(), idle_timed_ppu_event(), idle_timed_ppu_event()]
@@ -91,4 +91,5 @@ pub entity core_test_top(
         | (zext(if core.irq_req.stat_req { 1u1 } else { 0u1 }) << 25)
         | (zext(encode_run(trace.run_after)) << 26)
         | (zext(if trace.first_frame_blank_after { 1u1 } else { 0u1 }) << 28)
+        | (zext(trace.stat_readback_after) << 29)
 }

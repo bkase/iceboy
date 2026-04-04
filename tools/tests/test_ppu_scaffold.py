@@ -340,6 +340,7 @@ class PpuScaffoldTest(unittest.TestCase):
             "run_after: LcdRunState",
             "phase_after: PpuPhase",
             "first_frame_blank_after: bool",
+            "stat_readback_after: uint<8>",
             "fetcher: FetcherState",
             "bg_fifo: BgFifo",
             "obj_fifo: ObjFifo",
@@ -381,7 +382,7 @@ class PpuScaffoldTest(unittest.TestCase):
             "write_valid_i: bool",
             "write_target_i: uint<4>",
             "write_value_i: uint<8>",
-            ") -> uint<29>",
+            ") -> uint<37>",
             "let core = inst ppu_core(",
             "let trace = core.trace;",
             "zext(encode_phase(trace.phase_after))",
@@ -390,6 +391,7 @@ class PpuScaffoldTest(unittest.TestCase):
             "(zext(encode_mode(trace.mode_after)) << 20)",
             "(zext(encode_run(trace.run_after)) << 26)",
             "(zext(if trace.first_frame_blank_after { 1u1 } else { 0u1 }) << 28)",
+            "(zext(trace.stat_readback_after) << 29)",
         ]:
             self.assertIn(symbol, text)
 
