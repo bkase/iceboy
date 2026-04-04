@@ -25,6 +25,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/unit/test_decode.py"
     "test/unit/test_decode_cb.py"
     "test/unit/test_memory_map.py"
+    "test/unit/test_ppu_timing.py"
     "test/unit/test_serial.py"
     "test/unit/test_interrupt_service.py"
     "test/unit/test_timer.py"

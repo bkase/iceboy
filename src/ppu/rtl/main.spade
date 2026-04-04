@@ -1,1 +1,3 @@
 pub mod regs;
+pub mod timing;
+pub mod timing_test_top;

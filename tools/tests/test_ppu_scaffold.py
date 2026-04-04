@@ -10,6 +10,8 @@ PPU_MAIN_PATH = ROOT / "src" / "ppu" / "main.spade"
 PPU_SEM_MAIN_PATH = ROOT / "src" / "ppu" / "sem" / "main.spade"
 PPU_RTL_MAIN_PATH = ROOT / "src" / "ppu" / "rtl" / "main.spade"
 PPU_RTL_REGS_PATH = ROOT / "src" / "ppu" / "rtl" / "regs.spade"
+PPU_RTL_TIMING_PATH = ROOT / "src" / "ppu" / "rtl" / "timing.spade"
+PPU_RTL_TIMING_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "timing_test_top.spade"
 PPU_EVENTS_PATH = ROOT / "src" / "ppu" / "sem" / "events.spade"
 PPU_MEMORY_PATH = ROOT / "src" / "ppu" / "sem" / "memory.spade"
 PPU_TYPES_PATH = ROOT / "src" / "ppu" / "sem" / "types.spade"
@@ -24,6 +26,8 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("pub mod sem;", PPU_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod rtl;", PPU_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod regs;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod timing;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod timing_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod events;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod memory;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod profiles;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
@@ -276,6 +280,44 @@ class PpuScaffoldTest(unittest.TestCase):
             "0x44u8 => ly",
             "0x4Bu8 => regs.wx",
             "_ => 0xffu8",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_timing_helpers_match_architecture_contract(self) -> None:
+        text = PPU_RTL_TIMING_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub fn visible_mode(status: PpuStatusState) -> lib::ppu::sem::types::PpuMode",
+            "pub fn lcd_enabled(status: PpuStatusState, regs: PpuRegs) -> bool",
+            "pub fn advance_run_state(run: LcdRunState, frame_start: bool) -> LcdRunState",
+            "pub fn advance_timing(",
+            "state: PpuState",
+            "input: lib::ppu::sem::events::DotInput",
+            "next_regs: PpuRegs",
+            ") -> (PpuPhase, uint<8>, PpuSamplingState, bool, bool)",
+            "LcdRunState::WarmupBlankFrame",
+            "PpuPhase::Transfer$(x_out: 0u8, discard_scx: sampled.scx_low3_line)",
+            "PpuPhase::VBlank$(line: new_ly, dots_left: 456u9)",
+            "pub fn handle_lcd_transition(",
+            "old_lcdc7: bool",
+            "new_lcdc7: bool",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_timing_test_top_provides_stable_projection(self) -> None:
+        text = PPU_RTL_TIMING_TEST_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub entity timing_test_top(",
+            "run_i: uint<2>",
+            "phase_i: uint<3>",
+            "ly_i: uint<8>",
+            "dot_in_line_i: uint<9>",
+            "sampled_scx_low3_i: uint<3>",
+            "old_lcdc_enable_i: bool",
+            "new_lcdc_enable_i: bool",
+            ") -> uint<34>",
+            "let (next_phase, next_ly, next_sampled, line_start, frame_start) = advance_timing(",
+            "let transitioned = handle_lcd_transition(state, old_lcdc_enable_i, new_lcdc_enable_i);",
+            "let next_run = advance_run_state(state.status.run, frame_start);",
         ]:
             self.assertIn(symbol, text)
 

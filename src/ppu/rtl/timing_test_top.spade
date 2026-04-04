@@ -1,0 +1,176 @@
+use lib::ppu::rtl::timing::{advance_run_state, advance_timing, handle_lcd_transition, lcd_enabled, visible_mode};
+use lib::ppu::sem::events::idle_dot_input;
+use lib::ppu::sem::types::{
+    LcdRunState,
+    Lcdc,
+    PpuMode,
+    PpuPhase,
+    PpuRegs,
+    PpuSamplingState,
+    PpuState,
+    PpuStatusState,
+    PpuVisibleState,
+    StatIrqState,
+    StatSelect,
+};
+
+fn decode_run(run_i: uint<2>) -> LcdRunState {
+    match run_i {
+        1u2 => LcdRunState::WarmupBlankFrame,
+        2u2 => LcdRunState::Running,
+        _ => LcdRunState::Disabled,
+    }
+}
+
+fn decode_phase(
+    phase_i: uint<3>,
+    line_i: uint<8>,
+    dots_left_i: uint<9>,
+    sampled_scx_low3_i: uint<3>,
+) -> PpuPhase {
+    match phase_i {
+        1u3 => PpuPhase::OamScan$(index: 0u6, found: 0u4),
+        2u3 => PpuPhase::Transfer$(x_out: 0u8, discard_scx: sampled_scx_low3_i),
+        3u3 => PpuPhase::HBlank$(dots_left: dots_left_i),
+        4u3 => PpuPhase::VBlank$(line: line_i, dots_left: dots_left_i),
+        _ => PpuPhase::LcdOff,
+    }
+}
+
+fn decode_mode(mode: PpuMode) -> uint<3> {
+    match mode {
+        PpuMode::HBlank => 0u3,
+        PpuMode::VBlank => 1u3,
+        PpuMode::OamScan => 2u3,
+        PpuMode::PixelTransfer => 3u3,
+        PpuMode::LcdOff => 4u3,
+    }
+}
+
+fn encode_run(run: LcdRunState) -> uint<2> {
+    match run {
+        LcdRunState::Disabled => 0u2,
+        LcdRunState::WarmupBlankFrame => 1u2,
+        LcdRunState::Running => 2u2,
+    }
+}
+
+fn encode_phase(phase: PpuPhase) -> uint<3> {
+    match phase {
+        PpuPhase::LcdOff => 0u3,
+        PpuPhase::OamScan$(index: _, found: _) => 1u3,
+        PpuPhase::Transfer$(x_out: _, discard_scx: _) => 2u3,
+        PpuPhase::HBlank$(dots_left: _) => 3u3,
+        PpuPhase::VBlank$(line: _, dots_left: _) => 4u3,
+    }
+}
+
+fn build_regs(old_lcdc_enable_i: bool, scx_i: uint<8>, wy_i: uint<8>, win_enable_i: bool) -> PpuRegs {
+    PpuRegs$(
+        lcdc: Lcdc$(
+            lcd_enable: old_lcdc_enable_i,
+            win_map_hi: false,
+            win_enable: win_enable_i,
+            bgwin_data_hi: false,
+            bg_map_hi: false,
+            obj_size_8x16: false,
+            obj_enable: false,
+            bg_enable: false,
+        ),
+        stat_sel: StatSelect$(lyc_sel: false, mode2_sel: false, mode1_sel: false, mode0_sel: false),
+        scy: 0u8,
+        scx: scx_i,
+        lyc: 0u8,
+        wy: wy_i,
+        wx: 0u8,
+        bgp: 0u8,
+        obp0: 0u8,
+        obp1: 0u8,
+    )
+}
+
+fn build_next_regs(new_lcdc_enable_i: bool, scx_i: uint<8>, wy_i: uint<8>, win_enable_i: bool) -> PpuRegs {
+    PpuRegs$(
+        lcdc: Lcdc$(
+            lcd_enable: new_lcdc_enable_i,
+            win_map_hi: false,
+            win_enable: win_enable_i,
+            bgwin_data_hi: false,
+            bg_map_hi: false,
+            obj_size_8x16: false,
+            obj_enable: false,
+            bg_enable: false,
+        ),
+        stat_sel: StatSelect$(lyc_sel: false, mode2_sel: false, mode1_sel: false, mode0_sel: false),
+        scy: 0u8,
+        scx: scx_i,
+        lyc: 0u8,
+        wy: wy_i,
+        wx: 0u8,
+        bgp: 0u8,
+        obp0: 0u8,
+        obp1: 0u8,
+    )
+}
+
+pub entity timing_test_top(
+    run_i: uint<2>,
+    phase_i: uint<3>,
+    ly_i: uint<8>,
+    dot_in_line_i: uint<9>,
+    line_i: uint<8>,
+    dots_left_i: uint<9>,
+    sampled_scx_low3_i: uint<3>,
+    sampled_wy_triggered_i: bool,
+    sampled_window_enable_i: bool,
+    scx_i: uint<8>,
+    wy_i: uint<8>,
+    win_enable_i: bool,
+    old_lcdc_enable_i: bool,
+    new_lcdc_enable_i: bool,
+) -> uint<34> {
+    let regs = build_regs(old_lcdc_enable_i, scx_i, wy_i, win_enable_i);
+    let next_regs = build_next_regs(new_lcdc_enable_i, scx_i, wy_i, win_enable_i);
+    let phase = decode_phase(phase_i, line_i, dots_left_i, sampled_scx_low3_i);
+    let state = PpuState$(
+        visible: PpuVisibleState$(regs: regs, ly: ly_i),
+        status: PpuStatusState$(
+            run: decode_run(run_i),
+            phase: phase,
+            stat_irq: StatIrqState$(line_high: false),
+        ),
+        sampled: PpuSamplingState$(
+            scx_low3_line: sampled_scx_low3_i,
+            wy_triggered_this_frame: sampled_wy_triggered_i,
+            window_enable_at_mode2_start: sampled_window_enable_i,
+        ),
+        render: lib::ppu::sem::types::PpuRenderState$(
+            dot_in_line: dot_in_line_i,
+            x_out: 0u8,
+            window_state: lib::ppu::sem::types::WindowState::Inactive,
+            window_line: 0u8,
+            oam_scan: lib::ppu::sem::types::empty_oam_scan_state(),
+            line_objs: lib::ppu::sem::types::empty_line_obj_list(),
+            fetcher: lib::ppu::sem::types::initial_fetcher_state(),
+            bg_fifo: lib::ppu::sem::types::empty_bg_fifo(),
+            obj_fifo: lib::ppu::sem::types::empty_obj_fifo(),
+            first_frame_blank: false,
+        ),
+    );
+    let (next_phase, next_ly, next_sampled, line_start, frame_start) = advance_timing(state, idle_dot_input(), next_regs);
+    let transitioned = handle_lcd_transition(state, old_lcdc_enable_i, new_lcdc_enable_i);
+    let next_run = advance_run_state(state.status.run, frame_start);
+
+    zext(encode_phase(next_phase))
+        | (zext(next_ly) << 3)
+        | (zext(next_sampled.scx_low3_line) << 11)
+        | (zext(if next_sampled.wy_triggered_this_frame { 1u1 } else { 0u1 }) << 14)
+        | (zext(if next_sampled.window_enable_at_mode2_start { 1u1 } else { 0u1 }) << 15)
+        | (zext(if line_start { 1u1 } else { 0u1 }) << 16)
+        | (zext(if frame_start { 1u1 } else { 0u1 }) << 17)
+        | (zext(encode_run(next_run)) << 18)
+        | (zext(decode_mode(visible_mode(transitioned.status))) << 20)
+        | (zext(if lcd_enabled(transitioned.status, transitioned.visible.regs) { 1u1 } else { 0u1 }) << 23)
+        | (zext(transitioned.visible.ly) << 24)
+        | (zext(encode_run(transitioned.status.run)) << 32)
+}
