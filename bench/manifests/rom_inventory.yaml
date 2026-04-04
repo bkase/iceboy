@@ -245,7 +245,7 @@ roms:
   - id: PPU_OFF_ON_BASIC
     <<: *dmg_entry
     path: bench/roms/out/PPU_OFF_ON_BASIC.gb
-    rom_sha256: null
+    rom_sha256: 29c366ba580fb2c125186eeee8bfae3a89a9d4adb191728f714913db340c8d54
     requires: [cpu, ppu]
     oracle_mode: frame_semantic
     raster_event_coord_space: frame_line_dot
@@ -257,7 +257,7 @@ roms:
   - id: LY_LYC_BASIC
     <<: *dmg_entry
     path: bench/roms/out/LY_LYC_BASIC.gb
-    rom_sha256: null
+    rom_sha256: 1e2e9683d5b7522010ba61d967640e017bc01f66aa9fdb8c259726fa2586b8e3
     requires: [cpu, ppu]
     oracle_mode: frame_semantic
     raster_event_coord_space: frame_line_dot
@@ -269,7 +269,7 @@ roms:
   - id: STAT_MODE_SEQ
     <<: *dmg_entry
     path: bench/roms/out/STAT_MODE_SEQ.gb
-    rom_sha256: null
+    rom_sha256: 3d59b780473f253ded7f39f76f4c6e645fd2c030d9af8a1ca3f563421a958f9e
     requires: [cpu, ppu]
     oracle_mode: frame_semantic
     raster_event_coord_space: frame_line_dot
@@ -281,7 +281,7 @@ roms:
   - id: VBLANK_IRQ_BASIC
     <<: *dmg_entry
     path: bench/roms/out/VBLANK_IRQ_BASIC.gb
-    rom_sha256: null
+    rom_sha256: ec99474c79016b48c28e962d993cd8d7059e7e603c46413041b596af1dd72fee
     requires: [cpu, ppu]
     oracle_mode: frame_semantic
     raster_event_coord_space: frame_line_dot
@@ -293,7 +293,7 @@ roms:
   - id: VRAM_OAM_GATING
     <<: *dmg_entry
     path: bench/roms/out/VRAM_OAM_GATING.gb
-    rom_sha256: null
+    rom_sha256: 180d47979812daa76cdc25a1c71d39394b62a535d1c08abbf27e98ca558197b6
     requires: [cpu, ppu]
     oracle_mode: frame_semantic
     raster_event_coord_space: frame_line_dot
