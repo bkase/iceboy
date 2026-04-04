@@ -9,6 +9,8 @@ ROOT_MAIN_PATH = ROOT / "src" / "main.spade"
 PPU_MAIN_PATH = ROOT / "src" / "ppu" / "main.spade"
 PPU_SEM_MAIN_PATH = ROOT / "src" / "ppu" / "sem" / "main.spade"
 PPU_RTL_MAIN_PATH = ROOT / "src" / "ppu" / "rtl" / "main.spade"
+PPU_RTL_IRQ_PATH = ROOT / "src" / "ppu" / "rtl" / "irq.spade"
+PPU_RTL_IRQ_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "irq_test_top.spade"
 PPU_RTL_REGS_PATH = ROOT / "src" / "ppu" / "rtl" / "regs.spade"
 PPU_RTL_TIMING_PATH = ROOT / "src" / "ppu" / "rtl" / "timing.spade"
 PPU_RTL_TIMING_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "timing_test_top.spade"
@@ -25,6 +27,8 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("mod ppu;", ROOT_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod sem;", PPU_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod rtl;", PPU_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod irq;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod irq_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod regs;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod timing;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod timing_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
@@ -91,6 +95,9 @@ class PpuScaffoldTest(unittest.TestCase):
             "pub struct PpuVisibleState",
             "pub struct PpuStatusState",
             "phase: PpuPhase",
+            "pub struct PpuIrqReq",
+            "vblank_req: bool",
+            "stat_req: bool",
             "pub enum LcdRunState",
             "pub enum PpuPhase",
             "Transfer { x_out: uint<8>, discard_scx: uint<3> }",
@@ -125,12 +132,45 @@ class PpuScaffoldTest(unittest.TestCase):
             "obj_fifo: ObjFifo",
             "pub struct PpuState",
             "pub fn initial_ppu_state() -> PpuState",
+            "pub fn idle_ppu_irq_req() -> PpuIrqReq",
             "pub fn visible_mode(status: PpuStatusState) -> PpuMode",
             "pub fn lcd_enabled(status: PpuStatusState, regs: PpuRegs) -> bool",
             "LcdRunState::Disabled => PpuMode::LcdOff",
             "pub fn zero_obj_flags() -> ObjFlags",
             "pub fn zero_resolved_obj_meta() -> ResolvedObjMeta",
             "pub fn zero_obj_draw_rank() -> ObjDrawRank",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_irq_helpers_match_architecture_contract(self) -> None:
+        text = PPU_RTL_IRQ_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub fn lyc_match(regs: PpuRegs, ly: uint<8>) -> bool",
+            "pub fn stat_line(regs: PpuRegs, status: PpuStatusState, ly: uint<8>) -> bool",
+            "pub fn stat_write_quirk_pulse(features: BehaviorFeatureSet, stat_write_seen: bool) -> bool",
+            "feature_enabled(features, BehaviorFeature::DmgStatWriteQuirk) && stat_write_seen",
+            "pub fn entered_vblank(prev_status: PpuStatusState, next_status: PpuStatusState) -> bool",
+            "!is_vblank_mode(visible_mode(prev_status)) && is_vblank_mode(visible_mode(next_status))",
+            "pub fn advance_stat_irq(",
+            "(StatIrqState, bool)",
+            "pub fn irq_req(",
+            "(StatIrqState, PpuIrqReq)",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_irq_test_top_provides_stable_projection(self) -> None:
+        text = PPU_RTL_IRQ_TEST_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub entity irq_test_top(",
+            "prev_run_i: uint<2>",
+            "next_phase_i: uint<3>",
+            "prev_line_high_i: bool",
+            "stat_write_seen_i: bool",
+            "quirk_enable_i: bool",
+            ") -> uint<10>",
+            "let new_line = stat_line(regs, next_status, ly_i);",
+            "let (next_irq_state, edge_req) = advance_stat_irq(",
+            "let (_, irq_req_out) = irq_req(prev_status, next_status, regs, ly_i, stat_write_seen_i, features);",
         ]:
             self.assertIn(symbol, text)
 

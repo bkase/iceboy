@@ -46,6 +46,11 @@ pub struct StatIrqState {
     line_high: bool,
 }
 
+pub struct PpuIrqReq {
+    vblank_req: bool,
+    stat_req: bool,
+}
+
 pub enum LcdRunState {
     Disabled,
     WarmupBlankFrame,
@@ -224,6 +229,10 @@ pub fn initial_ppu_visible_state() -> PpuVisibleState {
 
 pub fn initial_stat_irq_state() -> StatIrqState {
     StatIrqState$(line_high: false)
+}
+
+pub fn idle_ppu_irq_req() -> PpuIrqReq {
+    PpuIrqReq$(vblank_req: false, stat_req: false)
 }
 
 pub fn zero_selected_obj_ticket() -> SelectedObjTicket {

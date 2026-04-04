@@ -1,0 +1,78 @@
+use lib::ppu::sem::profiles::{BehaviorFeature, BehaviorFeatureSet, feature_enabled};
+use lib::ppu::sem::types::{
+    PpuIrqReq,
+    PpuMode,
+    PpuRegs,
+    PpuStatusState,
+    StatIrqState,
+    idle_ppu_irq_req,
+    visible_mode,
+};
+
+fn mode_source_enabled(regs: PpuRegs, mode: PpuMode) -> bool {
+    match mode {
+        PpuMode::HBlank => regs.stat_sel.mode0_sel,
+        PpuMode::VBlank => regs.stat_sel.mode1_sel,
+        PpuMode::OamScan => regs.stat_sel.mode2_sel,
+        PpuMode::PixelTransfer => false,
+        PpuMode::LcdOff => false,
+    }
+}
+
+pub fn lyc_match(regs: PpuRegs, ly: uint<8>) -> bool {
+    ly == regs.lyc
+}
+
+pub fn stat_line(regs: PpuRegs, status: PpuStatusState, ly: uint<8>) -> bool {
+    let mode = visible_mode(status);
+    let mode_source = mode_source_enabled(regs, mode);
+    let lyc_source = regs.stat_sel.lyc_sel && lyc_match(regs, ly);
+    mode_source || lyc_source
+}
+
+pub fn stat_write_quirk_pulse(features: BehaviorFeatureSet, stat_write_seen: bool) -> bool {
+    feature_enabled(features, BehaviorFeature::DmgStatWriteQuirk) && stat_write_seen
+}
+
+fn is_vblank_mode(mode: PpuMode) -> bool {
+    match mode {
+        PpuMode::VBlank => true,
+        _ => false,
+    }
+}
+
+pub fn entered_vblank(prev_status: PpuStatusState, next_status: PpuStatusState) -> bool {
+    !is_vblank_mode(visible_mode(prev_status)) && is_vblank_mode(visible_mode(next_status))
+}
+
+pub fn advance_stat_irq(
+    prev_irq: StatIrqState,
+    new_line: bool,
+    stat_write_seen: bool,
+    features: BehaviorFeatureSet,
+) -> (StatIrqState, bool) {
+    let quirk_req = stat_write_quirk_pulse(features, stat_write_seen);
+    let rising_edge_req = !prev_irq.line_high && new_line;
+    (StatIrqState$(line_high: new_line), rising_edge_req || quirk_req)
+}
+
+pub fn irq_req(
+    prev_status: PpuStatusState,
+    next_status: PpuStatusState,
+    regs: PpuRegs,
+    next_ly: uint<8>,
+    stat_write_seen: bool,
+    features: BehaviorFeatureSet,
+) -> (StatIrqState, PpuIrqReq) {
+    let new_line = stat_line(regs, next_status, next_ly);
+    let (next_stat_irq, stat_req) =
+        advance_stat_irq(prev_status.stat_irq, new_line, stat_write_seen, features);
+    let base_req = idle_ppu_irq_req();
+    (
+        next_stat_irq,
+        PpuIrqReq$(
+            vblank_req: entered_vblank(prev_status, next_status),
+            stat_req: base_req.stat_req || stat_req,
+        ),
+    )
+}

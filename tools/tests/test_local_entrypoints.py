@@ -126,6 +126,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/unit/test_halt_bug.py"', text)
         self.assertIn('"test/unit/test_membus.py"', text)
         self.assertIn('"test/unit/test_memory_map.py"', text)
+        self.assertIn('"test/unit/test_ppu_irq.py"', text)
         self.assertIn('"test/unit/test_ppu_timing.py"', text)
         self.assertIn('"test/unit/test_oam_dma.py"', text)
         self.assertIn('"test/unit/test_serial.py"', text)

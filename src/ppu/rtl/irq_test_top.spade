@@ -1,0 +1,109 @@
+use lib::ppu::rtl::irq::{advance_stat_irq, entered_vblank, irq_req, lyc_match, stat_line, stat_write_quirk_pulse};
+use lib::ppu::sem::profiles::BehaviorFeatureSet;
+use lib::ppu::sem::types::{
+    LcdRunState,
+    Lcdc,
+    PpuPhase,
+    PpuRegs,
+    PpuStatusState,
+    StatIrqState,
+    StatSelect,
+};
+
+fn decode_run(run_i: uint<2>) -> LcdRunState {
+    match run_i {
+        1u2 => LcdRunState::WarmupBlankFrame,
+        2u2 => LcdRunState::Running,
+        _ => LcdRunState::Disabled,
+    }
+}
+
+fn decode_phase(phase_i: uint<3>, line_i: uint<8>) -> PpuPhase {
+    match phase_i {
+        1u3 => PpuPhase::OamScan$(index: 0u6, found: 0u4),
+        2u3 => PpuPhase::Transfer$(x_out: 0u8, discard_scx: 0u3),
+        3u3 => PpuPhase::HBlank$(dots_left: 204u9),
+        4u3 => PpuPhase::VBlank$(line: line_i, dots_left: 456u9),
+        _ => PpuPhase::LcdOff,
+    }
+}
+
+fn build_regs(
+    lyc_sel_i: bool,
+    mode2_sel_i: bool,
+    mode1_sel_i: bool,
+    mode0_sel_i: bool,
+    lyc_i: uint<8>,
+) -> PpuRegs {
+    PpuRegs$(
+        lcdc: Lcdc$(
+            lcd_enable: true,
+            win_map_hi: false,
+            win_enable: false,
+            bgwin_data_hi: false,
+            bg_map_hi: false,
+            obj_size_8x16: false,
+            obj_enable: false,
+            bg_enable: false,
+        ),
+        stat_sel: StatSelect$(
+            lyc_sel: lyc_sel_i,
+            mode2_sel: mode2_sel_i,
+            mode1_sel: mode1_sel_i,
+            mode0_sel: mode0_sel_i,
+        ),
+        scy: 0u8,
+        scx: 0u8,
+        lyc: lyc_i,
+        wy: 0u8,
+        wx: 0u8,
+        bgp: 0u8,
+        obp0: 0u8,
+        obp1: 0u8,
+    )
+}
+
+pub entity irq_test_top(
+    prev_run_i: uint<2>,
+    prev_phase_i: uint<3>,
+    next_run_i: uint<2>,
+    next_phase_i: uint<3>,
+    line_i: uint<8>,
+    ly_i: uint<8>,
+    lyc_i: uint<8>,
+    prev_line_high_i: bool,
+    lyc_sel_i: bool,
+    mode2_sel_i: bool,
+    mode1_sel_i: bool,
+    mode0_sel_i: bool,
+    stat_write_seen_i: bool,
+    quirk_enable_i: bool,
+) -> uint<10> {
+    let regs = build_regs(lyc_sel_i, mode2_sel_i, mode1_sel_i, mode0_sel_i, lyc_i);
+    let prev_status = PpuStatusState$(
+        run: decode_run(prev_run_i),
+        phase: decode_phase(prev_phase_i, line_i),
+        stat_irq: StatIrqState$(line_high: prev_line_high_i),
+    );
+    let next_status = PpuStatusState$(
+        run: decode_run(next_run_i),
+        phase: decode_phase(next_phase_i, line_i),
+        stat_irq: StatIrqState$(line_high: prev_line_high_i),
+    );
+    let features = BehaviorFeatureSet$(bits: if quirk_enable_i { 0b000000001u9 } else { 0u9 });
+    let new_line = stat_line(regs, next_status, ly_i);
+    let quirk_pulse = stat_write_quirk_pulse(features, stat_write_seen_i);
+    let (next_irq_state, edge_req) = advance_stat_irq(prev_status.stat_irq, new_line, stat_write_seen_i, features);
+    let (_, irq_req_out) = irq_req(prev_status, next_status, regs, ly_i, stat_write_seen_i, features);
+
+    zext(if lyc_match(regs, ly_i) { 1u1 } else { 0u1 })
+        | (zext(if new_line { 1u1 } else { 0u1 }) << 1)
+        | (zext(if next_irq_state.line_high { 1u1 } else { 0u1 }) << 2)
+        | (zext(if entered_vblank(prev_status, next_status) { 1u1 } else { 0u1 }) << 3)
+        | (zext(if quirk_pulse { 1u1 } else { 0u1 }) << 4)
+        | (zext(if edge_req { 1u1 } else { 0u1 }) << 5)
+        | (zext(if irq_req_out.vblank_req { 1u1 } else { 0u1 }) << 6)
+        | (zext(if irq_req_out.stat_req { 1u1 } else { 0u1 }) << 7)
+        | (zext(if regs.stat_sel.mode1_sel { 1u1 } else { 0u1 }) << 8)
+        | (zext(if regs.stat_sel.mode2_sel { 1u1 } else { 0u1 }) << 9)
+}

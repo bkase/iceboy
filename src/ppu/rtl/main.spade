@@ -1,3 +1,5 @@
+pub mod irq;
+pub mod irq_test_top;
 pub mod regs;
 pub mod timing;
 pub mod timing_test_top;
