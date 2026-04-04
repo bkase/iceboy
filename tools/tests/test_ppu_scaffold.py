@@ -11,6 +11,7 @@ PPU_SEM_MAIN_PATH = ROOT / "src" / "ppu" / "sem" / "main.spade"
 PPU_MEMORY_PATH = ROOT / "src" / "ppu" / "sem" / "memory.spade"
 PPU_TYPES_PATH = ROOT / "src" / "ppu" / "sem" / "types.spade"
 PPU_PROFILES_PATH = ROOT / "src" / "ppu" / "sem" / "profiles.spade"
+PPU_SAMPLE_PATH = ROOT / "src" / "ppu" / "sem" / "sample.spade"
 
 
 class PpuScaffoldTest(unittest.TestCase):
@@ -19,6 +20,7 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("pub mod sem;", PPU_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod memory;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod profiles;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod sample;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod types;", PPU_SEM_MAIN_PATH.read_text(encoding="utf-8"))
 
     def test_ppu_type_surface_matches_architecture_contract(self) -> None:
@@ -121,6 +123,30 @@ class PpuScaffoldTest(unittest.TestCase):
             "pub fn idle_ppu_mem_req() -> PpuMemReq",
             "pub fn idle_ppu_mem_resp() -> PpuMemResp",
             "pub fn idle_pending_read() -> PendingRead",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_sampling_surface_matches_architecture_contract(self) -> None:
+        text = PPU_SAMPLE_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub struct PpuRenderInputs",
+            "scx_fetch: uint<8>",
+            "scy_fetch: uint<8>",
+            "scx_low3_line: uint<3>",
+            "wx_live: uint<8>",
+            "wy_triggered_this_frame: bool",
+            "bgp_pop: uint<8>",
+            "obp0_pop: uint<8>",
+            "obp1_pop: uint<8>",
+            "lyc_eq_live: bool",
+            "pub fn sample_mode2_state(visible: PpuVisibleState, sampled: PpuSamplingState) -> PpuSamplingState",
+            "scx_low3_line: trunc(visible.regs.scx)",
+            "wy_triggered_this_frame: sampled.wy_triggered_this_frame || visible.ly == visible.regs.wy",
+            "window_enable_at_mode2_start: visible.regs.lcdc.win_enable",
+            "pub fn sample_render_inputs(",
+            "phase: PpuPhase",
+            "PpuPhase::Transfer$(x_out: _, discard_scx: _)",
+            "lyc_eq_live: visible.ly == visible.regs.lyc",
         ]:
             self.assertIn(symbol, text)
 

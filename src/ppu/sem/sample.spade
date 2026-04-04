@@ -1,0 +1,46 @@
+use lib::ppu::sem::types::{PpuPhase, PpuSamplingState, PpuVisibleState};
+
+pub struct PpuRenderInputs {
+    scx_fetch: uint<8>,
+    scy_fetch: uint<8>,
+    scx_low3_line: uint<3>,
+    wx_live: uint<8>,
+    wy_triggered_this_frame: bool,
+    bgp_pop: uint<8>,
+    obp0_pop: uint<8>,
+    obp1_pop: uint<8>,
+    lyc_eq_live: bool,
+}
+
+pub fn sample_mode2_state(visible: PpuVisibleState, sampled: PpuSamplingState) -> PpuSamplingState {
+    PpuSamplingState$(
+        scx_low3_line: trunc(visible.regs.scx),
+        wy_triggered_this_frame: sampled.wy_triggered_this_frame || visible.ly == visible.regs.wy,
+        window_enable_at_mode2_start: visible.regs.lcdc.win_enable,
+    )
+}
+
+pub fn sample_render_inputs(
+    visible: PpuVisibleState,
+    sampled: PpuSamplingState,
+    phase: PpuPhase,
+) -> PpuRenderInputs {
+    let fetch_regs = match phase {
+        PpuPhase::Transfer$(x_out: _, discard_scx: _) => visible.regs,
+        PpuPhase::OamScan$(index: _, found: _) => visible.regs,
+        PpuPhase::HBlank$(dots_left: _) => visible.regs,
+        PpuPhase::VBlank$(line: _, dots_left: _) => visible.regs,
+        PpuPhase::LcdOff => visible.regs,
+    };
+    PpuRenderInputs$(
+        scx_fetch: fetch_regs.scx,
+        scy_fetch: fetch_regs.scy,
+        scx_low3_line: sampled.scx_low3_line,
+        wx_live: fetch_regs.wx,
+        wy_triggered_this_frame: sampled.wy_triggered_this_frame,
+        bgp_pop: fetch_regs.bgp,
+        obp0_pop: fetch_regs.obp0,
+        obp1_pop: fetch_regs.obp1,
+        lyc_eq_live: visible.ly == visible.regs.lyc,
+    )
+}
