@@ -42,6 +42,8 @@ LINES_PER_FRAME = 154
 FRAME_DOTS = DOTS_PER_LINE * LINES_PER_FRAME
 VISIBLE_DOTS_BEFORE_VBLANK = (144 * DOTS_PER_LINE) - 1
 FRAME_DOTS_FROM_INITIAL_STATE = FRAME_DOTS - 1
+WARMUP_LINE0_DOTS = 444
+WARMUP_FRAME_DOTS_FROM_ENABLE = (WARMUP_LINE0_DOTS - 1) + (153 * DOTS_PER_LINE)
 
 SUITE_NAME = "test_ppu_modes.py"
 
@@ -131,7 +133,7 @@ async def test_mode_sequence_visible_line(dut):
 
     logger.step("Advance until HBlank entry on the same line")
     _, hblank = await advance_until(dut, lambda snap: snap["phase"] == PHASE_HBLANK)
-    require(logger, "hblank_entry_dot", 252, hblank["dot"], snapshot=hblank)
+    require(logger, "hblank_entry_dot", 256, hblank["dot"], snapshot=hblank)
     require(logger, "hblank_entry_mode", MODE_HBLANK, hblank["mode"], snapshot=hblank)
     require(logger, "hblank_entry_ly", 0, hblank["ly"], snapshot=hblank)
 
@@ -198,17 +200,17 @@ async def test_lcd_disable_mid_transfer_and_reenable_warmup(dut):
         require(logger, "held_ly", 0, held["ly"], snapshot=held)
         require(logger, "held_dot", 0, held["dot"], snapshot=held)
 
-    logger.step("Re-enable LCDC.7 and verify warmup blank frame starts immediately")
+    logger.step("Re-enable LCDC.7 and verify warmup starts in mode 0 before active fetch resumes")
     warmup = await step(dut, dot_ce=True, write_target=LCDC_TARGET, write_value=LCDC_ON)
-    require(logger, "warmup_mode", MODE_OAM, warmup["mode"], snapshot=warmup)
-    require(logger, "warmup_phase", PHASE_OAM, warmup["phase"], snapshot=warmup)
+    require(logger, "warmup_mode", MODE_LCD_OFF, warmup["mode"], snapshot=warmup)
+    require(logger, "warmup_phase", PHASE_LCD_OFF, warmup["phase"], snapshot=warmup)
     require(logger, "warmup_run", RUN_WARMUP, warmup["run"], snapshot=warmup)
     require(logger, "warmup_ly", 0, warmup["ly"], snapshot=warmup)
     require(logger, "warmup_first_frame_blank", True, warmup["first_frame_blank"], snapshot=warmup)
 
     logger.step("Advance until warmup promotes back to Running at the next frame boundary")
     dots_until_running, running = await advance_until(dut, lambda snap: snap["run"] == RUN_RUNNING, max_dots=FRAME_DOTS + 8)
-    require(logger, "warmup_duration_dots", FRAME_DOTS_FROM_INITIAL_STATE, dots_until_running, snapshot=running)
+    require(logger, "warmup_duration_dots", WARMUP_FRAME_DOTS_FROM_ENABLE, dots_until_running, snapshot=running)
     require(logger, "running_mode", MODE_OAM, running["mode"], snapshot=running)
     require(logger, "running_ly", 0, running["ly"], snapshot=running)
     require(logger, "running_dot", 0, running["dot"], snapshot=running)
@@ -230,7 +232,7 @@ async def test_mode_projection_matches_run_state(dut):
     require(logger, "disabled_run_projection", RUN_DISABLED, disabled["run"], snapshot=disabled)
     require(logger, "disabled_mode_projection", MODE_LCD_OFF, disabled["mode"], snapshot=disabled)
 
-    logger.step("Re-enable and verify warmup still projects visible mode from the phase")
+    logger.step("Re-enable and verify warmup still projects mode 0 before active fetch resumes")
     warmup = await step(dut, write_target=LCDC_TARGET, write_value=LCDC_ON)
     require(logger, "warmup_run_projection", RUN_WARMUP, warmup["run"], snapshot=warmup)
-    require(logger, "warmup_mode_projection", MODE_OAM, warmup["mode"], snapshot=warmup)
+    require(logger, "warmup_mode_projection", MODE_LCD_OFF, warmup["mode"], snapshot=warmup)

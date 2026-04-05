@@ -71,6 +71,7 @@ fn build_status(run_i: uint<2>, phase_i: uint<3>) -> PpuStatusState {
         run: decode_run(run_i),
         phase: decode_phase(phase_i),
         stat_irq: StatIrqState$(line_high: false),
+        lyc_match_flag: false,
     )
 }
 

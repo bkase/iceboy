@@ -4,5 +4,6 @@ pub mod ppu_support;
 pub mod ppu_test_top;
 pub mod semantic_observe_top;
 pub mod soc_lockstep_top;
+pub mod soc_rom_top;
 pub mod trace_observe_top;
 pub mod types;

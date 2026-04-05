@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = ROOT / "bench" / "manifests" / "ppu_external_suites.yaml"
 SUITE_OWNED_README = ROOT / "bench" / "expected" / "suite_owned" / "README.md"
 HUMAN_REVIEWED_README = ROOT / "bench" / "expected" / "human_reviewed" / "README.md"
+MOONEYE_README = ROOT / "bench" / "external" / "mooneye-test-suite" / "README.md"
+MOONEYE_PPU_ROOT = ROOT / "bench" / "external" / "mooneye-test-suite" / "acceptance" / "ppu"
 
 
 class PpuExternalAssetsTest(unittest.TestCase):
@@ -69,6 +71,17 @@ class PpuExternalAssetsTest(unittest.TestCase):
     def test_expected_roots_are_documented(self) -> None:
         self.assertIn("ppu_external_suites.yaml", SUITE_OWNED_README.read_text(encoding="utf-8"))
         self.assertIn("No human-reviewed PPU artifacts are pinned yet", HUMAN_REVIEWED_README.read_text(encoding="utf-8"))
+
+    def test_mooneye_wave_a_acceptance_subset_is_vendored_offline(self) -> None:
+        self.assertIn("443f6e1f2a8d83ad9da051cbb960311c5aaaea66", MOONEYE_README.read_text(encoding="utf-8"))
+        expected = {
+            "vblank_stat_intr-GS.gb",
+            "stat_lyc_onoff.gb",
+            "stat_irq_blocking.gb",
+            "lcdon_timing-GS.gb",
+            "lcdon_write_timing-GS.gb",
+        }
+        self.assertEqual({path.name for path in MOONEYE_PPU_ROOT.glob("*.gb")}, expected)
 
 
 if __name__ == "__main__":

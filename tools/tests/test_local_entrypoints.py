@@ -145,6 +145,17 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("[tool] pyboy: 2.7.0", completed.stdout)
         self.assertIn("tools/oracle_smoke.py", completed.stdout)
 
+    def test_ppu_wave_a_mooneye_verilator_wrapper_dry_run_uses_sanitized_verilog_path(self) -> None:
+        completed = self.run_script("run_ppu_wave_a_mooneye_verilator.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("tools/prepare_verilator_sv.py", completed.stdout)
+        self.assertIn("build/spade.verilator.sv", completed.stdout)
+        self.assertIn("soc_rom_top_verilator_wrapper.sv", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+
     def test_oracle_smoke_main_round_trips_snapshot(self) -> None:
         oracle_smoke_main()
 
@@ -167,6 +178,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/lockstep/test_ei_halt_corners.py"', text)
         self.assertIn('"test/harness/test_arch_time_invariants.py"', text)
         self.assertIn('"test/harness/test_soc_lockstep_top.py"', text)
+        self.assertIn('"test/harness/test_soc_rom_top.py"', text)
         self.assertIn('"test/power/test_duty_cycle_metrics.py"', text)
         self.assertIn('"test/power/test_halt_quiescence.py"', text)
         self.assertIn('"test/harness/test_reset_profile.py"', text)
@@ -178,9 +190,12 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/rom/test_mbc1_switch.py"', text)
         self.assertIn('"test/rom/test_mbc3_ram.py"', text)
         self.assertIn('"test/rom/test_mbc3_switch.py"', text)
+        self.assertIn('"test/rom/test_ppu_wave_a.py"', text)
+        self.assertIn('"tools/run_ppu_wave_a_mooneye_verilator.sh"', text)
         self.assertIn('"test/rom/test_timer_div_basic.py"', text)
         self.assertIn('"test/rom/test_timer_irq_halt.py"', text)
         self.assertIn('"$SWIM" test "$test_file"', text)
+        self.assertIn('run_checked "$test_file" --skip-build', text)
         self.assertNotIn('label="$(basename "${test_file%.py}")"', text)
 
     def test_cpu_lockstep_targeted_subset_is_not_marked_expect_fail(self) -> None:

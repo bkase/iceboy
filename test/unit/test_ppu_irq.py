@@ -170,6 +170,36 @@ async def test_vblank_request_only_fires_on_mode1_entry(dut):
 
 
 @cocotb.test()
+async def test_mode2_only_also_pulses_stat_on_line144_vblank_entry(dut):
+    entry = await sample(
+        dut,
+        prev_run=RUN_RUNNING,
+        prev_phase=PHASE_HBLANK,
+        next_run=RUN_RUNNING,
+        next_phase=PHASE_VBLANK,
+        line=144,
+        ly=144,
+        mode2_sel=True,
+    )
+    assert entry["entered_vblank"] is True
+    assert entry["vblank_req"] is True
+    assert entry["stat_req"] is True
+    assert entry["next_line_high"] is False
+
+    held = await sample(
+        dut,
+        prev_run=RUN_RUNNING,
+        prev_phase=PHASE_VBLANK,
+        next_run=RUN_RUNNING,
+        next_phase=PHASE_VBLANK,
+        line=145,
+        ly=145,
+        mode2_sel=True,
+    )
+    assert held["stat_req"] is False
+
+
+@cocotb.test()
 async def test_stat_write_quirk_hook_is_feature_gated(dut):
     disabled = await sample(
         dut,

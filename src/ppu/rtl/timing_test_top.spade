@@ -138,6 +138,7 @@ pub entity timing_test_top(
             run: decode_run(run_i),
             phase: phase,
             stat_irq: StatIrqState$(line_high: false),
+            lyc_match_flag: ly_i == 0u8,
         ),
         sampled: PpuSamplingState$(
             scx_low3_line: sampled_scx_low3_i,

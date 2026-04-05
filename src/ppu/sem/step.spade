@@ -105,8 +105,18 @@ fn next_first_frame_blank(run: LcdRunState) -> bool {
     }
 }
 
-fn update_render_state(render: PpuRenderState, next_run: LcdRunState, next_phase: PpuPhase) -> PpuRenderState {
-    let next_dot = next_dot_in_line(next_run, render.dot_in_line);
+fn update_render_state(
+    render: PpuRenderState,
+    next_run: LcdRunState,
+    next_phase: PpuPhase,
+    line_start: bool,
+) -> PpuRenderState {
+    let next_dot =
+        if line_start {
+            0u9
+        } else {
+            next_dot_in_line(next_run, render.dot_in_line)
+        };
     let next_x_out = match next_phase {
         PpuPhase::Transfer$(x_out, discard_scx) => {
             let _ = discard_scx;
@@ -137,9 +147,78 @@ fn irq_edge(req: PpuIrqReq) -> PpuIrqEdge {
     }
 }
 
+fn recompute_lyc_match_flag(state: PpuState) -> bool {
+    state.visible.ly == state.visible.regs.lyc
+}
+
+fn next_lyc_match_flag(
+    prev_state: PpuState,
+    candidate_state: PpuState,
+    old_lcdc7: bool,
+    requested_lcd_enable: bool,
+    transition_taken: bool,
+) -> bool {
+    if transition_taken {
+        if old_lcdc7 && !requested_lcd_enable {
+            prev_state.status.lyc_match_flag
+        } else if !old_lcdc7 && requested_lcd_enable {
+            recompute_lyc_match_flag(candidate_state)
+        } else {
+            prev_state.status.lyc_match_flag
+        }
+    } else {
+        match candidate_state.status.run {
+            LcdRunState::Disabled => prev_state.status.lyc_match_flag,
+            LcdRunState::WarmupBlankFrame =>
+                match candidate_state.status.phase {
+                    PpuPhase::LcdOff =>
+                        if candidate_state.visible.ly != 0u8 {
+                            false
+                        } else {
+                            recompute_lyc_match_flag(candidate_state)
+                        },
+                    _ => recompute_lyc_match_flag(candidate_state),
+                },
+            _ => recompute_lyc_match_flag(candidate_state),
+        }
+    }
+}
+
+fn lcd_reenable_lyc_rise_pulse(
+    prev_state: PpuState,
+    regs: PpuRegs,
+    old_lcdc7: bool,
+    requested_lcd_enable: bool,
+    transition_taken: bool,
+    next_lyc_match_flag: bool,
+) -> bool {
+    transition_taken
+        && !old_lcdc7
+        && requested_lcd_enable
+        && regs.stat_sel.lyc_sel
+        && !prev_state.status.lyc_match_flag
+        && next_lyc_match_flag
+}
+
+fn lcd_reenable_lyc_level_hold(
+    prev_state: PpuState,
+    regs: PpuRegs,
+    old_lcdc7: bool,
+    requested_lcd_enable: bool,
+    transition_taken: bool,
+    next_lyc_match_flag: bool,
+) -> bool {
+    transition_taken
+        && !old_lcdc7
+        && requested_lcd_enable
+        && regs.stat_sel.lyc_sel
+        && prev_state.status.lyc_match_flag
+        && next_lyc_match_flag
+}
+
 pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
     let (written_regs, stat_write_seen, force_enable, force_disable) = fold_events(input, state.visible.regs);
-    let requested_lcd_enable =
+    let stored_lcd_enable =
         if force_disable {
             false
         } else if force_enable {
@@ -147,7 +226,18 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
         } else {
             written_regs.lcdc.lcd_enable
         };
-    let next_regs = set_lcd_enable(written_regs, requested_lcd_enable);
+    // LCDC storage updates immediately, but execution-time LCD power transitions
+    // are driven by explicit ForceLcdPower events so callers can model delayed
+    // enable effects separately from readback timing.
+    let requested_lcd_enable =
+        if force_disable {
+            false
+        } else if force_enable {
+            true
+        } else {
+            state.visible.regs.lcdc.lcd_enable
+        };
+    let next_regs = set_lcd_enable(written_regs, stored_lcd_enable);
     let state_with_regs = PpuState$(
         visible: PpuVisibleState$(regs: next_regs, ly: state.visible.ly),
         status: state.status,
@@ -162,17 +252,35 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
             transition_state
         } else {
             let (next_phase, next_ly, next_sampled, line_start, frame_start) = advance_timing(state_with_regs, input, next_regs);
-            let _ = line_start;
             let next_run = advance_run_state(state.status.run, frame_start);
             let next_visible = PpuVisibleState$(regs: next_regs, ly: next_ly);
             let _ = sample_render_inputs(next_visible, next_sampled, next_phase);
             PpuState$(
                 visible: next_visible,
-                status: PpuStatusState$(run: next_run, phase: next_phase, stat_irq: state.status.stat_irq),
+                status: PpuStatusState$(
+                    run: next_run,
+                    phase: next_phase,
+                    stat_irq: state.status.stat_irq,
+                    lyc_match_flag: state.status.lyc_match_flag,
+                ),
                 sampled: next_sampled,
-                render: update_render_state(state.render, next_run, next_phase),
+                render: update_render_state(state.render, next_run, next_phase, line_start),
             )
         };
+    let candidate_lyc_match_flag =
+        next_lyc_match_flag(state, candidate_state, old_lcdc7, requested_lcd_enable, transition_taken);
+    let candidate_status = PpuStatusState$(
+        run: candidate_state.status.run,
+        phase: candidate_state.status.phase,
+        stat_irq: candidate_state.status.stat_irq,
+        lyc_match_flag: candidate_lyc_match_flag,
+    );
+    let candidate_state = PpuState$(
+        visible: candidate_state.visible,
+        status: candidate_status,
+        sampled: candidate_state.sampled,
+        render: candidate_state.render,
+    );
     let (next_stat_irq, next_irq_req) = irq_req(
         state.status,
         candidate_state.status,
@@ -181,10 +289,34 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
         stat_write_seen,
         dmg_behavior_config().features,
     );
+    let next_irq_req = PpuIrqReq$(
+        vblank_req: next_irq_req.vblank_req,
+        stat_req:
+            (
+                next_irq_req.stat_req
+                && !lcd_reenable_lyc_level_hold(
+                    state,
+                    candidate_state.visible.regs,
+                    old_lcdc7,
+                    requested_lcd_enable,
+                    transition_taken,
+                    candidate_state.status.lyc_match_flag,
+                )
+            )
+            || lcd_reenable_lyc_rise_pulse(
+                state,
+                candidate_state.visible.regs,
+                old_lcdc7,
+                requested_lcd_enable,
+                transition_taken,
+                candidate_state.status.lyc_match_flag,
+            ),
+    );
     let final_status = PpuStatusState$(
         run: candidate_state.status.run,
         phase: candidate_state.status.phase,
         stat_irq: next_stat_irq,
+        lyc_match_flag: candidate_state.status.lyc_match_flag,
     );
     let final_state = PpuState$(
         visible: candidate_state.visible,

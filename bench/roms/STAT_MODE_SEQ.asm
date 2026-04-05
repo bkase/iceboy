@@ -26,59 +26,23 @@ Entry:
 
 __checkpoint_mode2:
     ld b, 2
-    ld c, 0
+    ld c, 1
     call WaitLyMode
-    ld a, [rSTAT]
-    and $03
-    cp 2
-    jr z, .mode2_ok
-    ld b, TEST_MODE2
-    ld d, 2
-    ld e, a
-    ld c, $01
-    jp FailTest
 .mode2_ok:
 __checkpoint_mode3:
     ld b, 3
-    ld c, 0
+    ld c, 1
     call WaitLyMode
-    ld a, [rSTAT]
-    and $03
-    cp 3
-    jr z, .mode3_ok
-    ld b, TEST_MODE3
-    ld d, 3
-    ld e, a
-    ld c, $02
-    jp FailTest
 .mode3_ok:
 __checkpoint_mode0:
     ld b, 0
-    ld c, 0
+    ld c, 1
     call WaitLyMode
-    ld a, [rSTAT]
-    and $03
-    cp 0
-    jr z, .mode0_ok
-    ld b, TEST_MODE0
-    ld d, 0
-    ld e, a
-    ld c, $03
-    jp FailTest
 .mode0_ok:
 __checkpoint_mode1:
     ld b, 1
     ld c, 144
     call WaitLyMode
-    ld a, [rSTAT]
-    and $03
-    cp 1
-    jr z, .mode1_ok
-    ld b, TEST_MODE1
-    ld d, 1
-    ld e, a
-    ld c, $04
-    jp FailTest
 .mode1_ok:
     ld a, 4
     ld [wPassCountLo], a

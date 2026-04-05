@@ -21,6 +21,9 @@ MODE_OAM = 2
 MODE_TRANSFER = 3
 MODE_LCD_OFF = 4
 
+DOTS_PER_LINE = 456
+WARMUP_LINE0_DOTS = 444
+
 
 def decode_output(value: int) -> dict[str, int | bool]:
     return {
@@ -93,7 +96,7 @@ async def test_visible_line_mode_sequence_transitions(dut):
     assert transfer_hold["next_phase"] == PHASE_TRANSFER
     assert transfer_hold["next_ly"] == 12
 
-    to_hblank = await sample(dut, run=RUN_RUNNING, phase=PHASE_TRANSFER, ly=12, dot_in_line=251, sampled_scx_low3=5)
+    to_hblank = await sample(dut, run=RUN_RUNNING, phase=PHASE_TRANSFER, ly=12, dot_in_line=255, sampled_scx_low3=5)
     assert to_hblank["next_phase"] == PHASE_HBLANK
     assert to_hblank["next_ly"] == 12
     assert not to_hblank["line_start"]
@@ -199,6 +202,65 @@ async def test_lcd_enable_enters_warmup_blank_frame(dut):
         new_lcdc_enable=True,
     )
     assert snapshot["transition_run"] == RUN_WARMUP
-    assert snapshot["transition_mode"] == MODE_OAM
+    assert snapshot["transition_mode"] == MODE_LCD_OFF
     assert snapshot["transition_lcd_enabled"] is True
     assert snapshot["transition_ly"] == 0
+
+
+@cocotb.test()
+async def test_warmup_line0_wraps_to_line1_at_full_scanline(dut):
+    stay_hblank = await sample(
+        dut,
+        run=RUN_WARMUP,
+        phase=PHASE_HBLANK,
+        ly=0,
+        dot_in_line=442,
+        dots_left=1,
+    )
+    assert stay_hblank["next_phase"] == PHASE_HBLANK
+    assert stay_hblank["next_ly"] == 0
+    assert not stay_hblank["line_start"]
+
+    wrap_line = await sample(
+        dut,
+        run=RUN_WARMUP,
+        phase=PHASE_HBLANK,
+        ly=0,
+        dot_in_line=443,
+        dots_left=0,
+    )
+    assert wrap_line["next_phase"] == PHASE_LCD_OFF
+    assert wrap_line["next_ly"] == 1
+    assert wrap_line["line_start"]
+    assert not wrap_line["frame_start"]
+
+
+@cocotb.test()
+async def test_warmup_line1_holds_lcd_off_for_four_dots_before_oam(dut):
+    hold = await sample(
+        dut,
+        run=RUN_WARMUP,
+        phase=PHASE_LCD_OFF,
+        ly=1,
+        dot_in_line=0,
+        scx=0x15,
+        wy=0,
+        win_enable=True,
+    )
+    assert hold["next_phase"] == PHASE_LCD_OFF, hold
+    assert hold["next_ly"] == 1, hold
+
+    enter_oam = await sample(
+        dut,
+        run=RUN_WARMUP,
+        phase=PHASE_LCD_OFF,
+        ly=1,
+        dot_in_line=3,
+        scx=0x15,
+        wy=0,
+        win_enable=True,
+    )
+    assert enter_oam["next_phase"] == PHASE_OAM, enter_oam
+    assert enter_oam["next_ly"] == 1, enter_oam
+    assert enter_oam["next_scx_low3"] == 0x15 & 0x7, enter_oam
+    assert enter_oam["next_window_enable"] is True, enter_oam

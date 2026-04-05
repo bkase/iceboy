@@ -21,16 +21,36 @@ fn dots_left_in_line(next_dot_in_line: uint<9>) -> uint<9> {
     trunc(456u10 - zext(next_dot_in_line))
 }
 
+fn warmup_line0_dots_left(next_dot_in_line: uint<9>) -> uint<9> {
+    trunc(444u10 - zext(next_dot_in_line))
+}
+
 fn visible_transfer_complete(dot_in_line: uint<9>) -> bool {
-    dot_in_line == 251u9
+    dot_in_line == 255u9
 }
 
 fn visible_oam_complete(dot_in_line: uint<9>) -> bool {
     dot_in_line == 79u9
 }
 
+fn warmup_visible_oam_complete(dot_in_line: uint<9>) -> bool {
+    dot_in_line == 83u9
+}
+
+fn warmup_line0_mode0_complete(dot_in_line: uint<9>) -> bool {
+    dot_in_line == 71u9
+}
+
+fn warmup_line0_transfer_complete(dot_in_line: uint<9>) -> bool {
+    dot_in_line == 243u9
+}
+
 fn line_complete(dot_in_line: uint<9>) -> bool {
     dot_in_line == 455u9
+}
+
+fn warmup_line0_complete(dot_in_line: uint<9>) -> bool {
+    dot_in_line == 443u9
 }
 
 fn next_line(ly: uint<8>) -> uint<8> {
@@ -59,6 +79,10 @@ fn sample_visible_line(next_regs: PpuRegs, next_ly: uint<8>, sampled: PpuSamplin
 fn enabled_visible_phase(sampled: PpuSamplingState) -> PpuPhase {
     let _ = sampled;
     PpuPhase::OamScan$(index: 0u6, found: 0u4)
+}
+
+fn lcd_enable_mode0_hold(dot_in_line: uint<9>) -> bool {
+    dot_in_line < 20u9
 }
 
 fn blanked_render_state(first_frame_blank: bool) -> lib::ppu::sem::types::PpuRenderState {
@@ -133,16 +157,36 @@ pub fn advance_timing(
             let ly = state.visible.ly;
             let sampled = state.sampled;
             let dot_in_line = state.render.dot_in_line;
+            let warmup_line0 = ly == 0u8;
             match state.status.phase {
-                PpuPhase::LcdOff => (
-                    enabled_visible_phase(sampled),
-                    ly,
-                    sample_visible_line(next_regs, ly, sampled, false),
-                    false,
-                    false,
-                ),
+                PpuPhase::LcdOff =>
+                    if warmup_line0 {
+                        if warmup_line0_mode0_complete(dot_in_line) {
+                            (
+                                PpuPhase::Transfer$(x_out: 0u8, discard_scx: sampled.scx_low3_line),
+                                ly,
+                                sampled,
+                                false,
+                                false,
+                            )
+                        } else {
+                            (PpuPhase::LcdOff, ly, sampled, false, false)
+                        }
+                    } else {
+                        if dot_in_line == 3u9 {
+                            (
+                                enabled_visible_phase(sampled),
+                                ly,
+                                sample_visible_line(next_regs, ly, sampled, false),
+                                false,
+                                false,
+                            )
+                        } else {
+                            (PpuPhase::LcdOff, ly, sampled, false, false)
+                        }
+                    },
                 PpuPhase::OamScan$(index, found) =>
-                    if visible_oam_complete(dot_in_line) {
+                    if warmup_visible_oam_complete(dot_in_line) {
                         (
                             PpuPhase::Transfer$(x_out: 0u8, discard_scx: sampled.scx_low3_line),
                             ly,
@@ -154,14 +198,24 @@ pub fn advance_timing(
                         (PpuPhase::OamScan$(index: index, found: found), ly, sampled, false, false)
                     },
                 PpuPhase::Transfer$(x_out, discard_scx) =>
-                    if visible_transfer_complete(dot_in_line) {
-                        (
-                            PpuPhase::HBlank$(dots_left: dots_left_in_line(trunc(dot_in_line + 1u9))),
-                            ly,
-                            sampled,
-                            false,
-                            false,
-                        )
+                    if if warmup_line0 { warmup_line0_transfer_complete(dot_in_line) } else { visible_transfer_complete(dot_in_line) } {
+                        if warmup_line0 {
+                            (
+                                PpuPhase::HBlank$(dots_left: warmup_line0_dots_left(trunc(dot_in_line + 1u9))),
+                                ly,
+                                sampled,
+                                false,
+                                false,
+                            )
+                        } else {
+                            (
+                                PpuPhase::HBlank$(dots_left: dots_left_in_line(trunc(dot_in_line + 1u9))),
+                                ly,
+                                sampled,
+                                false,
+                                false,
+                            )
+                        }
                     } else {
                         (
                             PpuPhase::Transfer$(x_out: x_out, discard_scx: discard_scx),
@@ -172,7 +226,7 @@ pub fn advance_timing(
                         )
                     },
                 PpuPhase::HBlank$(dots_left) =>
-                    if line_complete(dot_in_line) {
+                    if (warmup_line0 && warmup_line0_complete(dot_in_line)) || (!warmup_line0 && line_complete(dot_in_line)) {
                         let new_ly = next_line(ly);
                         if ly == 143u8 {
                             (
@@ -184,7 +238,7 @@ pub fn advance_timing(
                             )
                         } else {
                             (
-                                enabled_visible_phase(sampled),
+                                PpuPhase::LcdOff,
                                 new_ly,
                                 sample_visible_line(next_regs, new_ly, sampled, false),
                                 true,
@@ -193,13 +247,23 @@ pub fn advance_timing(
                         }
                     } else {
                         let _ = dots_left;
-                        (
-                            PpuPhase::HBlank$(dots_left: dots_left_in_line(trunc(dot_in_line + 1u9))),
-                            ly,
-                            sampled,
-                            false,
-                            false,
-                        )
+                        if warmup_line0 {
+                            (
+                                PpuPhase::HBlank$(dots_left: warmup_line0_dots_left(trunc(dot_in_line + 1u9))),
+                                ly,
+                                sampled,
+                                false,
+                                false,
+                            )
+                        } else {
+                            (
+                                PpuPhase::HBlank$(dots_left: dots_left_in_line(trunc(dot_in_line + 1u9))),
+                                ly,
+                                sampled,
+                                false,
+                                false,
+                            )
+                        }
                     },
                 PpuPhase::VBlank$(line, dots_left) =>
                     if line_complete(dot_in_line) {
@@ -240,11 +304,17 @@ pub fn advance_timing(
             let dot_in_line = state.render.dot_in_line;
             match state.status.phase {
                 PpuPhase::LcdOff => (
-                    enabled_visible_phase(sampled),
-                    ly,
-                    sample_visible_line(next_regs, ly, sampled, false),
-                    false,
-                    false,
+                    if lcd_enable_mode0_hold(dot_in_line) {
+                        (PpuPhase::LcdOff, ly, sampled, false, false)
+                    } else {
+                        (
+                            enabled_visible_phase(sampled),
+                            ly,
+                            sample_visible_line(next_regs, ly, sampled, false),
+                            false,
+                            false,
+                        )
+                    }
                 ),
                 PpuPhase::OamScan$(index, found) =>
                     if visible_oam_complete(dot_in_line) {
@@ -354,6 +424,7 @@ pub fn handle_lcd_transition(
                 run: LcdRunState::Disabled,
                 phase: PpuPhase::LcdOff,
                 stat_irq: initial_stat_irq_state(),
+                lyc_match_flag: state.status.lyc_match_flag,
             ),
             sampled: initial_ppu_sampling_state(),
             render: blanked_render_state(false),
@@ -364,8 +435,9 @@ pub fn handle_lcd_transition(
             visible: PpuVisibleState$(regs: next_regs, ly: 0u8),
             status: PpuStatusState$(
                 run: LcdRunState::WarmupBlankFrame,
-                phase: enabled_visible_phase(state.sampled),
+                phase: PpuPhase::LcdOff,
                 stat_irq: initial_stat_irq_state(),
+                lyc_match_flag: state.status.lyc_match_flag,
             ),
             sampled: sample_visible_line(next_regs, 0u8, initial_ppu_sampling_state(), true),
             render: blanked_render_state(true),

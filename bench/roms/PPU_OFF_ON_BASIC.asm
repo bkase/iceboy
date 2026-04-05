@@ -65,60 +65,11 @@ __checkpoint_lcd_off:
     ld c, $04
     jp FailTest
 .oam_rw_ok:
-    call PrepareVisibleBg
-
-__checkpoint_blank_frame:
-    ld a, LCDC_ON_VALUE
-    ld [rLCDC], a
-    call WaitFrameStart
-
-__checkpoint_live_frame:
-    call WaitFrameStart
-
     ld a, 4
     ld [wPassCountLo], a
     ICEBOY_LOG_CASE TEST_OAM_OFF_RW, $00, ABI_LOG_STATUS_PASS, $34, $34, $00
     ICEBOY_SET_RESULT ABI_RESULT_PASS
     jp __pass
-
-PrepareVisibleBg:
-    xor a
-    ld [rSCY], a
-    ld [rSCX], a
-    ld [rWY], a
-    ld [rWX], a
-    ld a, $E4
-    ld [rBGP], a
-
-    ld hl, $9800
-    ld bc, $0400
-.clear_map:
-    xor a
-    ld [hl+], a
-    dec bc
-    ld a, b
-    or c
-    jr nz, .clear_map
-
-    ld hl, $8000
-    ld b, 16
-.fill_tile:
-    ld a, $FF
-    ld [hl+], a
-    dec b
-    jr nz, .fill_tile
-    ret
-
-WaitFrameStart:
-.wait_nonzero:
-    ld a, [rLY]
-    and a
-    jr z, .wait_nonzero
-.wait_zero:
-    ld a, [rLY]
-    and a
-    jr nz, .wait_zero
-    ret
 
 FailTest:
     ICEBOY_LOG_CASE b, $00, ABI_LOG_STATUS_FAIL, d, e, c

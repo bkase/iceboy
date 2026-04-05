@@ -74,9 +74,9 @@ async def step(
     dut.frame_start_i.value = int(frame_start)
     dut.line_index_i.value = line_index & 0xFF
     dut.dot_in_line_i.value = dot_in_line & 0x1FF
-    await RisingEdge(dut.clk_i)
     await ReadOnly()
     snapshot = decode_output(int(dut.output__.value))
+    await RisingEdge(dut.clk_i)
     await Timer(1, units="ps")
     return snapshot
 
@@ -130,6 +130,24 @@ async def test_lcdc_transition_emits_mmio_then_force_power_event(dut):
     await reset_dut(dut)
     await step(dut, frame_start=False, line_index=0, dot_in_line=1, m_ce=False)
 
+    disable = await step(
+        dut,
+        req_kind=REQ_WRITE,
+        addr=0xFF40,
+        data=0x11,
+        frame_start=False,
+        line_index=0,
+        dot_in_line=5,
+    )
+    assert disable["count"] == 2
+    assert disable["event0"]["kind"] == KIND_MMIO
+    assert disable["event0"]["target"] == TARGET_LCDC
+    assert disable["event0"]["payload"] == 0x11
+    assert disable["event0"]["seq"] == 0
+    assert disable["event1"]["kind"] == KIND_POWER
+    assert disable["event1"]["payload"] == 0
+    assert disable["event1"]["seq"] == 1
+
     enable = await step(
         dut,
         req_kind=REQ_WRITE,
@@ -137,16 +155,16 @@ async def test_lcdc_transition_emits_mmio_then_force_power_event(dut):
         data=0x91,
         frame_start=False,
         line_index=0,
-        dot_in_line=5,
+        dot_in_line=6,
     )
     assert enable["count"] == 2
     assert enable["event0"]["kind"] == KIND_MMIO
     assert enable["event0"]["target"] == TARGET_LCDC
     assert enable["event0"]["payload"] == 0x91
-    assert enable["event0"]["seq"] == 0
+    assert enable["event0"]["seq"] == 2
     assert enable["event1"]["kind"] == KIND_POWER
     assert enable["event1"]["payload"] == 1
-    assert enable["event1"]["seq"] == 1
+    assert enable["event1"]["seq"] == 3
 
     steady = await step(
         dut,
@@ -155,27 +173,12 @@ async def test_lcdc_transition_emits_mmio_then_force_power_event(dut):
         data=0x81,
         frame_start=False,
         line_index=0,
-        dot_in_line=6,
+        dot_in_line=7,
     )
     assert steady["count"] == 1
     assert steady["event0"]["kind"] == KIND_MMIO
-    assert steady["event0"]["seq"] == 2
+    assert steady["event0"]["seq"] == 4
     assert steady["event1"]["kind"] == KIND_IDLE
-
-    disable = await step(
-        dut,
-        req_kind=REQ_WRITE,
-        addr=0xFF40,
-        data=0x11,
-        frame_start=False,
-        line_index=0,
-        dot_in_line=7,
-    )
-    assert disable["count"] == 2
-    assert disable["event0"]["seq"] == 3
-    assert disable["event1"]["kind"] == KIND_POWER
-    assert disable["event1"]["payload"] == 0
-    assert disable["event1"]["seq"] == 4
 
 
 @cocotb.test()

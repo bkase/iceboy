@@ -14,6 +14,8 @@ use lib::sim::ppu_support::{encode_ppu_mode, scanout_or_blank, semantic_or_idle,
 use lib::sim::types::{SimStimulus, cpu_arch_time_enable, peripheral_arch_time_enable};
 
 struct SocLockstepTopOut {
+    ppu_vblank_req_window: bool,
+    ppu_stat_req_window: bool,
     ppu_scanout_valid: bool,
     ppu_scanout_kind: uint<2>,
     ppu_scanout_x: uint<8>,
@@ -34,6 +36,12 @@ struct SocLockstepTopOut {
     ppu_stat_req: bool,
     commit_seq: uint<64>,
     pc: uint<16>,
+    cpu_b: uint<8>,
+    cpu_c: uint<8>,
+    cpu_d: uint<8>,
+    cpu_e: uint<8>,
+    cpu_h: uint<8>,
+    cpu_l: uint<8>,
     bus_req_kind: uint<2>,
     bus_req_addr: uint<16>,
     bus_req_data: uint<8>,
@@ -49,8 +57,13 @@ struct SocLockstepTopOut {
     memory_behavior_profile: uint<2>,
     cpu_arch_time_enable: bool,
     peripheral_arch_time_enable: bool,
+    irq_ack_valid: bool,
+    irq_ack_bit: uint<3>,
     irq_pending: uint<5>,
     bus_read_data: uint<8>,
+    preview_bus_req_kind: uint<2>,
+    preview_bus_req_addr: uint<16>,
+    preview_bus_req_data: uint<8>,
 }
 
 fn count_inc(counter: uint<64>, active: bool) -> uint<64> {
@@ -261,6 +274,12 @@ entity soc_lockstep_top(
     let halt_quiescent = halted_cycle && !bus_active && !cpu.alu_active && !cpu.delta_active && !cpu.irq_ack_valid;
     let ppu_scanout = scanout_or_blank(ppu.scanout, ppu.trace.ly_after);
     let ppu_semantic = semantic_or_idle(ppu.trace.semantic);
+    reg(clk) ppu_vblank_req_accum: bool reset(rst: false) =
+        if tb.m_ce { false } else { ppu_vblank_req_accum || ppu.irq_req.vblank_req };
+    reg(clk) ppu_stat_req_accum: bool reset(rst: false) =
+        if tb.m_ce { false } else { ppu_stat_req_accum || ppu.irq_req.stat_req };
+    let ppu_vblank_req_window = ppu_vblank_req_accum || ppu.irq_req.vblank_req;
+    let ppu_stat_req_window = ppu_stat_req_accum || ppu.irq_req.stat_req;
     reg(clk) metric_total_cycles: uint<64> reset(rst: 0u64) = trunc(metric_total_cycles + 1u64);
     reg(clk) metric_bus_active_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_bus_active_cycles, bus_active);
     reg(clk) metric_alu_active_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_alu_active_cycles, cpu.alu_active);
@@ -278,6 +297,8 @@ entity soc_lockstep_top(
     reg(clk) metric_reg_pc_we_cycles: uint<64> reset(rst: 0u64) = count_inc(metric_reg_pc_we_cycles, mask_has(cpu.reg_we_mask, 0x200u10));
 
     SocLockstepTopOut$(
+        ppu_vblank_req_window: ppu_vblank_req_window,
+        ppu_stat_req_window: ppu_stat_req_window,
         ppu_scanout_valid: ppu_dot_ce,
         ppu_scanout_kind: encode_scanout_kind(ppu_scanout),
         ppu_scanout_x: scanout_x(ppu_scanout),
@@ -298,6 +319,12 @@ entity soc_lockstep_top(
         ppu_stat_req: ppu.irq_req.stat_req,
         commit_seq: cpu.commit_seq,
         pc: cpu.pc,
+        cpu_b: cpu.regs.b,
+        cpu_c: cpu.regs.c,
+        cpu_d: cpu.regs.d,
+        cpu_e: cpu.regs.e,
+        cpu_h: cpu.regs.h,
+        cpu_l: cpu.regs.l,
         bus_req_kind: cpu.bus_req_kind,
         bus_req_addr: cpu.bus_req_addr,
         bus_req_data: cpu.bus_req_data,
@@ -313,7 +340,12 @@ entity soc_lockstep_top(
         memory_behavior_profile: encode_memory_behavior_profile(profiles),
         cpu_arch_time_enable: requested_cpu_arch_time,
         peripheral_arch_time_enable: requested_peripheral_arch_time,
+        irq_ack_valid: cpu.irq_ack_valid,
+        irq_ack_bit: cpu.irq_ack_bit,
         irq_pending: irq_pending,
         bus_read_data: bus_read_data,
+        preview_bus_req_kind: cpu.preview_bus_req_kind,
+        preview_bus_req_addr: cpu.preview_bus_req_addr,
+        preview_bus_req_data: cpu.preview_bus_req_data,
     )
 }

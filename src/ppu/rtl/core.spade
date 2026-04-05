@@ -26,6 +26,7 @@ pub struct PpuCoreOut {
     mem_reqs: PpuMemReqs,
     irq_req: PpuIrqReq,
     scanout: Option<ScanoutEvent>,
+    visible_trace: PpuDebugTrace,
     trace: PpuDebugTrace,
 }
 
@@ -60,6 +61,7 @@ fn dmg_skipboot_state() -> PpuState {
             run: LcdRunState::Running,
             phase: PpuPhase::OamScan$(index: 0u6, found: 0u4),
             stat_irq: initial_stat_irq_state(),
+            lyc_match_flag: true,
         ),
         sampled: PpuSamplingState$(
             scx_low3_line: 0u3,
@@ -94,6 +96,7 @@ pub entity ppu_core(
         mem_reqs: visible.mem_reqs,
         irq_req: visible.irq_req,
         scanout: visible.scanout,
+        visible_trace: idle_trace_for_state(video_now, state_reg),
         trace: if dot_ce { ppu_debug_trace(video_now, visible) } else { idle_trace_for_state(video_now, visible_state) },
     )
 }

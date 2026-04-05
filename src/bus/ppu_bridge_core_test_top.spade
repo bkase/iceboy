@@ -1,11 +1,9 @@
-use std::option::Option;
-
+use lib::bus::ppu_event_bridge::ppu_event_bridge;
+use lib::bus::types::BusReq;
 use lib::ppu::rtl::core::ppu_core;
-use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
-use lib::ppu::sem::events::{idle_oam_dma_state, zero_video_coord};
+use lib::ppu::sem::events::{VideoCoord, idle_oam_dma_state};
 use lib::ppu::sem::memory::idle_ppu_mem_resp;
 use lib::ppu::sem::types::{LcdRunState, PpuMode, PpuPhase};
-use lib::sim::ppu_support::timed_events_from_direct;
 
 fn encode_phase(phase: PpuPhase) -> uint<3> {
     match phase {
@@ -35,47 +33,43 @@ fn encode_run(run: LcdRunState) -> uint<2> {
     }
 }
 
-fn decode_mmio_reg(target_i: uint<4>) -> MmioReg {
-    match target_i {
-        1u4 => MmioReg::Stat,
-        2u4 => MmioReg::Scy,
-        3u4 => MmioReg::Scx,
-        4u4 => MmioReg::Lyc,
-        5u4 => MmioReg::Wy,
-        6u4 => MmioReg::Wx,
-        7u4 => MmioReg::Bgp,
-        8u4 => MmioReg::Obp0,
-        9u4 => MmioReg::Obp1,
-        _ => MmioReg::Lcdc,
-    }
-}
-
-pub entity core_test_top(
+pub entity ppu_bridge_core_test_top(
     clk_i: clock,
     rst_i: bool,
     dot_ce_i: bool,
-    write_valid_i: bool,
-    write_target_i: uint<4>,
-    write_value_i: uint<8>,
-) -> uint<41> {
-    let write =
-        if write_valid_i {
-            Option::Some(MmioWrite$(target: decode_mmio_reg(write_target_i), value: write_value_i))
-        } else {
-            Option::None
-        };
-    let (bus_events, bus_event_count) = timed_events_from_direct(zero_video_coord(), 0u64, write, Option::None);
+    m_ce_i: bool,
+    req_kind_i: uint<2>,
+    addr_i: uint<16>,
+    data_i: uint<8>,
+    frame_start_i: bool,
+    line_index_i: uint<8>,
+    dot_in_line_i: uint<9>,
+) -> uint<45> {
+    let req = match req_kind_i {
+        1u2 => BusReq::Read$(addr: addr_i),
+        2u2 => BusReq::Write$(addr: addr_i, data: data_i),
+        _ => BusReq::Idle,
+    };
+    let (bus_events, bus_event_count) = inst ppu_event_bridge(
+        clk_i,
+        rst_i,
+        m_ce_i,
+        req,
+        frame_start_i,
+        line_index_i,
+        dot_in_line_i,
+    );
     let core = inst ppu_core(
         clk_i,
         rst_i,
         dot_ce_i,
-        zero_video_coord(),
+        VideoCoord$(frame: 0u32, line: line_index_i, dot: dot_in_line_i),
         bus_events,
         bus_event_count,
         idle_ppu_mem_resp(),
         idle_oam_dma_state(),
     );
-    let trace = core.trace;
+    let trace = core.visible_trace;
 
     zext(encode_phase(trace.phase_after))
         | (zext(trace.ly_after) << 3)
@@ -87,12 +81,9 @@ pub entity core_test_top(
         | (zext(encode_run(trace.run_after)) << 26)
         | (zext(if trace.first_frame_blank_after { 1u1 } else { 0u1 }) << 28)
         | (zext(trace.stat_readback_after) << 29)
-        | (zext(core.mem_reqs.count) << 37)
-        | (zext(match core.scanout {
-            std::option::Option::Some(event) => {
-                let _ = event;
-                1u1
-            },
-            std::option::Option::None => 0u1,
-        }) << 40)
+        | (zext(bus_event_count) << 37)
+        | (zext(if m_ce_i { 1u1 } else { 0u1 }) << 41)
+        | (zext(if dot_ce_i { 1u1 } else { 0u1 }) << 42)
+        | (zext(if frame_start_i { 1u1 } else { 0u1 }) << 43)
+        | (zext(req_kind_i) << 44)
 }

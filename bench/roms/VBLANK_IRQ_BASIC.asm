@@ -1,7 +1,7 @@
 INCLUDE "template.inc"
 
 DEF TEST_VBLANK_IRQ_COUNT EQU $01
-DEF TEST_VBLANK_IF_SEEN EQU $02
+DEF TEST_VBLANK_IF_CLEARED EQU $02
 DEF TEST_VBLANK_LINE EQU $03
 
 DEF LCDC_BG_ON EQU $01
@@ -58,14 +58,14 @@ __checkpoint_wait_vblank:
 .irq_count_ok:
     ld a, [wDebugCounters + 1]
     and IEF_VBLANK
-    cp IEF_VBLANK
-    jr z, .if_seen_ok
-    ld b, TEST_VBLANK_IF_SEEN
-    ld d, IEF_VBLANK
+    and a
+    jr z, .if_cleared_ok
+    ld b, TEST_VBLANK_IF_CLEARED
+    ld d, $00
     ld e, a
     ld c, $02
     jp FailTest
-.if_seen_ok:
+.if_cleared_ok:
     ld a, [wDebugCounters + 2]
     cp 144
     jr z, .line_ok

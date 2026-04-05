@@ -1,6 +1,6 @@
 use std::option::Option;
 
-use lib::ppu::sem::events::{PpuEventKind, TimedPpuEvent, VideoCoord, idle_timed_ppu_event, mmio::MmioWrite};
+use lib::ppu::sem::events::{PpuEventKind, TimedPpuEvent, VideoCoord, idle_timed_ppu_event, mmio::{MmioReg, MmioWrite}};
 use lib::ppu::sem::observe::{
     DotOutput,
     LineSummary,
@@ -44,6 +44,14 @@ fn dma_event(seq: uint<64>, at: VideoCoord, source_high: uint<8>) -> TimedPpuEve
     TimedPpuEvent$(seq: seq, at: at, kind: PpuEventKind::DmaStart$(source_high: source_high))
 }
 
+fn lcdc_enabled_bit(value: uint<8>) -> bool {
+    ((value >> 7) & 1u8) == 1u8
+}
+
+fn lcdc_power_event(seq: uint<64>, at: VideoCoord, enabled: bool) -> TimedPpuEvent {
+    TimedPpuEvent$(seq: seq, at: at, kind: PpuEventKind::ForceLcdPower$(enabled: enabled))
+}
+
 pub fn timed_events_from_direct(
     at: VideoCoord,
     seq_counter: uint<64>,
@@ -52,8 +60,26 @@ pub fn timed_events_from_direct(
 ) -> ([TimedPpuEvent; 4], uint<4>) {
     let idle = idle_timed_ppu_event();
     match reg_write {
-        Option::Some(write) => match dma_start {
-            Option::Some(source_high) => (
+        Option::Some(write) => match (write.target, dma_start) {
+            (MmioReg::Lcdc, Option::Some(source_high)) => (
+                [
+                    mmio_event(seq_counter, at, write),
+                    lcdc_power_event(trunc(seq_counter + 1u64), at, lcdc_enabled_bit(write.value)),
+                    dma_event(trunc(seq_counter + 2u64), at, source_high),
+                    idle,
+                ],
+                3u4,
+            ),
+            (MmioReg::Lcdc, Option::None) => (
+                [
+                    mmio_event(seq_counter, at, write),
+                    lcdc_power_event(trunc(seq_counter + 1u64), at, lcdc_enabled_bit(write.value)),
+                    idle,
+                    idle,
+                ],
+                2u4,
+            ),
+            (_, Option::Some(source_high)) => (
                 [
                     mmio_event(seq_counter, at, write),
                     dma_event(trunc(seq_counter + 1u64), at, source_high),
@@ -62,7 +88,7 @@ pub fn timed_events_from_direct(
                 ],
                 2u4,
             ),
-            Option::None => ([mmio_event(seq_counter, at, write), idle, idle, idle], 1u4),
+            (_, Option::None) => ([mmio_event(seq_counter, at, write), idle, idle, idle], 1u4),
         },
         Option::None => match dma_start {
             Option::Some(source_high) => ([dma_event(seq_counter, at, source_high), idle, idle, idle], 1u4),

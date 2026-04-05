@@ -120,7 +120,7 @@ pub entity ppu_event_bridge(
         current_frame_index(frame_index, prev_frame_start, frame_start);
 
     let (write_valid, addr, data) = write_fields(rst, m_ce, req);
-    reg(clk) lcdc7_shadow: bool reset(rst: false) =
+    reg(clk) lcdc7_shadow: bool reset(rst: true) =
         if write_valid && addr == 0xff40u16 {
             lcdc_enabled_bit(data)
         } else {
@@ -134,8 +134,5 @@ pub entity ppu_event_bridge(
     );
     let count = event_count(write_valid, addr, data, lcdc7_shadow);
     reg(clk) seq_counter: uint<64> reset(rst: 0u64) = trunc(seq_counter + zext(count));
-    reg(clk) emitted_events: [TimedPpuEvent; 4] reset(rst: [idle_timed_ppu_event(); 4]) =
-        build_events(write_valid, addr, data, lcdc7_shadow, seq_counter, at);
-    reg(clk) emitted_count: uint<4> reset(rst: 0u4) = count;
-    (emitted_events, emitted_count)
+    (build_events(write_valid, addr, data, lcdc7_shadow, seq_counter, at), count)
 }

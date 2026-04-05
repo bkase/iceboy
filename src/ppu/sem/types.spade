@@ -69,6 +69,7 @@ pub struct PpuStatusState {
     run: LcdRunState,
     phase: PpuPhase,
     stat_irq: StatIrqState,
+    lyc_match_flag: bool,
 }
 
 pub enum WindowState {
@@ -321,6 +322,7 @@ pub fn initial_ppu_status_state() -> PpuStatusState {
         run: LcdRunState::Disabled,
         phase: PpuPhase::LcdOff,
         stat_irq: initial_stat_irq_state(),
+        lyc_match_flag: false,
     )
 }
 

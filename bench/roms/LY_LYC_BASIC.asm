@@ -22,6 +22,7 @@ StatVector:
     ld a, [rLY]
     ld [wDebugCounters + 1], a
     xor a
+    ld [rSTAT], a
     ld [rIF], a
     reti
 
@@ -58,8 +59,15 @@ Entry:
     jp FailTest
 .lyc_flag_ok:
     ei
-    halt
     nop
+    ld a, [wDebugCounters + 0]
+    and a
+    jr nz, .irq_seen
+.wait_irq:
+    ld a, [wDebugCounters + 0]
+    and a
+    jr z, .wait_irq
+.irq_seen:
 
     ld a, [wDebugCounters + 0]
     cp 1

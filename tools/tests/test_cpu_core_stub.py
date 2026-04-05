@@ -35,6 +35,9 @@ class CpuCoreStubContractTest(unittest.TestCase):
             "reg_we_mask: uint<10>",
             "alu_active: bool",
             "delta_active: bool",
+            "preview_bus_req_kind: uint<2>",
+            "preview_bus_req_addr: uint<16>",
+            "preview_bus_req_data: uint<8>",
             "fn skipboot_pc() -> uint<16>",
             "fn skipboot_sp() -> uint<16>",
             "fn skipboot_regs() -> Registers",
@@ -56,6 +59,7 @@ class CpuCoreStubContractTest(unittest.TestCase):
             "let state = CpuState(arch_state, micro_state);",
             "let step = step_mcycle(state, MicroInput(bus_resp, irq_pending));",
             "let next_state = apply_delta(state, step.delta);",
+            "let preview_bus_req = step.bus_req;",
             "reg(clk) arch_state: CpuArchState reset(rst: skipboot_arch_state()) =",
             "reg(clk) micro_state: CpuMicroState reset(rst: initial_cpu_micro_state()) =",
             "reg(clk) commit_seq: uint<64> reset(rst: 0u64) =",
@@ -83,6 +87,9 @@ class CpuCoreStubContractTest(unittest.TestCase):
             "reg_we_mask: visible_reg_we_mask",
             "alu_active: visible_alu_active",
             "delta_active: visible_delta_active",
+            "preview_bus_req_kind: bus_req_kind(preview_bus_req)",
+            "preview_bus_req_addr: bus_req_addr(preview_bus_req)",
+            "preview_bus_req_data: bus_req_data(preview_bus_req)",
         ]:
             self.assertIn(symbol, text)
 

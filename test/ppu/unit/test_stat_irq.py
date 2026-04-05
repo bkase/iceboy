@@ -103,6 +103,27 @@ async def step(
     return snapshot
 
 
+async def preview_then_step(
+    dut,
+    *,
+    dot_ce: bool = True,
+    write_target: int | None = None,
+    write_value: int = 0,
+) -> tuple[dict[str, int | bool], dict[str, int | bool]]:
+    dut.dot_ce_i.value = int(dot_ce)
+    dut.write_valid_i.value = int(write_target is not None)
+    dut.write_target_i.value = (write_target or 0) & 0xF
+    dut.write_value_i.value = write_value & 0xFF
+    await ReadOnly()
+    preview = decode_output(int(dut.output__.value))
+    await Timer(1, units="ps")
+    await RisingEdge(dut.clk_i)
+    await ReadOnly()
+    committed = decode_output(int(dut.output__.value))
+    await Timer(1, units="ps")
+    return preview, committed
+
+
 async def advance_until(dut, predicate, *, max_dots: int = FRAME_DOTS) -> dict[str, int | bool]:
     for _ in range(max_dots):
         snapshot = await step(dut)
@@ -157,7 +178,7 @@ async def test_mode0_irq_fires_once_per_hblank_edge(dut):
     logger.step("Enable mode 0 STAT source and advance to HBlank entry")
     await step(dut, write_target=STAT_TARGET, write_value=STAT_SEL_MODE0)
     hblank_entry = await advance_until(dut, lambda snap: snap["phase"] == PHASE_HBLANK)
-    require(logger, "hblank_entry_dot", 252, hblank_entry["dot"], snapshot=hblank_entry)
+    require(logger, "hblank_entry_dot", 256, hblank_entry["dot"], snapshot=hblank_entry)
     require(logger, "hblank_irq_edge", True, hblank_entry["stat_irq"], snapshot=hblank_entry)
     require(logger, "hblank_line_high", True, hblank_entry["stat_line"], snapshot=hblank_entry)
 
@@ -185,6 +206,25 @@ async def test_mode1_and_vblank_irqs_are_distinct_on_entry(dut):
     require(logger, "vblank_hold_vblank_irq", False, vblank_hold["vblank_irq"], snapshot=vblank_hold)
     require(logger, "vblank_hold_stat_irq", False, vblank_hold["stat_irq"], snapshot=vblank_hold)
     require(logger, "vblank_hold_line", True, vblank_hold["stat_line"], snapshot=vblank_hold)
+
+
+@cocotb.test()
+async def test_mode2_only_pulses_stat_irq_on_line144_vblank_entry(dut):
+    logger = case_logger("test_mode2_only_pulses_stat_irq_on_line144_vblank_entry")
+    await reset_dut(dut)
+
+    logger.step("Enable only mode 2 STAT source and advance to line 144 VBlank entry")
+    await step(dut, write_target=STAT_TARGET, write_value=STAT_SEL_MODE2)
+    vblank_entry = await advance_until(dut, lambda snap: snap["mode"] == MODE_VBLANK)
+    require(logger, "vblank_entry_ly", 144, vblank_entry["ly"], snapshot=vblank_entry)
+    require(logger, "vblank_irq", True, vblank_entry["vblank_irq"], snapshot=vblank_entry)
+    require(logger, "mode2_boundary_stat_irq", True, vblank_entry["stat_irq"], snapshot=vblank_entry)
+    require(logger, "mode2_boundary_line_low", False, vblank_entry["stat_line"], snapshot=vblank_entry)
+
+    logger.step("Verify the pulse is edge-only and does not hold the STAT line high in VBlank")
+    vblank_hold = await step(dut)
+    require(logger, "vblank_hold_stat_irq", False, vblank_hold["stat_irq"], snapshot=vblank_hold)
+    require(logger, "vblank_hold_line", False, vblank_hold["stat_line"], snapshot=vblank_hold)
 
 
 @cocotb.test()
@@ -234,3 +274,74 @@ async def test_stat_mode_bits_report_zero_when_lcd_off(dut):
     require(logger, "lcd_off_mode", MODE_LCD_OFF, disabled["mode"], snapshot=disabled)
     require(logger, "lcd_off_phase", PHASE_LCD_OFF, disabled["phase"], snapshot=disabled)
     require(logger, "stat_mode_bits_lcd_off", 0x80, disabled["stat_readback"] & 0x83, snapshot=disabled)
+
+
+@cocotb.test()
+async def test_lcd_off_retains_lyc_flag_and_ignores_lyc_writes_until_reenabled(dut):
+    logger = case_logger("test_lcd_off_retains_lyc_flag_and_ignores_lyc_writes_until_reenabled")
+    await reset_dut(dut)
+
+    logger.step("Enable LYC source with LY=LYC=0 so the coincidence bit is high")
+    await step(dut, write_target=LYC_TARGET, write_value=0x00)
+    start = await step(dut, write_target=STAT_TARGET, write_value=STAT_SEL_LYC)
+    require(logger, "start_lyc_flag", 0x44, start["stat_readback"] & 0x44, snapshot=start)
+
+    logger.step("Disable LCD and verify the retained coincidence bit stays set")
+    disabled = await step(dut, write_target=LCDC_TARGET, write_value=LCDC_OFF)
+    require(logger, "lcd_off_retained_flag", 0x44, disabled["stat_readback"] & 0x44, snapshot=disabled)
+    require(logger, "lcd_off_stat_irq", False, disabled["stat_irq"], snapshot=disabled)
+
+    logger.step("Change LYC while LCD is off; the retained coincidence bit must not update yet")
+    changed_while_off = await step(dut, write_target=LYC_TARGET, write_value=0x01)
+    require(logger, "lcd_off_changed_lyc_flag", 0x44, changed_while_off["stat_readback"] & 0x44, snapshot=changed_while_off)
+    require(logger, "lcd_off_changed_lyc_irq", False, changed_while_off["stat_irq"], snapshot=changed_while_off)
+
+    logger.step("Re-enable LCD; the comparison restarts and the coincidence bit drops for LY=0 vs LYC=1")
+    reenabled = await step(dut, write_target=LCDC_TARGET, write_value=0x80)
+    require(logger, "reenable_clears_flag", 0x40, reenabled["stat_readback"] & 0x44, snapshot=reenabled)
+    require(logger, "reenable_no_irq_on_falling_edge", False, reenabled["stat_irq"], snapshot=reenabled)
+
+
+@cocotb.test()
+async def test_lcd_reenable_without_comparison_change_does_not_retrigger_stat_irq(dut):
+    logger = case_logger("test_lcd_reenable_without_comparison_change_does_not_retrigger_stat_irq")
+    await reset_dut(dut)
+
+    logger.step("Start with LY=LYC=0 and LYC source enabled")
+    await step(dut, write_target=LYC_TARGET, write_value=0x00)
+    await step(dut, write_target=STAT_TARGET, write_value=STAT_SEL_LYC)
+
+    logger.step("Disable LCD while the coincidence bit is high, then rewrite LYC=0 while LCD is off")
+    await step(dut, write_target=LCDC_TARGET, write_value=LCDC_OFF)
+    retained = await step(dut, write_target=LYC_TARGET, write_value=0x00)
+    require(logger, "retained_flag", 0x44, retained["stat_readback"] & 0x44, snapshot=retained)
+
+    logger.step("Re-enabling LCD keeps the coincidence bit high but must not produce a second STAT edge")
+    preview, reenabled = await preview_then_step(dut, write_target=LCDC_TARGET, write_value=0x80)
+    require(logger, "reenable_keeps_flag", 0x44, reenabled["stat_readback"] & 0x44, snapshot=reenabled)
+    require(logger, "reenable_preview_blocks_duplicate_irq", False, preview["stat_irq"], snapshot=preview)
+    require(logger, "reenable_blocks_duplicate_irq", False, reenabled["stat_irq"], snapshot=reenabled)
+
+
+@cocotb.test()
+async def test_lcd_reenable_raises_stat_irq_when_coincidence_bit_becomes_true(dut):
+    logger = case_logger("test_lcd_reenable_raises_stat_irq_when_coincidence_bit_becomes_true")
+    await reset_dut(dut)
+
+    logger.step("Program LYC=1 so LY=0 does not currently match, then enable LYC source")
+    await step(dut, write_target=LYC_TARGET, write_value=0x01)
+    start = await step(dut, write_target=STAT_TARGET, write_value=STAT_SEL_LYC)
+    require(logger, "start_flag_low", 0x40, start["stat_readback"] & 0x44, snapshot=start)
+
+    logger.step("Disable LCD, then change LYC to 0 while the comparison clock is stopped")
+    disabled = await step(dut, write_target=LCDC_TARGET, write_value=LCDC_OFF)
+    require(logger, "disabled_flag_low", 0x40, disabled["stat_readback"] & 0x44, snapshot=disabled)
+    changed_while_off = await step(dut, write_target=LYC_TARGET, write_value=0x00)
+    require(logger, "changed_while_off_flag_low", 0x40, changed_while_off["stat_readback"] & 0x44, snapshot=changed_while_off)
+
+    logger.step("Re-enable LCD; restarting the comparison to LY=0 vs LYC=0 should raise one STAT IRQ")
+    preview, reenabled = await preview_then_step(dut, write_target=LCDC_TARGET, write_value=0x80)
+    require(logger, "reenable_preview_stat_irq", True, preview["stat_irq"], snapshot=preview)
+    require(logger, "reenable_sets_flag", 0x44, reenabled["stat_readback"] & 0x44, snapshot=reenabled)
+    require(logger, "reenable_committed_line_high", True, reenabled["stat_line"], snapshot=reenabled)
+    require(logger, "reenable_committed_irq_clears", False, reenabled["stat_irq"], snapshot=reenabled)

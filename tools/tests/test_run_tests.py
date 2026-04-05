@@ -84,6 +84,14 @@ class RunTestsTest(unittest.TestCase):
         env = command_env(sim="icarus", nightly=True)
         self.assertEqual(env["ICEBOY_NIGHTLY"], "1")
 
+    def test_rom_tier_includes_wave_a_ppu_rom_and_mooneye_suites(self) -> None:
+        rom_labels = [suite.label for suite in suites_for_tier("rom", nightly=False)]
+        self.assertIn("test_ppu_wave_a.py", rom_labels)
+        self.assertIn("test_ppu_wave_a_mooneye.py", rom_labels)
+        mooneye_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_ppu_wave_a_mooneye.py")
+        self.assertEqual(mooneye_suite.runner, "shell")
+        self.assertEqual(mooneye_suite.target, "tools/run_ppu_wave_a_mooneye_verilator.sh")
+
     def test_write_junit_xml_emits_parseable_report(self) -> None:
         results = [
             SuiteResult(

@@ -84,11 +84,13 @@ pub entity irq_test_top(
         run: decode_run(prev_run_i),
         phase: decode_phase(prev_phase_i, line_i),
         stat_irq: StatIrqState$(line_high: prev_line_high_i),
+        lyc_match_flag: lyc_match(regs, ly_i),
     );
     let next_status = PpuStatusState$(
         run: decode_run(next_run_i),
         phase: decode_phase(next_phase_i, line_i),
         stat_irq: StatIrqState$(line_high: prev_line_high_i),
+        lyc_match_flag: lyc_match(regs, ly_i),
     );
     let features = BehaviorFeatureSet$(bits: if quirk_enable_i { 0b000000001u9 } else { 0u9 });
     let new_line = stat_line(regs, next_status, ly_i);

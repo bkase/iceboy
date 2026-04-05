@@ -41,11 +41,13 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/lockstep/test_ei_halt_corners.py"
     "test/harness/test_arch_time_invariants.py"
     "test/harness/test_soc_lockstep_top.py"
+    "test/harness/test_soc_rom_top.py"
     "test/rom/test_loads_basic.py"
     "test/rom/test_mbc1_ram.py"
     "test/rom/test_mbc1_switch.py"
     "test/rom/test_mbc3_ram.py"
     "test/rom/test_mbc3_switch.py"
+    "test/rom/test_ppu_wave_a.py"
     "test/rom/test_timer_irq_halt.py"
 )
 
@@ -66,6 +68,7 @@ PRECOMMIT_SWIM_TESTS_EXTENDED=(
     "test/rom/test_ei_delay.py"
     "test/rom/test_alu16_sp.py"
     "test/rom/test_joy_diverge_persist.py"
+    "tools/run_ppu_wave_a_mooneye_verilator.sh"
     "test/rom/test_timer_div_basic.py"
 )
 
@@ -272,7 +275,11 @@ if find test -type f -name 'test_*.py' -print -quit | grep -q .; then
         echo "Running curated simulator suites..."
         for test_file in "${PRECOMMIT_SWIM_TESTS[@]}"; do
             printf '  %s... ' "$test_file"
-            run_checked "$SWIM" test "$test_file"
+            if [[ "$test_file" == *.sh ]]; then
+                run_checked "$test_file" --skip-build
+            else
+                run_checked "$SWIM" test "$test_file"
+            fi
         done
     else
         echo -e "Tests: ${YELLOW}skipped (no simulator: install icarus-verilog or verilator)${NC}"
