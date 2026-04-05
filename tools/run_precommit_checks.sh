@@ -32,6 +32,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/ppu/unit/test_access_policy.py"
     "test/ppu/unit/test_bg_fetcher.py"
     "test/ppu/unit/test_bg_fifo.py"
+    "test/ppu/unit/test_window.py"
     "test/unit/test_video_backend_adapter.py"
     "test/ppu/unit/test_ppu_modes.py"
     "test/ppu/unit/test_stat_irq.py"
