@@ -1,0 +1,71 @@
+use std::option::Option;
+
+use lib::ppu::rtl::mixer::{bg_pixel_enabled, emit_bg_scanout, mix_bg_pixel, palette_lookup};
+use lib::ppu::sem::sample::PpuRenderInputs;
+use lib::ppu::sem::scanout::{PixelSource, ScanoutEvent};
+use lib::ppu::sem::types::{BgPixel, Lcdc};
+
+fn build_lcdc(bg_enable_i: bool) -> Lcdc {
+    Lcdc$(
+        lcd_enable: true,
+        win_map_hi: false,
+        win_enable: false,
+        bgwin_data_hi: true,
+        bg_map_hi: false,
+        obj_size_8x16: false,
+        obj_enable: false,
+        bg_enable: bg_enable_i,
+    )
+}
+
+fn build_render(bgp_pop_i: uint<8>, bg_enable_i: bool) -> PpuRenderInputs {
+    PpuRenderInputs$(
+        lcdc_fetch: build_lcdc(bg_enable_i),
+        scx_fetch: 0u8,
+        scy_fetch: 0u8,
+        scx_low3_line: 0u3,
+        wx_live: 0u8,
+        wy_triggered_this_frame: false,
+        bgp_pop: bgp_pop_i,
+        obp0_pop: 0u8,
+        obp1_pop: 0u8,
+        lyc_eq_live: false,
+    )
+}
+
+fn encode_source(source: PixelSource) -> uint<2> {
+    match source {
+        PixelSource::Background => 0u2,
+        PixelSource::Window => 1u2,
+        PixelSource::Object => 2u2,
+    }
+}
+
+pub entity mixer_test_top(
+    color_idx_i: uint<2>,
+    bgp_pop_i: uint<8>,
+    bg_enable_i: bool,
+    pixel_valid_i: bool,
+    x_i: uint<8>,
+    y_i: uint<8>,
+) -> uint<25> {
+    let pixel = BgPixel$(shade: color_idx_i, palette: 0u8);
+    let render = build_render(bgp_pop_i, bg_enable_i);
+    let mixed = mix_bg_pixel(pixel, render, x_i, y_i);
+    let event = emit_bg_scanout(pixel_valid_i, pixel, render, x_i, y_i);
+
+    zext(palette_lookup(color_idx_i, bgp_pop_i))
+        | (zext(if bg_pixel_enabled(render.lcdc_fetch) { 1u1 } else { 0u1 }) << 2)
+        | (zext(mixed.shade) << 3)
+        | (zext(mixed.x) << 5)
+        | (zext(mixed.y) << 13)
+        | (zext(encode_source(mixed.source)) << 21)
+        | (zext(match event {
+            Option::Some(scanout) => match scanout {
+                ScanoutEvent::Pixel$(emit) => if emit.shade == mixed.shade { 1u1 } else { 0u1 },
+                _ => 0u1,
+            },
+            Option::None => 0u1,
+        }) << 23)
+        | (zext(if match event { Option::Some(_) => true, Option::None => false } { 1u1 } else { 0u1 }) << 24)
+}

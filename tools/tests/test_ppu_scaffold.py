@@ -17,6 +17,8 @@ PPU_RTL_FETCHER_PATH = ROOT / "src" / "ppu" / "rtl" / "fetcher.spade"
 PPU_RTL_FETCHER_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "fetcher_test_top.spade"
 PPU_RTL_IRQ_PATH = ROOT / "src" / "ppu" / "rtl" / "irq.spade"
 PPU_RTL_IRQ_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "irq_test_top.spade"
+PPU_RTL_MIXER_PATH = ROOT / "src" / "ppu" / "rtl" / "mixer.spade"
+PPU_RTL_MIXER_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "mixer_test_top.spade"
 PPU_RTL_REGS_PATH = ROOT / "src" / "ppu" / "rtl" / "regs.spade"
 PPU_RTL_TILE_PATH = ROOT / "src" / "ppu" / "rtl" / "tile.spade"
 PPU_RTL_TILE_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "tile_test_top.spade"
@@ -46,6 +48,8 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("pub mod fetcher_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod irq;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod irq_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod mixer;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod mixer_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod regs;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod tile;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod tile_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
@@ -536,6 +540,38 @@ class PpuScaffoldTest(unittest.TestCase):
             "let output = advance_bg_pipe(",
             "let window_after =",
             "note_window_tile_push(output.next_window_state)",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_mixer_surface_matches_architecture_contract(self) -> None:
+        text = PPU_RTL_MIXER_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub fn palette_lookup(color_idx: uint<2>, palette: uint<8>) -> uint<2>",
+            "0u2 => trunc(palette >> 0)",
+            "1u2 => trunc(palette >> 2)",
+            "2u2 => trunc(palette >> 4)",
+            "_ => trunc(palette >> 6)",
+            "pub fn bg_pixel_enabled(lcdc: Lcdc) -> bool",
+            "pub fn mix_bg_pixel(pixel: BgPixel, render: PpuRenderInputs, x: uint<8>, y: uint<8>) -> PixelEmit",
+            "if bg_pixel_enabled(render.lcdc_fetch)",
+            "render.bgp_pop",
+            "PixelEmit$(x: x, y: y, shade: shade, source: PixelSource::Background)",
+            "pub fn emit_bg_scanout(",
+            "Option::Some(ScanoutEvent::Pixel$(emit: mix_bg_pixel(pixel, render, x, y)))",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_mixer_test_top_provides_projection_surface(self) -> None:
+        text = PPU_RTL_MIXER_TEST_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub entity mixer_test_top(",
+            "color_idx_i: uint<2>",
+            "bgp_pop_i: uint<8>",
+            "bg_enable_i: bool",
+            "pixel_valid_i: bool",
+            "let mixed = mix_bg_pixel(pixel, render, x_i, y_i);",
+            "let event = emit_bg_scanout(pixel_valid_i, pixel, render, x_i, y_i);",
+            "palette_lookup(color_idx_i, bgp_pop_i)",
         ]:
             self.assertIn(symbol, text)
 

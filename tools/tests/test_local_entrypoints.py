@@ -174,6 +174,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/ppu/unit/test_access_policy.py"', text)
         self.assertIn('"test/ppu/unit/test_bg_fetcher.py"', text)
         self.assertIn('"test/ppu/unit/test_bg_fifo.py"', text)
+        self.assertIn('"test/ppu/unit/test_mixer.py"', text)
         self.assertIn('"test/ppu/unit/test_window.py"', text)
         self.assertIn('"test/unit/test_video_backend_adapter.py"', text)
         self.assertIn('"test/unit/test_oam_dma.py"', text)
