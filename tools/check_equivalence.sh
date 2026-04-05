@@ -6,6 +6,8 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/entrypoint_common.sh"
 DRY_RUN=0
 TOP=""
 OUT_DIR="${ICEBOY_ROOT}/build/formal/cpu_refactor"
+TEMPLATE="${ICEBOY_ROOT}/formal/cpu_refactor.eqy"
+GENERATED_NAME="cpu_refactor.generated.eqy"
 POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
@@ -23,9 +25,19 @@ while [[ $# -gt 0 ]]; do
             OUT_DIR="$2"
             shift
             ;;
+        --template)
+            [[ $# -ge 2 ]] || iceboy_die "--template requires a path"
+            TEMPLATE="$2"
+            shift
+            ;;
+        --generated-name)
+            [[ $# -ge 2 ]] || iceboy_die "--generated-name requires a filename"
+            GENERATED_NAME="$2"
+            shift
+            ;;
         --help|-h)
             cat <<'EOF'
-usage: tools/check_equivalence.sh --top <module> [--out-dir <dir>] [--dry-run] <before.v> <after.v>
+usage: tools/check_equivalence.sh --top <module> [--out-dir <dir>] [--template <eqy>] [--generated-name <file>] [--dry-run] <before.v> <after.v>
 EOF
             exit 0
             ;;
@@ -41,10 +53,9 @@ done
 
 GOLD_VERILOG="${POSITIONAL[0]}"
 GATE_VERILOG="${POSITIONAL[1]}"
-TEMPLATE="${ICEBOY_ROOT}/formal/cpu_refactor.eqy"
-GENERATED_EQY="${OUT_DIR}/cpu_refactor.generated.eqy"
+GENERATED_EQY="${OUT_DIR}/${GENERATED_NAME}"
 
-iceboy_require_file "${TEMPLATE}" "cpu refactor eqy template"
+iceboy_require_file "${TEMPLATE}" "equivalence eqy template"
 iceboy_require_file "${GOLD_VERILOG}" "gold verilog design"
 iceboy_require_file "${GATE_VERILOG}" "gate verilog design"
 

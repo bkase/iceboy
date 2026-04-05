@@ -253,6 +253,32 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("top=cpu_core", completed.stdout)
         self.assertTrue((ROOT / "formal" / "cpu_refactor.eqy").exists())
 
+    def test_ppu_equivalence_wrapper_dry_run_renders_ppu_refactor_template(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            gold = tmpdir_path / "before.v"
+            gate = tmpdir_path / "after.v"
+            gold.write_text("module ppu_core; endmodule\n", encoding="utf-8")
+            gate.write_text("module ppu_core; endmodule\n", encoding="utf-8")
+
+            completed = self.run_script(
+                "check_ppu_equivalence.sh",
+                "--dry-run",
+                "--top",
+                "ppu_core",
+                str(gold),
+                str(gate),
+            )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] eqy: EQY 0.1-test", completed.stdout)
+        self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
+        self.assertIn("formal/ppu/equivalence/ppu_refactor.eqy", completed.stdout)
+        self.assertIn("ppu_refactor.generated.eqy", completed.stdout)
+        self.assertIn("top=ppu_core", completed.stdout)
+        self.assertTrue((ROOT / "tools" / "check_ppu_equivalence.sh").exists())
+        self.assertTrue((ROOT / "formal" / "ppu" / "equivalence" / "ppu_refactor.eqy").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
