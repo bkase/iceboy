@@ -30,6 +30,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/unit/test_frame_sink.py"
     "test/unit/test_memory_map.py"
     "test/ppu/unit/test_access_policy.py"
+    "test/ppu/unit/test_bg_fetcher.py"
     "test/unit/test_video_backend_adapter.py"
     "test/ppu/unit/test_ppu_modes.py"
     "test/ppu/unit/test_stat_irq.py"
