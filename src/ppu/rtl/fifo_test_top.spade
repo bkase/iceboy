@@ -1,0 +1,200 @@
+use lib::ppu::rtl::fifo::{advance_bg_pipe, note_window_tile_push};
+use lib::ppu::sem::sample::PpuRenderInputs;
+use lib::ppu::sem::types::{BgFifo, BgPixel, PpuSamplingState, WindowState, zero_bg_pixel, Lcdc};
+
+fn decode_window_state(window_state_i: uint<2>, active_win_x_i: uint<5>, active_win_line_i: uint<8>) -> WindowState {
+    match window_state_i {
+        1u2 => WindowState::ArmedThisFrame,
+        2u2 => WindowState::ActiveOnLine$(win_x: active_win_x_i, win_line: active_win_line_i),
+        _ => WindowState::Inactive,
+    }
+}
+
+fn build_lcdc(win_enable_i: bool) -> Lcdc {
+    Lcdc$(
+        lcd_enable: true,
+        win_map_hi: false,
+        win_enable: win_enable_i,
+        bgwin_data_hi: true,
+        bg_map_hi: false,
+        obj_size_8x16: false,
+        obj_enable: false,
+        bg_enable: true,
+    )
+}
+
+fn build_sampled(scx_low3_i: uint<3>, wy_triggered_i: bool, window_enable_at_mode2_start_i: bool) -> PpuSamplingState {
+    PpuSamplingState$(
+        scx_low3_line: scx_low3_i,
+        wy_triggered_this_frame: wy_triggered_i,
+        window_enable_at_mode2_start: window_enable_at_mode2_start_i,
+    )
+}
+
+fn build_render(wx_live_i: uint<8>, push_palette_i: uint<8>, win_enable_i: bool) -> PpuRenderInputs {
+    PpuRenderInputs$(
+        lcdc_fetch: build_lcdc(win_enable_i),
+        scx_fetch: 0u8,
+        scy_fetch: 0u8,
+        scx_low3_line: 0u3,
+        wx_live: wx_live_i,
+        wy_triggered_this_frame: false,
+        bgp_pop: push_palette_i,
+        obp0_pop: 0u8,
+        obp1_pop: 0u8,
+        lyc_eq_live: false,
+    )
+}
+
+fn decode_shade(shades: uint<32>, index: uint<5>) -> uint<2> {
+    match index {
+        0u5 => trunc(shades >> 0),
+        1u5 => trunc(shades >> 2),
+        2u5 => trunc(shades >> 4),
+        3u5 => trunc(shades >> 6),
+        4u5 => trunc(shades >> 8),
+        5u5 => trunc(shades >> 10),
+        6u5 => trunc(shades >> 12),
+        7u5 => trunc(shades >> 14),
+        8u5 => trunc(shades >> 16),
+        9u5 => trunc(shades >> 18),
+        10u5 => trunc(shades >> 20),
+        11u5 => trunc(shades >> 22),
+        12u5 => trunc(shades >> 24),
+        13u5 => trunc(shades >> 26),
+        14u5 => trunc(shades >> 28),
+        _ => trunc(shades >> 30),
+    }
+}
+
+fn decode_fifo(fifo_count_i: uint<5>, fifo_shades_i: uint<32>, fifo_palette_i: uint<8>) -> BgFifo {
+    BgFifo$(
+        count: fifo_count_i,
+        pixels: [
+            BgPixel$(shade: decode_shade(fifo_shades_i, 0u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 1u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 2u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 3u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 4u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 5u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 6u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 7u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 8u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 9u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 10u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 11u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 12u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 13u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 14u5), palette: fifo_palette_i),
+            BgPixel$(shade: decode_shade(fifo_shades_i, 15u5), palette: fifo_palette_i),
+        ],
+    )
+}
+
+fn decode_row(push_row_i: uint<16>) -> [uint<2>; 8] {
+    [
+        trunc(push_row_i >> 0),
+        trunc(push_row_i >> 2),
+        trunc(push_row_i >> 4),
+        trunc(push_row_i >> 6),
+        trunc(push_row_i >> 8),
+        trunc(push_row_i >> 10),
+        trunc(push_row_i >> 12),
+        trunc(push_row_i >> 14),
+    ]
+}
+
+fn pack_fifo_shades(fifo: BgFifo) -> uint<32> {
+    zext(fifo.pixels[0].shade)
+        | (zext(fifo.pixels[1].shade) << 2)
+        | (zext(fifo.pixels[2].shade) << 4)
+        | (zext(fifo.pixels[3].shade) << 6)
+        | (zext(fifo.pixels[4].shade) << 8)
+        | (zext(fifo.pixels[5].shade) << 10)
+        | (zext(fifo.pixels[6].shade) << 12)
+        | (zext(fifo.pixels[7].shade) << 14)
+        | (zext(fifo.pixels[8].shade) << 16)
+        | (zext(fifo.pixels[9].shade) << 18)
+        | (zext(fifo.pixels[10].shade) << 20)
+        | (zext(fifo.pixels[11].shade) << 22)
+        | (zext(fifo.pixels[12].shade) << 24)
+        | (zext(fifo.pixels[13].shade) << 26)
+        | (zext(fifo.pixels[14].shade) << 28)
+        | (zext(fifo.pixels[15].shade) << 30)
+}
+
+fn pack_window_state(state: WindowState) -> uint<2> {
+    match state {
+        WindowState::Inactive => 0u2,
+        WindowState::ArmedThisFrame => 1u2,
+        WindowState::ActiveOnLine$(win_x: _, win_line: _) => 2u2,
+    }
+}
+
+fn window_win_x(state: WindowState) -> uint<5> {
+    match state {
+        WindowState::ActiveOnLine$(win_x, win_line: _) => win_x,
+        _ => 0u5,
+    }
+}
+
+fn window_win_line(state: WindowState) -> uint<8> {
+    match state {
+        WindowState::ActiveOnLine$(win_x: _, win_line) => win_line,
+        _ => 0u8,
+    }
+}
+
+pub entity fifo_test_top(
+    fifo_count_i: uint<5>,
+    fifo_shades_i: uint<32>,
+    fifo_palette_i: uint<8>,
+    scx_low3_i: uint<3>,
+    discard_scx_i: uint<3>,
+    push_valid_i: bool,
+    push_row_i: uint<16>,
+    push_palette_i: uint<8>,
+    window_state_i: uint<2>,
+    active_win_x_i: uint<5>,
+    active_win_line_i: uint<8>,
+    window_line_i: uint<8>,
+    wy_triggered_i: bool,
+    window_enable_at_mode2_start_i: bool,
+    wx_live_i: uint<8>,
+    x_out_i: uint<8>,
+    frame_start_i: bool,
+    line_start_i: bool,
+    note_window_tile_push_i: bool,
+    win_enable_i: bool,
+) -> uint<76> {
+    let output = advance_bg_pipe(
+        decode_fifo(fifo_count_i, fifo_shades_i, fifo_palette_i),
+        decode_window_state(window_state_i, active_win_x_i, active_win_line_i),
+        window_line_i,
+        build_sampled(scx_low3_i, wy_triggered_i, window_enable_at_mode2_start_i),
+        build_render(wx_live_i, push_palette_i, win_enable_i),
+        x_out_i,
+        frame_start_i,
+        line_start_i,
+        discard_scx_i,
+        push_valid_i,
+        decode_row(push_row_i),
+        push_palette_i,
+    );
+    let window_after =
+        if note_window_tile_push_i { note_window_tile_push(output.next_window_state) } else { output.next_window_state };
+    let pixel = if output.pixel_valid || output.discard_applied { output.pixel } else { zero_bg_pixel() };
+
+    zext(pack_fifo_shades(output.next_fifo))
+        | (zext(output.next_fifo.count) << 32)
+        | (zext(if output.pixel_valid { 1u1 } else { 0u1 }) << 37)
+        | (zext(pixel.shade) << 38)
+        | (zext(pixel.palette) << 40)
+        | (zext(if output.discard_applied { 1u1 } else { 0u1 }) << 48)
+        | (zext(output.next_discard_scx) << 49)
+        | (zext(pack_window_state(window_after)) << 52)
+        | (zext(window_win_x(window_after)) << 54)
+        | (zext(window_win_line(window_after)) << 59)
+        | (zext(output.next_window_line) << 67)
+        | (zext(if output.restart_fetcher { 1u1 } else { 0u1 }) << 75)
+}

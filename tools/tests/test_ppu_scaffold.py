@@ -12,6 +12,7 @@ PPU_RTL_MAIN_PATH = ROOT / "src" / "ppu" / "rtl" / "main.spade"
 PPU_RTL_CORE_PATH = ROOT / "src" / "ppu" / "rtl" / "core.spade"
 PPU_RTL_CORE_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "core_test_top.spade"
 PPU_RTL_FIFO_PATH = ROOT / "src" / "ppu" / "rtl" / "fifo.spade"
+PPU_RTL_FIFO_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "fifo_test_top.spade"
 PPU_RTL_FETCHER_PATH = ROOT / "src" / "ppu" / "rtl" / "fetcher.spade"
 PPU_RTL_FETCHER_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "fetcher_test_top.spade"
 PPU_RTL_IRQ_PATH = ROOT / "src" / "ppu" / "rtl" / "irq.spade"
@@ -40,6 +41,7 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("pub mod core;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod core_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod fifo;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod fifo_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod fetcher;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod fetcher_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod irq;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
@@ -509,6 +511,31 @@ class PpuScaffoldTest(unittest.TestCase):
             "pub fn advance_bg_pipe(",
             "let pre_push_fifo = if window_step.clear_bg_fifo { clear_bg_fifo() } else { fifo };",
             "let popped = pop_bg_fifo(next_fifo, discard_scx);",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_fifo_test_top_provides_projection_surface(self) -> None:
+        text = PPU_RTL_FIFO_TEST_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub entity fifo_test_top(",
+            "fifo_count_i: uint<5>",
+            "fifo_shades_i: uint<32>",
+            "scx_low3_i: uint<3>",
+            "discard_scx_i: uint<3>",
+            "push_row_i: uint<16>",
+            "window_state_i: uint<2>",
+            "active_win_x_i: uint<5>",
+            "active_win_line_i: uint<8>",
+            "window_line_i: uint<8>",
+            "wy_triggered_i: bool",
+            "window_enable_at_mode2_start_i: bool",
+            "wx_live_i: uint<8>",
+            "x_out_i: uint<8>",
+            "line_start_i: bool",
+            "note_window_tile_push_i: bool",
+            "let output = advance_bg_pipe(",
+            "let window_after =",
+            "note_window_tile_push(output.next_window_state)",
         ]:
             self.assertIn(symbol, text)
 
