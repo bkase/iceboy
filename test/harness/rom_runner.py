@@ -43,6 +43,8 @@ from spec.profiles import ModelProfile, ResetProfile, SimulationProfiles
 
 ROOT = Path(__file__).resolve().parents[2]
 ROM_MANIFEST_PATH = ROOT / "bench" / "manifests" / "rom_inventory.yaml"
+SCREEN_WIDTH = 160
+SCREEN_HEIGHT = 144
 
 ABI_SIGNATURE_BASE = 0xC000
 ABI_LOG_BASE = 0xC020
@@ -165,6 +167,126 @@ class MooneyeTerminalState:
     last_pc: int = 0
     failure_triplet: tuple[int, int, int] | None = None
     oracle_history: tuple[tuple[int, int, int, int], ...] = ()
+
+
+def _decode_png_1bit_grayscale(path: Path) -> tuple[tuple[int, ...], ...]:
+    import struct
+    import zlib
+
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError(f"{path} is not a PNG file")
+    offset = 8
+    width = 0
+    height = 0
+    bit_depth = 0
+    color_type = 0
+    idat = bytearray()
+
+    while offset < len(data):
+        chunk_len = struct.unpack(">I", data[offset : offset + 4])[0]
+        chunk_type = data[offset + 4 : offset + 8]
+        chunk_data = data[offset + 8 : offset + 8 + chunk_len]
+        offset += 12 + chunk_len
+        if chunk_type == b"IHDR":
+            width, height, bit_depth, color_type, _compression, _filter, interlace = struct.unpack(
+                ">IIBBBBB", chunk_data
+            )
+            if interlace != 0:
+                raise ValueError(f"{path} uses unsupported interlaced PNG encoding")
+            if bit_depth != 1 or color_type != 0:
+                raise ValueError(
+                    f"{path} must be 1-bit grayscale PNG, got bit_depth={bit_depth} color_type={color_type}"
+                )
+        elif chunk_type == b"IDAT":
+            idat.extend(chunk_data)
+        elif chunk_type == b"IEND":
+            break
+
+    raw = zlib.decompress(bytes(idat))
+    stride = (width * bit_depth + 7) // 8
+    rows: list[tuple[int, ...]] = []
+    cursor = 0
+    prev = bytearray(stride)
+
+    def paeth(a: int, b: int, c: int) -> int:
+        prediction = a + b - c
+        pa = abs(prediction - a)
+        pb = abs(prediction - b)
+        pc = abs(prediction - c)
+        if pa <= pb and pa <= pc:
+            return a
+        if pb <= pc:
+            return b
+        return c
+
+    for _ in range(height):
+        filt = raw[cursor]
+        cursor += 1
+        scan = bytearray(raw[cursor : cursor + stride])
+        cursor += stride
+        if filt == 1:
+            for index in range(stride):
+                scan[index] = (scan[index] + (scan[index - 1] if index else 0)) & 0xFF
+        elif filt == 2:
+            for index in range(stride):
+                scan[index] = (scan[index] + prev[index]) & 0xFF
+        elif filt == 3:
+            for index in range(stride):
+                left = scan[index - 1] if index else 0
+                scan[index] = (scan[index] + ((left + prev[index]) >> 1)) & 0xFF
+        elif filt == 4:
+            for index in range(stride):
+                left = scan[index - 1] if index else 0
+                up = prev[index]
+                up_left = prev[index - 1] if index else 0
+                scan[index] = (scan[index] + paeth(left, up, up_left)) & 0xFF
+        rows.append(tuple((scan[x >> 3] >> (7 - (x & 7))) & 0x1 for x in range(width)))
+        prev = scan
+    return tuple(rows)
+
+
+def _blob_frame_zero() -> list[list[int]]:
+    return [[0 for _ in range(SCREEN_WIDTH)] for _ in range(SCREEN_HEIGHT)]
+
+
+def _freeze_blob_frame(frame: list[list[int]]) -> tuple[tuple[int, ...], ...]:
+    return tuple(tuple(row) for row in frame)
+
+
+def _scanout_blob_bit(shade: int, *, light_shades: frozenset[int]) -> int:
+    return 1 if (int(shade) & 0x3) in light_shades else 0
+
+
+def _capture_blob_pixel(
+    frame: list[list[int]],
+    observation: Any,
+    *,
+    light_shades: frozenset[int],
+) -> None:
+    if not bool(getattr(observation, "ppu_scanout_valid", False)):
+        return
+    if int(getattr(observation, "ppu_scanout_kind", 0)) != 0:
+        return
+    x = int(getattr(observation, "ppu_scanout_x", 0))
+    y = int(getattr(observation, "ppu_scanout_y", 0))
+    if 0 <= x < SCREEN_WIDTH and 0 <= y < SCREEN_HEIGHT:
+        frame[y][x] = _scanout_blob_bit(getattr(observation, "ppu_scanout_shade", 0), light_shades=light_shades)
+
+
+def _blob_frame_mismatch(
+    actual: tuple[tuple[int, ...], ...],
+    expected: tuple[tuple[int, ...], ...],
+) -> tuple[int, tuple[int, int, int, int] | None]:
+    mismatches = 0
+    first = None
+    for y, (actual_row, expected_row) in enumerate(zip(actual, expected)):
+        for x, (actual_bit, expected_bit) in enumerate(zip(actual_row, expected_row)):
+            if actual_bit != expected_bit:
+                mismatches += 1
+                if first is None:
+                    first = (x, y, actual_bit, expected_bit)
+    return mismatches, first
 
 
 class ExternalMemoryBus:
@@ -1135,6 +1257,165 @@ async def _soc_step_to_commit(driver: Any, memory: ExternalMemoryBus) -> tuple[A
     return post, preview_kind, preview_addr, preview_data, video_sample, write_allowed
 
 
+async def _soc_step_to_commit_with_observations(
+    driver: Any,
+    memory: ExternalMemoryBus,
+) -> tuple[Any, int, int, int, Any | None, bool | None, tuple[Any, ...]]:
+    from cocotb.triggers import ClockCycles
+
+    observe = getattr(driver, "observe_rom", driver.observe)
+    step_mcycle = getattr(driver, "step_mcycle_rom", driver.step_mcycle)
+    video_debug = os.environ.get("ICEBOY_SOC_ROM_VIDEO_DEBUG", "").strip().lower() not in {"", "0", "false", "no", "off"}
+    prefinal_observation = None
+    mid_observation = None
+    obs_t0 = observe()
+    scanout_observations = [obs_t0]
+    memory.sync_integrated_ppu(obs_t0)
+
+    def video_access_observation(kind: int, addr: int) -> Any:
+        mode_t0 = int(getattr(obs_t0, "ppu_mode", 0))
+        ly_t0 = int(getattr(obs_t0, "ppu_ly", 0))
+        if ly_t0 == 0 or mid_observation is None:
+            return obs_t0
+        if kind == BUS_REQ_READ:
+            if OAM_BASE <= addr < OAM_BASE + OAM_SIZE and mode_t0 == 0:
+                return mid_observation
+            if VRAM_BASE <= addr < VRAM_BASE + VRAM_SIZE and mode_t0 == 1:
+                return mid_observation
+        if kind == BUS_REQ_WRITE:
+            if OAM_BASE <= addr < OAM_BASE + OAM_SIZE and mode_t0 == 1:
+                return mid_observation
+        return obs_t0
+
+    def video_write_allowed(addr: int) -> bool | None:
+        if not memory.use_integrated_ppu:
+            return None
+        if not (VRAM_BASE <= addr < VRAM_BASE + VRAM_SIZE or OAM_BASE <= addr < OAM_BASE + OAM_SIZE):
+            return None
+        mode_t0 = int(getattr(obs_t0, "ppu_mode", 0))
+        ly_t0 = int(getattr(obs_t0, "ppu_ly", 0))
+        mode_mid = int(getattr(mid_observation, "ppu_mode", mode_t0))
+        if VRAM_BASE <= addr < VRAM_BASE + VRAM_SIZE:
+            return mode_t0 != 2
+        if ly_t0 == 0:
+            return mode_t0 in {0, 3}
+        if mode_t0 in {0, 3}:
+            return True
+        if mode_t0 == 1:
+            return mode_mid == 2
+        return False
+
+    def pending_inputs(observation: Any) -> tuple[int, int, int, int, int, int, Any | None, bool | None]:
+        if all(
+            hasattr(observation, name)
+            for name in ("preview_bus_req_kind", "preview_bus_req_addr", "preview_bus_req_data")
+        ):
+            preview_kind = int(getattr(observation, "preview_bus_req_kind", BUS_REQ_IDLE))
+            preview_addr = int(getattr(observation, "preview_bus_req_addr", 0))
+            preview_data = int(getattr(observation, "preview_bus_req_data", 0))
+        else:
+            preview_kind, preview_addr, preview_data = soc_preview_bus_req(driver)
+        video_sample = None
+        write_allowed = None
+        live_if_bits = (memory.if_reg | memory.integrated_ppu_if_bits) & 0x1F
+        if preview_kind == BUS_REQ_READ:
+            if preview_addr == IF_ADDR:
+                bus_read_data = live_if_bits
+            elif (
+                memory.use_integrated_ppu
+                and LCDC_ADDR <= preview_addr <= WX_ADDR
+                and preview_addr != DMA_ADDR
+            ):
+                bus_read_data = memory.integrated_ppu_mmio_read_from_observation(obs_t0, preview_addr)
+            elif memory.use_integrated_ppu and (
+                VRAM_BASE <= preview_addr < VRAM_BASE + VRAM_SIZE
+                or OAM_BASE <= preview_addr < OAM_BASE + OAM_SIZE
+            ):
+                video_sample = video_access_observation(preview_kind, preview_addr)
+                bus_read_data = memory.integrated_ppu_cpu_read_from_observation(video_sample, preview_addr)
+            else:
+                bus_read_data = memory.read(preview_addr)
+        else:
+            bus_read_data = 0
+            if memory.use_integrated_ppu and (
+                VRAM_BASE <= preview_addr < VRAM_BASE + VRAM_SIZE
+                or OAM_BASE <= preview_addr < OAM_BASE + OAM_SIZE
+            ):
+                video_sample = video_access_observation(preview_kind, preview_addr)
+                write_allowed = video_write_allowed(preview_addr)
+        return (
+            preview_kind,
+            preview_addr,
+            preview_data,
+            bus_read_data & 0xFF,
+            memory.if_reg & 0x1F,
+            memory.ie_reg & 0x1F,
+            video_sample,
+            write_allowed,
+        )
+
+    skip_to_prefinal = 3 if bool(getattr(obs_t0, "m_ce", False)) else max(0, 2 - int(getattr(obs_t0, "t_index", 0)))
+    preview_kind, preview_addr, preview_data, bus_read_data, if_reg, ie_reg, video_sample, write_allowed = pending_inputs(obs_t0)
+    if skip_to_prefinal > 0:
+        driver.inject_stimulus(SimStimulus.idle())
+        driver.set_bus_inputs(bus_read_data=bus_read_data, irq_pending=0, if_reg=if_reg, ie_reg=ie_reg)
+        await ClockCycles(driver.dut.clk_i, 1)
+        mid_observation = observe()
+        scanout_observations.append(mid_observation)
+        if skip_to_prefinal > 1:
+            await ClockCycles(driver.dut.clk_i, skip_to_prefinal - 1)
+            prefinal_observation = observe()
+            scanout_observations.append(prefinal_observation)
+        else:
+            prefinal_observation = mid_observation
+        preview_kind, preview_addr, preview_data, bus_read_data, if_reg, ie_reg, video_sample, write_allowed = pending_inputs(prefinal_observation)
+    if (
+        video_debug
+        and preview_kind in {BUS_REQ_READ, BUS_REQ_WRITE}
+        and (
+            VRAM_BASE <= preview_addr < VRAM_BASE + VRAM_SIZE
+            or OAM_BASE <= preview_addr < OAM_BASE + OAM_SIZE
+        )
+    ):
+        print(
+            "soc-rom-video",
+            {
+                "kind": "write" if preview_kind == BUS_REQ_WRITE else "read",
+                "addr": hex(preview_addr),
+                "data": hex(preview_data),
+                "bus_read_data": hex(bus_read_data),
+                "start_mode": int(getattr(obs_t0, "ppu_mode", 0)),
+                "start_ly": int(getattr(obs_t0, "ppu_ly", 0)),
+                "start_stat": hex(int(getattr(obs_t0, "ppu_stat", 0))),
+                "mid_mode": int(getattr(mid_observation, "ppu_mode", getattr(obs_t0, "ppu_mode", 0))),
+                "mid_ly": int(getattr(mid_observation, "ppu_ly", getattr(obs_t0, "ppu_ly", 0))),
+                "mid_stat": hex(int(getattr(mid_observation, "ppu_stat", getattr(obs_t0, "ppu_stat", 0)))),
+                "prefinal_mode": int(getattr(prefinal_observation, "ppu_mode", getattr(obs_t0, "ppu_mode", 0))),
+                "prefinal_ly": int(getattr(prefinal_observation, "ppu_ly", getattr(obs_t0, "ppu_ly", 0))),
+                "prefinal_stat": hex(int(getattr(prefinal_observation, "ppu_stat", getattr(obs_t0, "ppu_stat", 0)))),
+            },
+            flush=True,
+        )
+    post = await step_mcycle(
+        stimulus=SimStimulus.idle(),
+        bus_read_data=bus_read_data,
+        irq_pending=0,
+        if_reg=if_reg,
+        ie_reg=ie_reg,
+    )
+    scanout_observations.append(post)
+    memory.sync_integrated_ppu(post)
+    return (
+        post,
+        preview_kind,
+        preview_addr,
+        preview_data,
+        video_sample,
+        write_allowed,
+        tuple(scanout_observations),
+    )
+
+
 async def run_dut_to_abi_result(
     driver: Any,
     *,
@@ -1298,6 +1579,103 @@ async def run_soc_dut_to_serial_capture(
         f"last_pc=0x{int(getattr(last_post, 'pc', 0)):04X} "
         f"last_if=0x{memory.if_reg:02X} last_ie=0x{memory.ie_reg:02X} "
         f"serial_len={len(memory.serial_capture)}"
+    )
+
+
+async def run_soc_dut_to_mealybug_blob_frame(
+    driver: Any,
+    *,
+    rom_bytes: bytes,
+    max_mcycles: int,
+    stable_frames: int = 2,
+    light_shades: frozenset[int] = frozenset({0}),
+) -> tuple[tuple[int, ...], ...]:
+    memory = ExternalMemoryBus(rom_bytes, use_integrated_ppu=True)
+    current_frame = _blob_frame_zero()
+    last_completed_frame: tuple[tuple[int, ...], ...] | None = None
+    stable_completed_frames = 0
+    seen_frame_start = False
+    completed_frames = 0
+    last_post = None
+
+    while completed_frames < max_mcycles:
+        post, _preview_kind, _preview_addr, _preview_data, _video_sample, video_write_allowed, observations = (
+            await _soc_step_to_commit_with_observations(driver, memory)
+        )
+        last_post = post
+        completed_frames += 1
+        write_en = int(getattr(post, "bus_req_kind", BUS_REQ_IDLE)) == BUS_REQ_WRITE
+        write_addr = int(getattr(post, "bus_req_addr", 0)) if write_en else 0
+        write_data = int(getattr(post, "bus_req_data", 0)) if write_en else 0
+        if write_en and not (DIV_ADDR <= write_addr <= TAC_ADDR) and write_addr not in (IF_ADDR, IE_ADDR):
+            if video_write_allowed is not None:
+                if video_write_allowed:
+                    memory.write_video_direct(write_addr, write_data)
+            else:
+                memory.write(write_addr, write_data)
+        memory.advance_cycle(
+            write_en=write_en,
+            write_addr=write_addr,
+            write_data=write_data,
+            if_set_bits=0,
+            irq_ack_valid=bool(getattr(post, "irq_ack_valid", False)),
+            irq_ack_bit=int(getattr(post, "irq_ack_bit", 0)),
+        )
+
+        for observation in observations:
+            if not bool(getattr(observation, "ppu_scanout_valid", False)):
+                continue
+            if int(getattr(observation, "ppu_scanout_kind", 0)) == 2:
+                if seen_frame_start:
+                    frozen = _freeze_blob_frame(current_frame)
+                    if frozen == last_completed_frame:
+                        stable_completed_frames += 1
+                    else:
+                        last_completed_frame = frozen
+                        stable_completed_frames = 1
+                    if stable_completed_frames >= stable_frames:
+                        return frozen
+                current_frame = _blob_frame_zero()
+                seen_frame_start = True
+                continue
+            _capture_blob_pixel(current_frame, observation, light_shades=light_shades)
+
+    raise TimeoutError(
+        f"SoC DUT did not stabilize a mealybug frame within {max_mcycles} M-cycles; "
+        f"last_pc=0x{int(getattr(last_post, 'pc', 0)):04X}"
+    )
+
+
+async def assert_mealybug_ppu_soc_rom_matches_reference(
+    driver: Any,
+    *,
+    rom_path: Path,
+    expected_path: Path,
+    max_mcycles: int,
+    light_shades: frozenset[int] = frozenset({0}),
+) -> None:
+    actual = await run_soc_dut_to_mealybug_blob_frame(
+        driver,
+        rom_bytes=rom_path.read_bytes(),
+        max_mcycles=max_mcycles,
+        light_shades=light_shades,
+    )
+    expected = _decode_png_1bit_grayscale(expected_path)
+    if len(expected) != SCREEN_HEIGHT or any(len(row) != SCREEN_WIDTH for row in expected):
+        raise AssertionError(
+            f"{expected_path} must decode to {SCREEN_WIDTH}x{SCREEN_HEIGHT}, "
+            f"got {len(expected[0]) if expected else 0}x{len(expected)}"
+        )
+    mismatches, first = _blob_frame_mismatch(actual, expected)
+    if mismatches == 0:
+        return
+    first_text = ""
+    if first is not None:
+        x, y, actual_bit, expected_bit = first
+        first_text = f" first mismatch at ({x}, {y}): actual={actual_bit} expected={expected_bit}"
+    raise AssertionError(
+        f"mealybug frame mismatch for {rom_path.name} vs {expected_path.name}: "
+        f"{mismatches} pixels differ.{first_text}"
     )
 
 

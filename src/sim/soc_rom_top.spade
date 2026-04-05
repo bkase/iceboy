@@ -6,13 +6,21 @@ use lib::cpu::types::{HaltState, ImeState, IrqPending, Phase, SimulationProfiles
 use lib::ppu::rtl::core::ppu_core;
 use lib::ppu::sem::events::{VideoCoord, idle_oam_dma_state};
 use lib::ppu::sem::memory::idle_ppu_mem_resp;
+use lib::ppu::sem::scanout::{BlankReason, PixelSource, ScanoutEvent};
 use lib::ppu::sem::types::PpuMode;
-use lib::sim::ppu_support::encode_ppu_mode;
+use lib::sim::ppu_support::{encode_ppu_mode, scanout_or_blank};
 use lib::sim::types::{SimStimulus, cpu_arch_time_enable, peripheral_arch_time_enable};
 
 struct SocRomTopOut {
     ppu_vblank_req_window: bool,
     ppu_stat_req_window: bool,
+    ppu_scanout_valid: bool,
+    ppu_scanout_kind: uint<2>,
+    ppu_scanout_x: uint<8>,
+    ppu_scanout_y: uint<8>,
+    ppu_scanout_shade: uint<2>,
+    ppu_scanout_source: uint<2>,
+    ppu_blank_reason: uint<2>,
     ppu_vblank_req: bool,
     ppu_stat_req: bool,
     ppu_mode: uint<3>,
@@ -70,6 +78,69 @@ fn encode_phase(phase: Phase) -> uint<4> {
         Phase::FetchPrefix$(prefix: _) => 8u4,
         Phase::ServiceInterrupt$(irq: _, subphase: _) => 9u4,
         _ => 15u4,
+    }
+}
+
+fn encode_scanout_kind(event: ScanoutEvent) -> uint<2> {
+    match event {
+        ScanoutEvent::Pixel$(emit: _) => 0u2,
+        ScanoutEvent::Blank$(y: _, reason: _) => 1u2,
+        ScanoutEvent::FrameStart => 2u2,
+        ScanoutEvent::LineStart$(y: _) => 3u2,
+    }
+}
+
+fn encode_pixel_source(source: PixelSource) -> uint<2> {
+    match source {
+        PixelSource::Background => 0u2,
+        PixelSource::Window => 1u2,
+        PixelSource::Object => 2u2,
+    }
+}
+
+fn encode_blank_reason(reason: BlankReason) -> uint<2> {
+    match reason {
+        BlankReason::LcdDisabled => 0u2,
+        BlankReason::WarmupBlankFrame => 1u2,
+        BlankReason::NonVisibleLine => 2u2,
+        BlankReason::NonVisibleDot => 3u2,
+    }
+}
+
+fn scanout_x(event: ScanoutEvent) -> uint<8> {
+    match event {
+        ScanoutEvent::Pixel$(emit: emit) => emit.x,
+        _ => 0u8,
+    }
+}
+
+fn scanout_y(event: ScanoutEvent) -> uint<8> {
+    match event {
+        ScanoutEvent::Pixel$(emit: emit) => emit.y,
+        ScanoutEvent::Blank$(y: y, reason: _) => y,
+        ScanoutEvent::LineStart$(y: y) => y,
+        ScanoutEvent::FrameStart => 0u8,
+    }
+}
+
+fn scanout_shade(event: ScanoutEvent) -> uint<2> {
+    match event {
+        ScanoutEvent::Pixel$(emit: emit) => emit.shade,
+        _ => 0u2,
+    }
+}
+
+fn scanout_source(event: ScanoutEvent) -> uint<2> {
+    match event {
+        ScanoutEvent::Pixel$(emit: emit) => encode_pixel_source(emit.source),
+        _ => 0u2,
+    }
+}
+
+fn scanout_blank_reason(event: ScanoutEvent) -> uint<2> {
+    match event {
+        ScanoutEvent::Blank$(y: _, reason: reason) => encode_blank_reason(reason),
+        _ => 0u2,
     }
 }
 
@@ -222,10 +293,18 @@ entity soc_rom_top(
         if_write_value_low2,
         ppu_if_set_low2,
     );
+    let ppu_scanout = scanout_or_blank(ppu.scanout, ppu.visible_trace.ly_after);
 
     SocRomTopOut$(
         ppu_vblank_req_window: ppu_vblank_req_accum || ppu.irq_req.vblank_req,
         ppu_stat_req_window: ppu_stat_req_accum || ppu.irq_req.stat_req,
+        ppu_scanout_valid: ppu_dot_ce,
+        ppu_scanout_kind: encode_scanout_kind(ppu_scanout),
+        ppu_scanout_x: scanout_x(ppu_scanout),
+        ppu_scanout_y: scanout_y(ppu_scanout),
+        ppu_scanout_shade: scanout_shade(ppu_scanout),
+        ppu_scanout_source: scanout_source(ppu_scanout),
+        ppu_blank_reason: scanout_blank_reason(ppu_scanout),
         ppu_vblank_req: ppu.irq_req.vblank_req,
         ppu_stat_req: ppu.irq_req.stat_req,
         ppu_mode: encode_ppu_mode(ppu.visible_trace.mode_after),

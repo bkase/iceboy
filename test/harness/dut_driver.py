@@ -298,6 +298,13 @@ class SoCRomObservation:
 class SoCRomTopObservation:
     ppu_vblank_req_window: bool = False
     ppu_stat_req_window: bool = False
+    ppu_scanout_valid: bool = False
+    ppu_scanout_kind: int = 0
+    ppu_scanout_x: int = 0
+    ppu_scanout_y: int = 0
+    ppu_scanout_shade: int = 0
+    ppu_scanout_source: int = 0
+    ppu_blank_reason: int = 0
     ppu_vblank_req: bool = False
     ppu_stat_req: bool = False
     ppu_mode: int = 0
@@ -328,8 +335,15 @@ class SoCRomTopObservation:
     @classmethod
     def from_output(cls, output_value: int) -> "SoCRomTopObservation":
         return cls(
-            ppu_vblank_req_window=bool((output_value >> 161) & 0x1),
-            ppu_stat_req_window=bool((output_value >> 160) & 0x1),
+            ppu_vblank_req_window=bool((output_value >> 186) & 0x1),
+            ppu_stat_req_window=bool((output_value >> 185) & 0x1),
+            ppu_scanout_valid=bool((output_value >> 184) & 0x1),
+            ppu_scanout_kind=(output_value >> 182) & 0x3,
+            ppu_scanout_x=(output_value >> 174) & 0xFF,
+            ppu_scanout_y=(output_value >> 166) & 0xFF,
+            ppu_scanout_shade=(output_value >> 164) & 0x3,
+            ppu_scanout_source=(output_value >> 162) & 0x3,
+            ppu_blank_reason=(output_value >> 160) & 0x3,
             ppu_vblank_req=bool((output_value >> 159) & 0x1),
             ppu_stat_req=bool((output_value >> 158) & 0x1),
             ppu_mode=(output_value >> 155) & 0x7,

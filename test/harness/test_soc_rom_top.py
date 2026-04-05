@@ -73,12 +73,17 @@ async def test_soc_rom_top_ppu_advances_and_packed_regs_match_arch_state(dut):
     assert start.t_index == 1
     assert start.ppu_mode == 1
     assert start.ppu_ly == 0
+    assert start.ppu_scanout_valid is True
+    assert start.ppu_scanout_kind == 1
+    assert start.ppu_blank_reason == 3
     assert (start.cpu_a, start.cpu_b, start.cpu_c, start.cpu_d, start.cpu_e, start.cpu_h, start.cpu_l) == decode_arch_state_abcdehl(dut)
 
     await ClockCycles(dut.clk_i, 90)
     transfer = driver.observe()
     assert transfer.ppu_ly == 0
     assert transfer.ppu_mode == 2
+    assert transfer.ppu_scanout_valid is True
+    assert transfer.ppu_scanout_y == 0
     assert (transfer.cpu_a, transfer.cpu_b, transfer.cpu_c, transfer.cpu_d, transfer.cpu_e, transfer.cpu_h, transfer.cpu_l) == (
         decode_arch_state_abcdehl(dut)
     )

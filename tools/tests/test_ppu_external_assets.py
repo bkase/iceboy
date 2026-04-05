@@ -12,6 +12,8 @@ SUITE_OWNED_README = ROOT / "bench" / "expected" / "suite_owned" / "README.md"
 HUMAN_REVIEWED_README = ROOT / "bench" / "expected" / "human_reviewed" / "README.md"
 MOONEYE_README = ROOT / "bench" / "external" / "mooneye-test-suite" / "README.md"
 MOONEYE_PPU_ROOT = ROOT / "bench" / "external" / "mooneye-test-suite" / "acceptance" / "ppu"
+MEALYBUG_README = ROOT / "bench" / "external" / "mealybug-tearoom-tests" / "README.md"
+MEALYBUG_PPU_ROOT = ROOT / "bench" / "external" / "mealybug-tearoom-tests" / "ppu"
 
 
 class PpuExternalAssetsTest(unittest.TestCase):
@@ -82,6 +84,17 @@ class PpuExternalAssetsTest(unittest.TestCase):
             "lcdon_write_timing-GS.gb",
         }
         self.assertEqual({path.name for path in MOONEYE_PPU_ROOT.glob("*.gb")}, expected)
+
+    def test_mealybug_wave_b_canary_subset_is_vendored_offline(self) -> None:
+        self.assertIn("70e88fb90b59d19dfbb9c3ac36c64105202bb1f4", MEALYBUG_README.read_text(encoding="utf-8"))
+        expected = {
+            "m2_win_en_toggle.gb",
+            "m3_bgp_change.gb",
+            "m3_scx_high_5_bits.gb",
+            "m3_scx_low_3_bits.gb",
+            "m3_window_timing.gb",
+        }
+        self.assertEqual({path.name for path in MEALYBUG_PPU_ROOT.glob("*.gb")}, expected)
 
 
 if __name__ == "__main__":

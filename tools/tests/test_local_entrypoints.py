@@ -167,6 +167,17 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("soc_rom_top_verilator_wrapper.sv", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
+    def test_ppu_wave_b_mealybug_verilator_wrapper_dry_run_uses_sanitized_verilog_path(self) -> None:
+        completed = self.run_script("run_ppu_wave_b_mealybug_verilator.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("tools/prepare_verilator_sv.py", completed.stdout)
+        self.assertIn("build/spade.verilator.sv", completed.stdout)
+        self.assertIn("soc_rom_top_verilator_wrapper.sv", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+
     def test_oracle_smoke_main_round_trips_snapshot(self) -> None:
         oracle_smoke_main()
 
@@ -303,6 +314,19 @@ class LocalEntrypointsTest(unittest.TestCase):
             clear=False,
         ):
             self.assertEqual(module._max_mcycles_for_rom("lcdon_write_timing-GS.gb"), 1_750_000)
+
+    def test_wave_b_mealybug_budget_allows_env_override(self) -> None:
+        module = load_module_from_path(
+            "test_ppu_wave_b_mealybug_module",
+            ROOT / "test" / "rom" / "test_ppu_wave_b_mealybug.py",
+        )
+        self.assertEqual(module._max_mcycles_for_rom("m3_window_timing.gb"), 400_000)
+        with patch.dict(
+            os.environ,
+            {"ICEBOY_MEALYBUG_MAX_MCYCLES_M3_WINDOW_TIMING_GB": "500000"},
+            clear=False,
+        ):
+            self.assertEqual(module._max_mcycles_for_rom("m3_window_timing.gb"), 500_000)
 
 
 if __name__ == "__main__":

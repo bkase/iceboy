@@ -30,6 +30,9 @@ from test.harness.rom_runner import (
     DutTerminalState,
     ExternalMemoryBus,
     _ScriptedJoypadOracleState,
+    _blob_frame_mismatch,
+    _decode_png_1bit_grayscale,
+    _scanout_blob_bit,
     classify_mooneye_register_signature,
     classify_mooneye_screen_text,
     classify_mooneye_serial_capture,
@@ -40,6 +43,11 @@ from test.harness.rom_runner import (
     mooneye_register_signature,
     soc_mooneye_register_signature,
     soc_preview_bus_req,
+)
+
+
+MEALYBUG_EXPECTED_ROOT = (
+    Path(__file__).resolve().parents[2] / "bench" / "expected" / "suite_owned" / "mealybug-tearoom-tests" / "DMG-blob"
 )
 
 
@@ -404,6 +412,20 @@ class RomRunnerTest(unittest.TestCase):
 
         bus.vram[0x1800 : 0x180F] = b"Fail: r1 step 3"
         self.assertEqual(classify_mooneye_screen_text(bus), "fail")
+
+    def test_decode_png_1bit_grayscale_reads_pinned_mealybug_reference(self) -> None:
+        image = _decode_png_1bit_grayscale(MEALYBUG_EXPECTED_ROOT / "m3_scx_low_3_bits.png")
+        self.assertEqual(len(image), 144)
+        self.assertTrue(all(len(row) == 160 for row in image))
+        self.assertEqual(set(pixel for row in image for pixel in row), {0, 1})
+
+    def test_blob_frame_helpers_report_binary_shades_and_first_mismatch(self) -> None:
+        self.assertEqual(_scanout_blob_bit(0, light_shades=frozenset({0})), 1)
+        self.assertEqual(_scanout_blob_bit(3, light_shades=frozenset({0})), 0)
+
+        actual = ((1, 0), (0, 1))
+        expected = ((1, 1), (0, 1))
+        self.assertEqual(_blob_frame_mismatch(actual, expected), (1, (1, 0, 0, 1)))
 
     def test_external_memory_bus_models_joyp_selection_and_press_edges(self) -> None:
         bus = ExternalMemoryBus(bytes(0x8000))

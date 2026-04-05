@@ -228,7 +228,7 @@ class SimScaffoldTest(unittest.TestCase):
             self.assertIn(symbol, soc_rom_text)
         wrapper_text = SOC_ROM_TOP_WRAPPER_PATH.read_text(encoding="utf-8")
         self.assertIn("module soc_rom_top_verilator_wrapper", wrapper_text)
-        self.assertIn("output [161:0] output__", wrapper_text)
+        self.assertIn("output [186:0] output__", wrapper_text)
         self.assertIn("\\iceboy::sim::soc_rom_top::soc_rom_top  impl (", wrapper_text)
         self.assertIn(".if_reg_i(if_reg_i)", wrapper_text)
         self.assertIn(".ie_reg_i(ie_reg_i)", wrapper_text)
