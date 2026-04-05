@@ -11,6 +11,7 @@ PPU_SEM_MAIN_PATH = ROOT / "src" / "ppu" / "sem" / "main.spade"
 PPU_RTL_MAIN_PATH = ROOT / "src" / "ppu" / "rtl" / "main.spade"
 PPU_RTL_CORE_PATH = ROOT / "src" / "ppu" / "rtl" / "core.spade"
 PPU_RTL_CORE_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "core_test_top.spade"
+PPU_RTL_FIFO_PATH = ROOT / "src" / "ppu" / "rtl" / "fifo.spade"
 PPU_RTL_FETCHER_PATH = ROOT / "src" / "ppu" / "rtl" / "fetcher.spade"
 PPU_RTL_FETCHER_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "fetcher_test_top.spade"
 PPU_RTL_IRQ_PATH = ROOT / "src" / "ppu" / "rtl" / "irq.spade"
@@ -38,6 +39,7 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("pub mod rtl;", PPU_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod core;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod core_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod fifo;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod fetcher;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod fetcher_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod irq;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
@@ -474,6 +476,39 @@ class PpuScaffoldTest(unittest.TestCase):
             "start_bg_fetcher(state, render, visible_ly_i, tile_x_i)",
             "restart_window_fetcher(state, window_line_i)",
             "advance_bg_fetcher(",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_fifo_surface_matches_architecture_contract(self) -> None:
+        text = PPU_RTL_FIFO_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub struct BgFifoPopResult",
+            "next_fifo: BgFifo",
+            "pixel_valid: bool",
+            "pixel: BgPixel",
+            "discard_applied: bool",
+            "next_discard_scx: uint<3>",
+            "pub struct WindowStepOutput",
+            "next_state: WindowState",
+            "next_window_line: uint<8>",
+            "restart_fetcher: bool",
+            "clear_bg_fifo: bool",
+            "pub struct BgPipeOutput",
+            "pub fn bg_fifo_is_empty(fifo: BgFifo) -> bool",
+            "pub fn bg_fifo_has_room_for_row(fifo: BgFifo) -> bool",
+            "pub fn clear_bg_fifo() -> BgFifo",
+            "pub fn push_bg_row(fifo: BgFifo, row: [uint<2>; 8], palette: uint<8>) -> BgFifo",
+            "pub fn pop_bg_fifo(fifo: BgFifo, discard_scx: uint<3>) -> BgFifoPopResult",
+            "pub fn window_enabled_for_line(sampled: PpuSamplingState) -> bool",
+            "pub fn window_triggered(wx_live: uint<8>, x_out: uint<8>) -> bool",
+            "pub fn line_start_window_state(",
+            "pub fn note_window_tile_push(state: WindowState) -> WindowState",
+            "pub fn step_window_state(",
+            "WindowState::ArmedThisFrame",
+            "WindowState::ActiveOnLine$(win_x: 0u5, win_line: window_line)",
+            "pub fn advance_bg_pipe(",
+            "let pre_push_fifo = if window_step.clear_bg_fifo { clear_bg_fifo() } else { fifo };",
+            "let popped = pop_bg_fifo(next_fifo, discard_scx);",
         ]:
             self.assertIn(symbol, text)
 

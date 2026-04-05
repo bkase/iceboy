@@ -1,5 +1,6 @@
 pub mod core;
 pub mod core_test_top;
+pub mod fifo;
 pub mod fetcher;
 pub mod fetcher_test_top;
 pub mod irq;

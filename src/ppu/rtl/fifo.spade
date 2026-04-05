@@ -1,0 +1,410 @@
+use lib::ppu::sem::sample::PpuRenderInputs;
+use lib::ppu::sem::types::{
+    BgFifo,
+    BgPixel,
+    PpuSamplingState,
+    WindowState,
+    empty_bg_fifo,
+    zero_bg_pixel,
+};
+
+pub struct BgFifoPopResult {
+    next_fifo: BgFifo,
+    pixel_valid: bool,
+    pixel: BgPixel,
+    discard_applied: bool,
+    next_discard_scx: uint<3>,
+}
+
+pub struct WindowStepOutput {
+    next_state: WindowState,
+    next_window_line: uint<8>,
+    restart_fetcher: bool,
+    clear_bg_fifo: bool,
+}
+
+pub struct BgPipeOutput {
+    next_fifo: BgFifo,
+    next_window_state: WindowState,
+    next_window_line: uint<8>,
+    next_discard_scx: uint<3>,
+    pixel_valid: bool,
+    pixel: BgPixel,
+    restart_fetcher: bool,
+    discard_applied: bool,
+}
+
+fn build_bg_pixel(shade: uint<2>, palette: uint<8>) -> BgPixel {
+    BgPixel$(shade: shade, palette: palette)
+}
+
+fn row_pixels(row: [uint<2>; 8], palette: uint<8>) -> [BgPixel; 8] {
+    [
+        build_bg_pixel(row[0], palette),
+        build_bg_pixel(row[1], palette),
+        build_bg_pixel(row[2], palette),
+        build_bg_pixel(row[3], palette),
+        build_bg_pixel(row[4], palette),
+        build_bg_pixel(row[5], palette),
+        build_bg_pixel(row[6], palette),
+        build_bg_pixel(row[7], palette),
+    ]
+}
+
+pub fn bg_fifo_is_empty(fifo: BgFifo) -> bool {
+    fifo.count == 0u5
+}
+
+pub fn bg_fifo_has_room_for_row(fifo: BgFifo) -> bool {
+    fifo.count <= 8u5
+}
+
+pub fn clear_bg_fifo() -> BgFifo {
+    empty_bg_fifo()
+}
+
+pub fn push_bg_row(fifo: BgFifo, row: [uint<2>; 8], palette: uint<8>) -> BgFifo {
+    let pushed = row_pixels(row, palette);
+    match fifo.count {
+        0u5 => BgFifo$(
+            count: 8u5,
+            pixels: [
+                pushed[0],
+                pushed[1],
+                pushed[2],
+                pushed[3],
+                pushed[4],
+                pushed[5],
+                pushed[6],
+                pushed[7],
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+            ],
+        ),
+        1u5 => BgFifo$(
+            count: 9u5,
+            pixels: [
+                fifo.pixels[0],
+                pushed[0],
+                pushed[1],
+                pushed[2],
+                pushed[3],
+                pushed[4],
+                pushed[5],
+                pushed[6],
+                pushed[7],
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+            ],
+        ),
+        2u5 => BgFifo$(
+            count: 10u5,
+            pixels: [
+                fifo.pixels[0],
+                fifo.pixels[1],
+                pushed[0],
+                pushed[1],
+                pushed[2],
+                pushed[3],
+                pushed[4],
+                pushed[5],
+                pushed[6],
+                pushed[7],
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+            ],
+        ),
+        3u5 => BgFifo$(
+            count: 11u5,
+            pixels: [
+                fifo.pixels[0],
+                fifo.pixels[1],
+                fifo.pixels[2],
+                pushed[0],
+                pushed[1],
+                pushed[2],
+                pushed[3],
+                pushed[4],
+                pushed[5],
+                pushed[6],
+                pushed[7],
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+            ],
+        ),
+        4u5 => BgFifo$(
+            count: 12u5,
+            pixels: [
+                fifo.pixels[0],
+                fifo.pixels[1],
+                fifo.pixels[2],
+                fifo.pixels[3],
+                pushed[0],
+                pushed[1],
+                pushed[2],
+                pushed[3],
+                pushed[4],
+                pushed[5],
+                pushed[6],
+                pushed[7],
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+            ],
+        ),
+        5u5 => BgFifo$(
+            count: 13u5,
+            pixels: [
+                fifo.pixels[0],
+                fifo.pixels[1],
+                fifo.pixels[2],
+                fifo.pixels[3],
+                fifo.pixels[4],
+                pushed[0],
+                pushed[1],
+                pushed[2],
+                pushed[3],
+                pushed[4],
+                pushed[5],
+                pushed[6],
+                pushed[7],
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+            ],
+        ),
+        6u5 => BgFifo$(
+            count: 14u5,
+            pixels: [
+                fifo.pixels[0],
+                fifo.pixels[1],
+                fifo.pixels[2],
+                fifo.pixels[3],
+                fifo.pixels[4],
+                fifo.pixels[5],
+                pushed[0],
+                pushed[1],
+                pushed[2],
+                pushed[3],
+                pushed[4],
+                pushed[5],
+                pushed[6],
+                pushed[7],
+                zero_bg_pixel(),
+                zero_bg_pixel(),
+            ],
+        ),
+        7u5 => BgFifo$(
+            count: 15u5,
+            pixels: [
+                fifo.pixels[0],
+                fifo.pixels[1],
+                fifo.pixels[2],
+                fifo.pixels[3],
+                fifo.pixels[4],
+                fifo.pixels[5],
+                fifo.pixels[6],
+                pushed[0],
+                pushed[1],
+                pushed[2],
+                pushed[3],
+                pushed[4],
+                pushed[5],
+                pushed[6],
+                pushed[7],
+                zero_bg_pixel(),
+            ],
+        ),
+        8u5 => BgFifo$(
+            count: 16u5,
+            pixels: [
+                fifo.pixels[0],
+                fifo.pixels[1],
+                fifo.pixels[2],
+                fifo.pixels[3],
+                fifo.pixels[4],
+                fifo.pixels[5],
+                fifo.pixels[6],
+                fifo.pixels[7],
+                pushed[0],
+                pushed[1],
+                pushed[2],
+                pushed[3],
+                pushed[4],
+                pushed[5],
+                pushed[6],
+                pushed[7],
+            ],
+        ),
+        _ => fifo,
+    }
+}
+
+fn pop_pixels(fifo: BgFifo) -> [BgPixel; 16] {
+    [
+        fifo.pixels[1],
+        fifo.pixels[2],
+        fifo.pixels[3],
+        fifo.pixels[4],
+        fifo.pixels[5],
+        fifo.pixels[6],
+        fifo.pixels[7],
+        fifo.pixels[8],
+        fifo.pixels[9],
+        fifo.pixels[10],
+        fifo.pixels[11],
+        fifo.pixels[12],
+        fifo.pixels[13],
+        fifo.pixels[14],
+        fifo.pixels[15],
+        zero_bg_pixel(),
+    ]
+}
+
+pub fn pop_bg_fifo(fifo: BgFifo, discard_scx: uint<3>) -> BgFifoPopResult {
+    if bg_fifo_is_empty(fifo) {
+        BgFifoPopResult$(
+            next_fifo: fifo,
+            pixel_valid: false,
+            pixel: zero_bg_pixel(),
+            discard_applied: false,
+            next_discard_scx: discard_scx,
+        )
+    } else {
+        let pixel = fifo.pixels[0];
+        let next_fifo = BgFifo$(count: trunc(fifo.count - 1u5), pixels: pop_pixels(fifo));
+        let discard = discard_scx > 0u3;
+        BgFifoPopResult$(
+            next_fifo: next_fifo,
+            pixel_valid: !discard,
+            pixel: pixel,
+            discard_applied: discard,
+            next_discard_scx: if discard { trunc(discard_scx - 1u3) } else { discard_scx },
+        )
+    }
+}
+
+pub fn window_enabled_for_line(sampled: PpuSamplingState) -> bool {
+    sampled.window_enable_at_mode2_start && sampled.wy_triggered_this_frame
+}
+
+pub fn window_triggered(wx_live: uint<8>, x_out: uint<8>) -> bool {
+    let lhs: uint<10> = trunc(zext(x_out) + 7u10);
+    let rhs: uint<10> = zext(wx_live);
+    lhs >= rhs
+}
+
+pub fn line_start_window_state(
+    state: WindowState,
+    sampled: PpuSamplingState,
+    frame_start: bool,
+    line_start: bool,
+) -> WindowState {
+    if frame_start {
+        WindowState::Inactive
+    } else if line_start {
+        if window_enabled_for_line(sampled) {
+            WindowState::ArmedThisFrame
+        } else {
+            WindowState::Inactive
+        }
+    } else {
+        state
+    }
+}
+
+pub fn note_window_tile_push(state: WindowState) -> WindowState {
+    match state {
+        WindowState::ActiveOnLine$(win_x, win_line) => WindowState::ActiveOnLine$(win_x: trunc(win_x + 1u5), win_line: win_line),
+        _ => state,
+    }
+}
+
+pub fn step_window_state(
+    state: WindowState,
+    window_line: uint<8>,
+    sampled: PpuSamplingState,
+    render: PpuRenderInputs,
+    x_out: uint<8>,
+    frame_start: bool,
+    line_start: bool,
+) -> WindowStepOutput {
+    let armed = line_start_window_state(state, sampled, frame_start, line_start);
+    if window_triggered(render.wx_live, x_out) {
+        match armed {
+            WindowState::ArmedThisFrame => WindowStepOutput$(
+                next_state: WindowState::ActiveOnLine$(win_x: 0u5, win_line: window_line),
+                next_window_line: trunc(window_line + 1u8),
+                restart_fetcher: true,
+                clear_bg_fifo: true,
+            ),
+            _ => WindowStepOutput$(
+                next_state: armed,
+                next_window_line: if frame_start { 0u8 } else { window_line },
+                restart_fetcher: false,
+                clear_bg_fifo: false,
+            ),
+        }
+    } else {
+        WindowStepOutput$(
+            next_state: armed,
+            next_window_line: if frame_start { 0u8 } else { window_line },
+            restart_fetcher: false,
+            clear_bg_fifo: false,
+        )
+    }
+}
+
+pub fn advance_bg_pipe(
+    fifo: BgFifo,
+    window_state: WindowState,
+    window_line: uint<8>,
+    sampled: PpuSamplingState,
+    render: PpuRenderInputs,
+    x_out: uint<8>,
+    frame_start: bool,
+    line_start: bool,
+    discard_scx: uint<3>,
+    push_valid: bool,
+    push_row: [uint<2>; 8],
+    push_palette: uint<8>,
+) -> BgPipeOutput {
+    let window_step = step_window_state(window_state, window_line, sampled, render, x_out, frame_start, line_start);
+    let pre_push_fifo = if window_step.clear_bg_fifo { clear_bg_fifo() } else { fifo };
+    let next_fifo =
+        if push_valid && bg_fifo_has_room_for_row(pre_push_fifo) {
+            push_bg_row(pre_push_fifo, push_row, push_palette)
+        } else {
+            pre_push_fifo
+        };
+    let popped = pop_bg_fifo(next_fifo, discard_scx);
+    BgPipeOutput$(
+        next_fifo: popped.next_fifo,
+        next_window_state: window_step.next_state,
+        next_window_line: window_step.next_window_line,
+        next_discard_scx: popped.next_discard_scx,
+        pixel_valid: popped.pixel_valid,
+        pixel: popped.pixel,
+        restart_fetcher: window_step.restart_fetcher,
+        discard_applied: popped.discard_applied,
+    )
+}
