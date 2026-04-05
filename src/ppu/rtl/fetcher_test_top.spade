@@ -1,0 +1,214 @@
+use lib::ppu::rtl::fetcher::{advance_bg_fetcher, initial_bg_fetcher_state, restart_window_fetcher, start_bg_fetcher};
+use lib::ppu::sem::memory::{MemClient, MemRegion, MemTxnTag, PendingRead, PpuMemResp, PpuMemResult};
+use lib::ppu::sem::sample::PpuRenderInputs;
+use lib::ppu::sem::types::{FetcherSource, FetcherState, FetcherStep, Lcdc};
+
+fn build_lcdc(bg_map_hi_i: bool, win_map_hi_i: bool, bgwin_data_hi_i: bool) -> Lcdc {
+    Lcdc$(
+        lcd_enable: true,
+        win_map_hi: win_map_hi_i,
+        win_enable: true,
+        bgwin_data_hi: bgwin_data_hi_i,
+        bg_map_hi: bg_map_hi_i,
+        obj_size_8x16: false,
+        obj_enable: false,
+        bg_enable: true,
+    )
+}
+
+fn decode_source(source_i: uint<2>) -> FetcherSource {
+    match source_i {
+        1u2 => FetcherSource::Window,
+        2u2 => FetcherSource::Object,
+        _ => FetcherSource::Background,
+    }
+}
+
+fn decode_step(step_i: uint<3>) -> FetcherStep {
+    match step_i {
+        1u3 => FetcherStep::GetLo,
+        2u3 => FetcherStep::GetHi,
+        3u3 => FetcherStep::Sleep,
+        4u3 => FetcherStep::Push,
+        _ => FetcherStep::GetTile,
+    }
+}
+
+fn build_render_inputs(
+    bg_map_hi_i: bool,
+    win_map_hi_i: bool,
+    bgwin_data_hi_i: bool,
+    scx_fetch_i: uint<8>,
+    scy_fetch_i: uint<8>,
+) -> PpuRenderInputs {
+    PpuRenderInputs$(
+        lcdc_fetch: build_lcdc(bg_map_hi_i, win_map_hi_i, bgwin_data_hi_i),
+        scx_fetch: scx_fetch_i,
+        scy_fetch: scy_fetch_i,
+        scx_low3_line: 0u3,
+        wx_live: 0u8,
+        wy_triggered_this_frame: false,
+        bgp_pop: 0u8,
+        obp0_pop: 0u8,
+        obp1_pop: 0u8,
+        lyc_eq_live: false,
+    )
+}
+
+fn build_state(
+    epoch_i: uint<4>,
+    source_i: uint<2>,
+    step_i: uint<3>,
+    tile_id_i: uint<8>,
+    tile_lo_i: uint<8>,
+    tile_hi_i: uint<8>,
+    map_x_i: uint<5>,
+    map_y_i: uint<5>,
+    row_i: uint<3>,
+    pending_push_i: bool,
+    pending_valid_i: bool,
+    pending_id_i: uint<4>,
+    pending_epoch_i: uint<4>,
+) -> FetcherState {
+    FetcherState$(
+        epoch: epoch_i,
+        source: decode_source(source_i),
+        step: decode_step(step_i),
+        tile_id: tile_id_i,
+        tile_lo: tile_lo_i,
+        tile_hi: tile_hi_i,
+        map_x: map_x_i,
+        map_y: map_y_i,
+        row: row_i,
+        pending_push: pending_push_i,
+        pending_valid: pending_valid_i,
+        pending_read: PendingRead$(
+            tag: MemTxnTag$(region: MemRegion::Vram, client: MemClient::BgFetcher, id: pending_id_i),
+            epoch: pending_epoch_i,
+        ),
+    )
+}
+
+fn build_resp(resp_valid_i: bool, resp_id_i: uint<4>, resp_data_i: uint<8>) -> PpuMemResp {
+    let result = if resp_valid_i { PpuMemResult::Ok$(data: resp_data_i) } else { PpuMemResult::Denied };
+    PpuMemResp$(tag: MemTxnTag$(region: MemRegion::Vram, client: MemClient::BgFetcher, id: resp_id_i), result: result)
+}
+
+fn pack_row(row: [uint<2>; 8]) -> uint<16> {
+    zext(row[0])
+        | (zext(row[1]) << 2)
+        | (zext(row[2]) << 4)
+        | (zext(row[3]) << 6)
+        | (zext(row[4]) << 8)
+        | (zext(row[5]) << 10)
+        | (zext(row[6]) << 12)
+        | (zext(row[7]) << 14)
+}
+
+fn pack_source(source: FetcherSource) -> uint<2> {
+    match source {
+        FetcherSource::Background => 0u2,
+        FetcherSource::Window => 1u2,
+        FetcherSource::Object => 2u2,
+    }
+}
+
+fn pack_step(step: FetcherStep) -> uint<3> {
+    match step {
+        FetcherStep::GetTile => 0u3,
+        FetcherStep::GetLo => 1u3,
+        FetcherStep::GetHi => 2u3,
+        FetcherStep::Sleep => 3u3,
+        FetcherStep::Push => 4u3,
+    }
+}
+
+pub entity fetcher_test_top(
+    mode_i: uint<2>,
+    bg_map_hi_i: bool,
+    win_map_hi_i: bool,
+    bgwin_data_hi_i: bool,
+    scx_fetch_i: uint<8>,
+    scy_fetch_i: uint<8>,
+    visible_ly_i: uint<8>,
+    tile_x_i: uint<5>,
+    window_line_i: uint<8>,
+    epoch_i: uint<4>,
+    source_i: uint<2>,
+    step_i: uint<3>,
+    tile_id_i: uint<8>,
+    tile_lo_i: uint<8>,
+    tile_hi_i: uint<8>,
+    map_x_i: uint<5>,
+    map_y_i: uint<5>,
+    row_i: uint<3>,
+    pending_push_i: bool,
+    pending_valid_i: bool,
+    pending_id_i: uint<4>,
+    pending_epoch_i: uint<4>,
+    fifo_has_room_i: bool,
+    resp_valid_i: bool,
+    resp_id_i: uint<4>,
+    resp_data_i: uint<8>,
+    restart_line_i: bool,
+    window_restart_i: bool,
+    fetch_cancel_i: bool,
+    lcd_disable_i: bool,
+) -> uint<95> {
+    let render = build_render_inputs(bg_map_hi_i, win_map_hi_i, bgwin_data_hi_i, scx_fetch_i, scy_fetch_i);
+    let state = build_state(
+        epoch_i,
+        source_i,
+        step_i,
+        tile_id_i,
+        tile_lo_i,
+        tile_hi_i,
+        map_x_i,
+        map_y_i,
+        row_i,
+        pending_push_i,
+        pending_valid_i,
+        pending_id_i,
+        pending_epoch_i,
+    );
+    let seeded = match mode_i {
+        1u2 => start_bg_fetcher(state, render, visible_ly_i, tile_x_i),
+        2u2 => restart_window_fetcher(state, window_line_i),
+        _ => initial_bg_fetcher_state(),
+    };
+    let active_state = if mode_i == 0u2 { state } else { seeded };
+    let output = advance_bg_fetcher(
+        active_state,
+        render,
+        visible_ly_i,
+        tile_x_i,
+        window_line_i,
+        fifo_has_room_i,
+        resp_valid_i,
+        build_resp(resp_valid_i, resp_id_i, resp_data_i),
+        restart_line_i,
+        window_restart_i,
+        fetch_cancel_i,
+        lcd_disable_i,
+    );
+
+    zext(output.req.addr)
+        | (zext(if output.req_valid { 1u1 } else { 0u1 }) << 16)
+        | (zext(output.req.tag.id) << 17)
+        | (zext(output.next_state.epoch) << 21)
+        | (zext(pack_source(output.next_state.source)) << 25)
+        | (zext(pack_step(output.next_state.step)) << 27)
+        | (zext(output.next_state.tile_id) << 30)
+        | (zext(output.next_state.tile_lo) << 38)
+        | (zext(output.next_state.tile_hi) << 46)
+        | (zext(output.next_state.map_x) << 54)
+        | (zext(output.next_state.map_y) << 59)
+        | (zext(output.next_state.row) << 64)
+        | (zext(if output.next_state.pending_push { 1u1 } else { 0u1 }) << 67)
+        | (zext(if output.next_state.pending_valid { 1u1 } else { 0u1 }) << 68)
+        | (zext(output.next_state.pending_read.tag.id) << 69)
+        | (zext(output.next_state.pending_read.epoch) << 73)
+        | (zext(if output.push_valid { 1u1 } else { 0u1 }) << 77)
+        | (zext(if output.stale_resp { 1u1 } else { 0u1 }) << 78)
+        | (zext(pack_row(output.push_row)) << 79)
+}

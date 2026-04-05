@@ -11,6 +11,8 @@ PPU_SEM_MAIN_PATH = ROOT / "src" / "ppu" / "sem" / "main.spade"
 PPU_RTL_MAIN_PATH = ROOT / "src" / "ppu" / "rtl" / "main.spade"
 PPU_RTL_CORE_PATH = ROOT / "src" / "ppu" / "rtl" / "core.spade"
 PPU_RTL_CORE_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "core_test_top.spade"
+PPU_RTL_FETCHER_PATH = ROOT / "src" / "ppu" / "rtl" / "fetcher.spade"
+PPU_RTL_FETCHER_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "fetcher_test_top.spade"
 PPU_RTL_IRQ_PATH = ROOT / "src" / "ppu" / "rtl" / "irq.spade"
 PPU_RTL_IRQ_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "irq_test_top.spade"
 PPU_RTL_REGS_PATH = ROOT / "src" / "ppu" / "rtl" / "regs.spade"
@@ -36,6 +38,8 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("pub mod rtl;", PPU_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod core;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod core_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod fetcher;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod fetcher_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod irq;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod irq_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod regs;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
@@ -162,6 +166,10 @@ class PpuScaffoldTest(unittest.TestCase):
             "dot_in_line: uint<9>",
             "line_objs: LineObjList",
             "fetcher: FetcherState",
+            "tile_lo: uint<8>",
+            "tile_hi: uint<8>",
+            "pending_valid: bool",
+            "pending_read: PendingRead",
             "bg_fifo: BgFifo",
             "obj_fifo: ObjFifo",
             "pub struct PpuState",
@@ -402,6 +410,7 @@ class PpuScaffoldTest(unittest.TestCase):
         text = PPU_SAMPLE_PATH.read_text(encoding="utf-8")
         for symbol in [
             "pub struct PpuRenderInputs",
+            "lcdc_fetch: Lcdc",
             "scx_fetch: uint<8>",
             "scy_fetch: uint<8>",
             "scx_low3_line: uint<3>",
@@ -418,7 +427,53 @@ class PpuScaffoldTest(unittest.TestCase):
             "pub fn sample_render_inputs(",
             "phase: PpuPhase",
             "PpuPhase::Transfer$(x_out: _, discard_scx: _)",
+            "lcdc_fetch: fetch_regs.lcdc",
             "lyc_eq_live: visible.ly == visible.regs.lyc",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_fetcher_surface_matches_architecture_contract(self) -> None:
+        text = PPU_RTL_FETCHER_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub struct BgFetcherOutput",
+            "next_state: FetcherState",
+            "req_valid: bool",
+            "req: PpuMemReq",
+            "push_valid: bool",
+            "push_row: [uint<2>; 8]",
+            "stale_resp: bool",
+            "pub fn next_fetcher_epoch(epoch: uint<4>) -> uint<4>",
+            "pub fn start_bg_fetcher(state: FetcherState, render: PpuRenderInputs, visible_ly: uint<8>, tile_x: uint<5>) -> FetcherState",
+            "pub fn restart_window_fetcher(state: FetcherState, window_line: uint<8>) -> FetcherState",
+            "pub fn invalidate_fetcher(",
+            "pub fn advance_bg_fetcher(",
+            "MemClient::BgFetcher",
+            "FetcherStep::GetTile",
+            "FetcherStep::GetLo",
+            "FetcherStep::GetHi",
+            "FetcherStep::Sleep",
+            "FetcherStep::Push",
+            "state.pending_read.epoch != state.epoch",
+            "decode_tile_row(state.tile_lo, state.tile_hi)",
+            "bgwin_tile_addr(render.lcdc_fetch, tile_id, row)",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_fetcher_test_top_provides_projection_surface(self) -> None:
+        text = PPU_RTL_FETCHER_TEST_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub entity fetcher_test_top(",
+            "mode_i: uint<2>",
+            "window_line_i: uint<8>",
+            "pending_epoch_i: uint<4>",
+            "resp_id_i: uint<4>",
+            "restart_line_i: bool",
+            "window_restart_i: bool",
+            "fetch_cancel_i: bool",
+            "lcd_disable_i: bool",
+            "start_bg_fetcher(state, render, visible_ly_i, tile_x_i)",
+            "restart_window_fetcher(state, window_line_i)",
+            "advance_bg_fetcher(",
         ]:
             self.assertIn(symbol, text)
 

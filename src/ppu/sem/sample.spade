@@ -1,6 +1,7 @@
-use lib::ppu::sem::types::{PpuPhase, PpuSamplingState, PpuVisibleState};
+use lib::ppu::sem::types::{Lcdc, PpuPhase, PpuSamplingState, PpuVisibleState};
 
 pub struct PpuRenderInputs {
+    lcdc_fetch: Lcdc,
     scx_fetch: uint<8>,
     scy_fetch: uint<8>,
     scx_low3_line: uint<3>,
@@ -37,6 +38,7 @@ pub fn sample_render_inputs(
         PpuPhase::LcdOff => visible.regs,
     };
     PpuRenderInputs$(
+        lcdc_fetch: fetch_regs.lcdc,
         scx_fetch: fetch_regs.scx,
         scy_fetch: fetch_regs.scy,
         scx_low3_line: sampled.scx_low3_line,

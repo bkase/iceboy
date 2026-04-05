@@ -1,3 +1,5 @@
+use lib::ppu::sem::memory::{PendingRead, idle_pending_read};
+
 pub enum PpuMode {
     HBlank,
     VBlank,
@@ -133,10 +135,14 @@ pub struct FetcherState {
     source: FetcherSource,
     step: FetcherStep,
     tile_id: uint<8>,
+    tile_lo: uint<8>,
+    tile_hi: uint<8>,
     map_x: uint<5>,
     map_y: uint<5>,
     row: uint<3>,
     pending_push: bool,
+    pending_valid: bool,
+    pending_read: PendingRead,
 }
 
 pub struct BgPixel {
@@ -262,10 +268,14 @@ pub fn initial_fetcher_state() -> FetcherState {
         source: FetcherSource::Background,
         step: FetcherStep::GetTile,
         tile_id: 0u8,
+        tile_lo: 0u8,
+        tile_hi: 0u8,
         map_x: 0u5,
         map_y: 0u5,
         row: 0u3,
         pending_push: false,
+        pending_valid: false,
+        pending_read: idle_pending_read(),
     )
 }
 
