@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import os
 import stat
 import subprocess
@@ -7,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,6 +47,15 @@ def make_fake_tool(directory: Path, name: str, version: str) -> Path:
     )
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
     return path
+
+
+def load_module_from_path(module_name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"failed to load module spec for {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class LocalEntrypointsTest(unittest.TestCase):
@@ -278,6 +289,19 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("top=ppu_core", completed.stdout)
         self.assertTrue((ROOT / "tools" / "check_ppu_equivalence.sh").exists())
         self.assertTrue((ROOT / "formal" / "ppu" / "equivalence" / "ppu_refactor.eqy").exists())
+
+    def test_wave_a_mooneye_write_timing_budget_allows_env_override(self) -> None:
+        module = load_module_from_path(
+            "test_ppu_wave_a_mooneye_module",
+            ROOT / "test" / "rom" / "test_ppu_wave_a_mooneye.py",
+        )
+        self.assertEqual(module._max_mcycles_for_rom("lcdon_write_timing-GS.gb"), 1_500_000)
+        with patch.dict(
+            os.environ,
+            {"ICEBOY_MOONEYE_MAX_MCYCLES_LCDON_WRITE_TIMING_GS_GB": "1750000"},
+            clear=False,
+        ):
+            self.assertEqual(module._max_mcycles_for_rom("lcdon_write_timing-GS.gb"), 1_750_000)
 
 
 if __name__ == "__main__":
