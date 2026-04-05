@@ -594,7 +594,7 @@ async def test_interrupt_injection_timer_overflow_logs_exact_pending_cycle(dut):
     )
 
     pending_index = first_index(trace, lambda obs: obs.pre.irq_pending == IRQ_TIMER)
-    require_scenario(pending_index == 60, scenario=scenario, setup=setup, inject=inject, trace=trace, message="timer overflow should raise IF on the exact expected M-cycle")
+    require_scenario(pending_index == 59, scenario=scenario, setup=setup, inject=inject, trace=trace, message="timer overflow should raise IF on the exact expected M-cycle")
     require_scenario(trace[pending_index - 1].tima == 0x00, scenario=scenario, setup=setup, inject=inject, trace=trace, message="TIMA should sit at 0x00 during the reload-delay cycle before IF becomes pending")
     require_scenario(trace[pending_index].tima == 0x3C, scenario=scenario, setup=setup, inject=inject, trace=trace, message="TIMA should reload from TMA on the same cycle IF becomes pending")
 

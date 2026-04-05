@@ -206,6 +206,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/rom/test_mbc3_ram.py"', text)
         self.assertIn('"test/rom/test_mbc3_switch.py"', text)
         self.assertIn('"test/rom/test_ppu_wave_a.py"', text)
+        self.assertIn('"test/rom/test_ppu_wave_b.py"', text)
         self.assertIn('"tools/run_ppu_wave_a_mooneye_verilator.sh"', text)
         self.assertIn('"test/rom/test_timer_div_basic.py"', text)
         self.assertIn('"test/rom/test_timer_irq_halt.py"', text)

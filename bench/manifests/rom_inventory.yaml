@@ -318,36 +318,123 @@ roms:
   - id: BG_STATIC
     <<: *dmg_entry
     path: bench/roms/out/BG_STATIC.gb
-    rom_sha256: null
+    rom_sha256: 741009624b427522c21688b4a3f758083ce578c6eb28bde85034e19b86b97ac7
     requires: [cpu, ppu]
     oracle_mode: frame_hash
     raster_event_coord_space: frame_line_dot
     timeout_commits: 600000
-    checkpoint_symbols: []
+    checkpoint_symbols: [__checkpoint_scene_ready]
     compare_scope:
       domains: [frame_hash]
 
-  - id: BG_SCROLL_SIGNED
+  - id: BG_SCROLL_WRAP
     <<: *dmg_entry
-    path: bench/roms/out/BG_SCROLL_SIGNED.gb
-    rom_sha256: null
+    path: bench/roms/out/BG_SCROLL_WRAP.gb
+    rom_sha256: 2ebdf27803a33bc3823960e9d6b47a0b59ed3015768da36478a34bc01e744f26
     requires: [cpu, ppu]
     oracle_mode: frame_hash
     raster_event_coord_space: frame_line_dot
     timeout_commits: 600000
-    checkpoint_symbols: []
+    checkpoint_symbols: [__checkpoint_scene_ready]
     compare_scope:
       domains: [frame_hash]
 
-  - id: PPU_WINDOW
+  - id: BG_SIGNED_ADDR
     <<: *dmg_entry
-    path: bench/roms/out/PPU_WINDOW.gb
-    rom_sha256: null
+    path: bench/roms/out/BG_SIGNED_ADDR.gb
+    rom_sha256: 0c1f582eed4d2a9c216c8bdc43026702ab2fdd4158174f35f194e7749d40d750
     requires: [cpu, ppu]
     oracle_mode: frame_hash
     raster_event_coord_space: frame_line_dot
     timeout_commits: 600000
-    checkpoint_symbols: []
+    checkpoint_symbols: [__checkpoint_scene_ready]
+    compare_scope:
+      domains: [frame_hash]
+
+  - id: WINDOW_BASIC
+    <<: *dmg_entry
+    path: bench/roms/out/WINDOW_BASIC.gb
+    rom_sha256: 8b21101e347fac7ae69d54860e71d597ceccaf3210c3003ce04d8d3142138162
+    requires: [cpu, ppu]
+    oracle_mode: frame_hash
+    raster_event_coord_space: frame_line_dot
+    timeout_commits: 600000
+    checkpoint_symbols: [__checkpoint_scene_ready]
+    compare_scope:
+      domains: [frame_hash]
+
+  - id: WINDOW_LINE_COUNTER
+    <<: *dmg_entry
+    path: bench/roms/out/WINDOW_LINE_COUNTER.gb
+    rom_sha256: 57d071078f2979679c4f2842f0e9834c804d7f167d9fe58a16b22cb1ef46a047
+    requires: [cpu, ppu]
+    oracle_mode: frame_hash
+    raster_event_coord_space: frame_line_dot
+    timeout_commits: 600000
+    checkpoint_symbols: [__checkpoint_scene_ready]
+    compare_scope:
+      domains: [frame_hash]
+
+  - id: WINDOW_WX_WY_EDGE
+    <<: *dmg_entry
+    path: bench/roms/out/WINDOW_WX_WY_EDGE.gb
+    rom_sha256: 4c6fb4917f993ea5552b42daea862837e78bfda2b932ffa751fd937024209a98
+    requires: [cpu, ppu]
+    oracle_mode: frame_hash
+    raster_event_coord_space: frame_line_dot
+    timeout_commits: 600000
+    checkpoint_symbols: [__checkpoint_scene_ready]
+    compare_scope:
+      domains: [frame_hash]
+
+  - id: WINDOW_WX0_STUTTER
+    <<: *dmg_entry
+    path: bench/roms/out/WINDOW_WX0_STUTTER.gb
+    rom_sha256: f03932d71cd309ea98e77f9bc2b9c79ba4227c48d37edcb0dce97a6747ed639e
+    requires: [cpu, ppu]
+    oracle_mode: frame_hash
+    raster_event_coord_space: frame_line_dot
+    timeout_commits: 600000
+    checkpoint_symbols: [__checkpoint_scene_ready]
+    compare_scope:
+      domains: [frame_hash]
+    required_behavior_features: [Wx0Stutter]
+
+  - id: WINDOW_WX166_NEXTLINE
+    <<: *dmg_entry
+    path: bench/roms/out/WINDOW_WX166_NEXTLINE.gb
+    rom_sha256: c528a6469bde14f4d1ad1841f6d34b8f41d265604da36642eb428f2c4405f955
+    requires: [cpu, ppu]
+    oracle_mode: frame_hash
+    raster_event_coord_space: frame_line_dot
+    timeout_commits: 600000
+    checkpoint_symbols: [__checkpoint_scene_ready]
+    compare_scope:
+      domains: [frame_hash]
+    required_behavior_features: [Wx166NextLine]
+
+  - id: WINDOW_WX_RETRIGGER_GLITCH
+    <<: *dmg_entry
+    path: bench/roms/out/WINDOW_WX_RETRIGGER_GLITCH.gb
+    rom_sha256: 7cf683185af4e269c8cb3515aef954a68d39c5a233c1fdc286270eb8c8aa7a03
+    requires: [cpu, ppu]
+    oracle_mode: frame_hash
+    raster_event_coord_space: frame_line_dot
+    timeout_commits: 600000
+    checkpoint_symbols: [__checkpoint_scene_ready]
+    compare_scope:
+      domains: [frame_hash]
+    required_behavior_features: [WindowRetriggerGlitch]
+
+  - id: WINDOW_WINEN_TOGGLE_REARM
+    <<: *dmg_entry
+    path: bench/roms/out/WINDOW_WINEN_TOGGLE_REARM.gb
+    rom_sha256: 240ddbb58d82787f33ce198444d8515219211d0344183e685e147a740030f2a8
+    requires: [cpu, ppu]
+    oracle_mode: frame_hash
+    raster_event_coord_space: frame_line_dot
+    timeout_commits: 600000
+    checkpoint_symbols: [__checkpoint_scene_ready]
     compare_scope:
       domains: [frame_hash]
 

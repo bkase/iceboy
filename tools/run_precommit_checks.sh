@@ -73,6 +73,7 @@ PRECOMMIT_SWIM_TESTS_EXTENDED=(
     "test/rom/test_alu16_sp.py"
     "test/rom/test_joy_diverge_persist.py"
     "tools/run_ppu_wave_a_mooneye_verilator.sh"
+    "test/rom/test_ppu_wave_b.py"
     "test/rom/test_timer_div_basic.py"
 )
 

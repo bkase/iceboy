@@ -64,7 +64,7 @@ class RunTestsTest(unittest.TestCase):
     def test_coverage_lines_report_implemented_tiers(self) -> None:
         lines = coverage_lines(selected_tiers(["meta", "unit", "formal", "lockstep"]), nightly=False)
         self.assertEqual(lines[0], "Implemented tiers: 4/4")
-        self.assertIn("Meta/Infrastructure: 40 suite(s)", lines)
+        self.assertIn("Meta/Infrastructure: 41 suite(s)", lines)
         self.assertIn("Unit Tests: 46 suite(s)", lines)
         self.assertIn("Formal Verification: 6 suite(s)", lines)
         self.assertIn("Lockstep: 4 suite(s)", lines)
@@ -88,6 +88,7 @@ class RunTestsTest(unittest.TestCase):
         rom_labels = [suite.label for suite in suites_for_tier("rom", nightly=False)]
         self.assertIn("test_ppu_wave_a.py", rom_labels)
         self.assertIn("test_ppu_wave_a_mooneye.py", rom_labels)
+        self.assertIn("test_ppu_wave_b.py", rom_labels)
         mooneye_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_ppu_wave_a_mooneye.py")
         self.assertEqual(mooneye_suite.runner, "shell")
         self.assertEqual(mooneye_suite.target, "tools/run_ppu_wave_a_mooneye_verilator.sh")

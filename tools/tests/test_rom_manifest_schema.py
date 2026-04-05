@@ -85,18 +85,58 @@ class RomManifestSchemaTest(unittest.TestCase):
             asm_path = ROOT / "bench" / "roms" / f"{rom_id}.asm"
             self.assertTrue(asm_path.exists(), f"missing source for {rom_id}: {asm_path}")
 
-    def test_existing_ppu_entries_use_revised_oracle_vocabulary(self) -> None:
+    def test_wave_b_bg_window_entries_use_frame_hash_defaults(self) -> None:
         inventory = yaml.safe_load(ROM_INVENTORY_PATH.read_text(encoding="utf-8"))
         roms = {rom["id"]: rom for rom in inventory["roms"]}
 
         self.assertEqual(roms["PPU_STAT_IRQ"]["oracle_mode"], "frame_semantic")
         self.assertEqual(roms["PPU_STAT_IRQ"]["compare_scope"]["domains"], ["frame_semantic"])
 
-        for rom_id in ("BG_STATIC", "BG_SCROLL_SIGNED", "PPU_WINDOW", "PPU_SPRITES"):
+        for rom_id in (
+            "BG_STATIC",
+            "BG_SCROLL_WRAP",
+            "BG_SIGNED_ADDR",
+            "WINDOW_BASIC",
+            "WINDOW_LINE_COUNTER",
+            "WINDOW_WX_WY_EDGE",
+            "WINDOW_WX0_STUTTER",
+            "WINDOW_WX166_NEXTLINE",
+            "WINDOW_WX_RETRIGGER_GLITCH",
+            "WINDOW_WINEN_TOGGLE_REARM",
+            "PPU_SPRITES",
+        ):
             rom = roms[rom_id]
             self.assertEqual(rom["oracle_mode"], "frame_hash")
             self.assertEqual(rom["compare_scope"]["domains"], ["frame_hash"])
             self.assertEqual(rom["raster_event_coord_space"], "frame_line_dot")
+
+        self.assertEqual(roms["WINDOW_WX0_STUTTER"]["required_behavior_features"], ["Wx0Stutter"])
+        self.assertEqual(roms["WINDOW_WX166_NEXTLINE"]["required_behavior_features"], ["Wx166NextLine"])
+        self.assertEqual(
+            roms["WINDOW_WX_RETRIGGER_GLITCH"]["required_behavior_features"],
+            ["WindowRetriggerGlitch"],
+        )
+
+    def test_wave_b_entries_have_matching_rom_sources(self) -> None:
+        inventory = yaml.safe_load(ROM_INVENTORY_PATH.read_text(encoding="utf-8"))
+        roms = {rom["id"]: rom for rom in inventory["roms"]}
+
+        for rom_id in (
+            "BG_STATIC",
+            "BG_SCROLL_WRAP",
+            "BG_SIGNED_ADDR",
+            "WINDOW_BASIC",
+            "WINDOW_LINE_COUNTER",
+            "WINDOW_WX_WY_EDGE",
+            "WINDOW_WX0_STUTTER",
+            "WINDOW_WX166_NEXTLINE",
+            "WINDOW_WX_RETRIGGER_GLITCH",
+            "WINDOW_WINEN_TOGGLE_REARM",
+        ):
+            rom_path = ROOT / roms[rom_id]["path"]
+            self.assertEqual(rom_path.parent, ROOT / "bench" / "roms" / "out")
+            asm_path = ROOT / "bench" / "roms" / f"{rom_id}.asm"
+            self.assertTrue(asm_path.exists(), f"missing source for {rom_id}: {asm_path}")
 
 
 if __name__ == "__main__":
