@@ -186,6 +186,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("unit", "test_bg_fetcher.py", "swim", "test/ppu/unit/test_bg_fetcher.py"),
     SuiteDefinition("unit", "test_bg_fifo.py", "swim", "test/ppu/unit/test_bg_fifo.py"),
     SuiteDefinition("unit", "test_mixer.py", "swim", "test/ppu/unit/test_mixer.py"),
+    SuiteDefinition("unit", "test_obj_fetch.py", "swim", "test/ppu/unit/test_obj_fetch.py"),
     SuiteDefinition("unit", "test_oam_scan.py", "swim", "test/ppu/unit/test_oam_scan.py"),
     SuiteDefinition("unit", "test_oam_ebr.py", "swim", "test/unit/test_oam_ebr.py"),
     SuiteDefinition("unit", "test_window.py", "swim", "test/ppu/unit/test_window.py"),

@@ -1,0 +1,153 @@
+use lib::ppu::rtl::obj_fetch::{
+    cancel_obj_fetch,
+    decode_obj_flags,
+    decode_obj_row,
+    obj_fifo_overlay_row,
+    obj_fifo_start_offset,
+    obj_fetch_flags_req,
+    obj_fetch_hi_req,
+    obj_fetch_lo_req,
+    obj_fetch_tile_req,
+    resolve_obj_meta,
+};
+use lib::ppu::sem::memory::{MemClient, MemRegion, MemTxnTag, PendingRead};
+use lib::ppu::sem::types::{
+    FetcherSource,
+    FetcherState,
+    FetcherStep,
+    ObjFifo,
+    ObjPixel,
+    SelectedObjTicket,
+    empty_obj_fifo,
+    zero_obj_pixel,
+};
+
+fn build_ticket(oam_index_i: uint<6>, x_i: uint<8>, y_i: uint<8>, selection_rank_i: uint<4>) -> SelectedObjTicket {
+    SelectedObjTicket$(oam_index: oam_index_i, x: x_i, y: y_i, selection_rank: selection_rank_i)
+}
+
+fn build_fetcher_state(epoch_i: uint<4>, pending_valid_i: bool, pending_id_i: uint<4>, pending_epoch_i: uint<4>) -> FetcherState {
+    FetcherState$(
+        epoch: epoch_i,
+        source: FetcherSource::Object,
+        step: FetcherStep::GetHi,
+        tile_id: 0u8,
+        tile_lo: 0u8,
+        tile_hi: 0u8,
+        map_x: 0u5,
+        map_y: 0u5,
+        row: 0u3,
+        pending_push: true,
+        pending_valid: pending_valid_i,
+        pending_read: PendingRead$(
+            tag: MemTxnTag$(region: MemRegion::Vram, client: MemClient::ObjFetcher, id: pending_id_i),
+            epoch: pending_epoch_i,
+        ),
+    )
+}
+
+fn pack_row_colors(row: [ObjPixel; 8]) -> uint<16> {
+    zext(row[0].color)
+        | (zext(row[1].color) << 2)
+        | (zext(row[2].color) << 4)
+        | (zext(row[3].color) << 6)
+        | (zext(row[4].color) << 8)
+        | (zext(row[5].color) << 10)
+        | (zext(row[6].color) << 12)
+        | (zext(row[7].color) << 14)
+}
+
+fn unpack_color(packed: uint<32>, index: uint<4>) -> uint<2> {
+    trunc((packed >> (zext(index) << 1)) & 0x3u32)
+}
+
+fn build_fifo_pixels(packed: uint<32>) -> [ObjPixel; 16] {
+    [
+        ObjPixel$(color: unpack_color(packed, 0u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 1u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 2u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 3u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 4u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 5u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 6u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 7u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 8u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 9u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 10u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 11u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 12u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 13u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 14u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+        ObjPixel$(color: unpack_color(packed, 15u4), palette: lib::ppu::sem::types::ObjPaletteSel::Obp0, draw_rank: lib::ppu::sem::types::zero_obj_draw_rank(), bg_over_obj: false),
+    ]
+}
+
+fn build_fifo(count_i: uint<5>, packed: uint<32>) -> ObjFifo {
+    let _ = empty_obj_fifo();
+    ObjFifo$(count: count_i, pixels: build_fifo_pixels(packed))
+}
+
+fn pack_fifo_colors(fifo: ObjFifo) -> uint<32> {
+    zext(fifo.pixels[0].color)
+        | (zext(fifo.pixels[1].color) << 2)
+        | (zext(fifo.pixels[2].color) << 4)
+        | (zext(fifo.pixels[3].color) << 6)
+        | (zext(fifo.pixels[4].color) << 8)
+        | (zext(fifo.pixels[5].color) << 10)
+        | (zext(fifo.pixels[6].color) << 12)
+        | (zext(fifo.pixels[7].color) << 14)
+        | (zext(fifo.pixels[8].color) << 16)
+        | (zext(fifo.pixels[9].color) << 18)
+        | (zext(fifo.pixels[10].color) << 20)
+        | (zext(fifo.pixels[11].color) << 22)
+        | (zext(fifo.pixels[12].color) << 24)
+        | (zext(fifo.pixels[13].color) << 26)
+        | (zext(fifo.pixels[14].color) << 28)
+        | (zext(fifo.pixels[15].color) << 30)
+}
+
+pub entity obj_fetch_test_top(
+    oam_index_i: uint<6>,
+    x_i: uint<8>,
+    y_i: uint<8>,
+    selection_rank_i: uint<4>,
+    visible_ly_i: uint<8>,
+    obj_size_8x16_i: bool,
+    tile_id_i: uint<8>,
+    flags_byte_i: uint<8>,
+    tile_lo_i: uint<8>,
+    tile_hi_i: uint<8>,
+    x_out_i: uint<8>,
+    fifo_count_i: uint<5>,
+    fifo_colors_i: uint<32>,
+    epoch_i: uint<4>,
+    pending_valid_i: bool,
+    pending_id_i: uint<4>,
+    pending_epoch_i: uint<4>,
+) -> uint<160> {
+    let ticket = build_ticket(oam_index_i, x_i, y_i, selection_rank_i);
+    let flags = decode_obj_flags(flags_byte_i);
+    let meta = resolve_obj_meta(ticket, tile_id_i, flags, visible_ly_i);
+    let row = decode_obj_row(meta, tile_lo_i, tile_hi_i);
+    let offset = obj_fifo_start_offset(ticket, x_out_i);
+    let fifo = build_fifo(fifo_count_i, fifo_colors_i);
+    let overlaid = obj_fifo_overlay_row(fifo, row, offset);
+    let cancelled = cancel_obj_fetch(build_fetcher_state(epoch_i, pending_valid_i, pending_id_i, pending_epoch_i));
+
+    zext(obj_fetch_tile_req(ticket).addr)
+        | (zext(obj_fetch_flags_req(ticket).addr) << 16)
+        | (zext(obj_fetch_lo_req(meta, obj_size_8x16_i).addr) << 32)
+        | (zext(obj_fetch_hi_req(meta, obj_size_8x16_i).addr) << 48)
+        | (zext(meta.row_index) << 64)
+        | (zext(meta.tile) << 68)
+        | (zext(if meta.flags.y_flip { 1u1 } else { 0u1 }) << 76)
+        | (zext(if meta.flags.x_flip { 1u1 } else { 0u1 }) << 77)
+        | (zext(match meta.flags.palette { lib::ppu::sem::types::ObjPaletteSel::Obp0 => 0u1, lib::ppu::sem::types::ObjPaletteSel::Obp1 => 1u1 }) << 78)
+        | (zext(if meta.flags.bg_over_obj { 1u1 } else { 0u1 }) << 79)
+        | (zext(offset) << 80)
+        | (zext(pack_row_colors(row)) << 84)
+        | (zext(overlaid.count) << 100)
+        | (zext(pack_fifo_colors(overlaid)) << 105)
+        | (zext(cancelled.epoch) << 137)
+        | (zext(if cancelled.pending_valid { 1u1 } else { 0u1 }) << 141)
+}

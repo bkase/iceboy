@@ -1,0 +1,176 @@
+use lib::ppu::rtl::fetcher::next_fetcher_epoch;
+use lib::ppu::rtl::tile::{apply_x_flip, decode_tile_row, obj_tile_addr};
+use lib::ppu::sem::memory::{MemClient, MemRegion, MemTxnTag, PpuMemKind, PpuMemReq};
+use lib::ppu::sem::types::{
+    FetcherSource,
+    FetcherState,
+    FetcherStep,
+    ObjDrawRank,
+    ObjFifo,
+    ObjFlags,
+    ObjPaletteSel,
+    ObjPixel,
+    ResolvedObjMeta,
+    SelectedObjTicket,
+    zero_obj_flags,
+    zero_obj_pixel,
+};
+
+fn oam_index_base(ticket: SelectedObjTicket) -> uint<16> {
+    let index_offset: uint<18> = zext(ticket.oam_index) << 2;
+    trunc(0xfe00u18 + index_offset)
+}
+
+fn obj_fetch_tag(region: MemRegion, id: uint<4>) -> MemTxnTag {
+    MemTxnTag$(region: region, client: MemClient::ObjFetcher, id: id)
+}
+
+fn read_req(region: MemRegion, id: uint<4>, addr: uint<16>) -> PpuMemReq {
+    PpuMemReq$(tag: obj_fetch_tag(region, id), kind: PpuMemKind::Read, addr: addr)
+}
+
+fn row_in_object(ticket: SelectedObjTicket, visible_ly: uint<8>) -> uint<4> {
+    let visible_ly_u10: uint<10> = zext(visible_ly);
+    let ticket_y_u10: uint<10> = zext(ticket.y);
+    let sprite_line: uint<10> = trunc(visible_ly_u10 + 16u10);
+    let row_raw: uint<10> = trunc(sprite_line - ticket_y_u10);
+    trunc(row_raw)
+}
+
+fn build_obj_pixel(color: uint<2>, meta: ResolvedObjMeta) -> ObjPixel {
+    ObjPixel$(
+        color: color,
+        palette: meta.flags.palette,
+        draw_rank: ObjDrawRank$(x: meta.ticket.x, selection_rank: meta.ticket.selection_rank),
+        bg_over_obj: meta.flags.bg_over_obj,
+    )
+}
+
+fn decode_palette(flags_byte: uint<8>) -> ObjPaletteSel {
+    if (flags_byte & 0x10u8) != 0u8 { ObjPaletteSel::Obp1 } else { ObjPaletteSel::Obp0 }
+}
+
+fn merge_obj_pixel(existing: ObjPixel, incoming: ObjPixel) -> ObjPixel {
+    if existing.color == 0u2 && incoming.color != 0u2 { incoming } else { existing }
+}
+
+fn incoming_row_pixel(row: [ObjPixel; 8], slot: uint<4>, offset: uint<4>) -> ObjPixel {
+    let slot_u7: uint<7> = zext(slot);
+    let offset_u7: uint<7> = zext(offset);
+    let row_end: uint<7> = trunc(offset_u7 + 8u7);
+    if slot_u7 >= offset_u7 && slot_u7 < row_end {
+        row[trunc(slot_u7 - offset_u7)]
+    } else {
+        zero_obj_pixel()
+    }
+}
+
+fn overlay_count(fifo: ObjFifo, offset: uint<4>) -> uint<5> {
+    let offset_u7: uint<7> = zext(offset);
+    let raw_cover: uint<7> = trunc(offset_u7 + 8u7);
+    let capped_cover: uint<5> = if raw_cover > 16u7 { 16u5 } else { trunc(raw_cover) };
+    if fifo.count > capped_cover { fifo.count } else { capped_cover }
+}
+
+pub fn obj_fetch_tile_req(ticket: SelectedObjTicket) -> PpuMemReq {
+    read_req(MemRegion::Oam, 0u4, trunc(oam_index_base(ticket) + 2u16))
+}
+
+pub fn obj_fetch_flags_req(ticket: SelectedObjTicket) -> PpuMemReq {
+    read_req(MemRegion::Oam, 1u4, trunc(oam_index_base(ticket) + 3u16))
+}
+
+pub fn decode_obj_flags(flags_byte: uint<8>) -> ObjFlags {
+    ObjFlags$(
+        y_flip: (flags_byte & 0x40u8) != 0u8,
+        x_flip: (flags_byte & 0x20u8) != 0u8,
+        palette: decode_palette(flags_byte),
+        bg_over_obj: (flags_byte & 0x80u8) != 0u8,
+    )
+}
+
+pub fn resolve_obj_meta(
+    ticket: SelectedObjTicket,
+    tile: uint<8>,
+    flags: ObjFlags,
+    visible_ly: uint<8>,
+) -> ResolvedObjMeta {
+    ResolvedObjMeta$(ticket: ticket, tile: tile, flags: flags, row_index: row_in_object(ticket, visible_ly))
+}
+
+pub fn obj_fetch_lo_req(meta: ResolvedObjMeta, obj_size_8x16: bool) -> PpuMemReq {
+    read_req(MemRegion::Vram, 2u4, obj_tile_addr(obj_size_8x16, meta.tile, meta.row_index, meta.flags))
+}
+
+pub fn obj_fetch_hi_req(meta: ResolvedObjMeta, obj_size_8x16: bool) -> PpuMemReq {
+    read_req(
+        MemRegion::Vram,
+        3u4,
+        trunc(obj_tile_addr(obj_size_8x16, meta.tile, meta.row_index, meta.flags) + 1u16),
+    )
+}
+
+pub fn decode_obj_row(meta: ResolvedObjMeta, tile_lo: uint<8>, tile_hi: uint<8>) -> [ObjPixel; 8] {
+    let row = decode_tile_row(tile_lo, tile_hi);
+    let row = if meta.flags.x_flip { apply_x_flip(row) } else { row };
+    [
+        build_obj_pixel(row[0], meta),
+        build_obj_pixel(row[1], meta),
+        build_obj_pixel(row[2], meta),
+        build_obj_pixel(row[3], meta),
+        build_obj_pixel(row[4], meta),
+        build_obj_pixel(row[5], meta),
+        build_obj_pixel(row[6], meta),
+        build_obj_pixel(row[7], meta),
+    ]
+}
+
+pub fn obj_fifo_start_offset(ticket: SelectedObjTicket, x_out: uint<8>) -> uint<4> {
+    let sprite_start = if ticket.x > 8u8 { trunc(ticket.x - 8u8) } else { 0u8 };
+    if sprite_start > x_out { trunc(sprite_start - x_out) } else { 0u4 }
+}
+
+pub fn obj_fifo_overlay_row(fifo: ObjFifo, row: [ObjPixel; 8], offset: uint<4>) -> ObjFifo {
+    ObjFifo$(
+        count: overlay_count(fifo, offset),
+        pixels: [
+            merge_obj_pixel(fifo.pixels[0], incoming_row_pixel(row, 0u4, offset)),
+            merge_obj_pixel(fifo.pixels[1], incoming_row_pixel(row, 1u4, offset)),
+            merge_obj_pixel(fifo.pixels[2], incoming_row_pixel(row, 2u4, offset)),
+            merge_obj_pixel(fifo.pixels[3], incoming_row_pixel(row, 3u4, offset)),
+            merge_obj_pixel(fifo.pixels[4], incoming_row_pixel(row, 4u4, offset)),
+            merge_obj_pixel(fifo.pixels[5], incoming_row_pixel(row, 5u4, offset)),
+            merge_obj_pixel(fifo.pixels[6], incoming_row_pixel(row, 6u4, offset)),
+            merge_obj_pixel(fifo.pixels[7], incoming_row_pixel(row, 7u4, offset)),
+            merge_obj_pixel(fifo.pixels[8], incoming_row_pixel(row, 8u4, offset)),
+            merge_obj_pixel(fifo.pixels[9], incoming_row_pixel(row, 9u4, offset)),
+            merge_obj_pixel(fifo.pixels[10], incoming_row_pixel(row, 10u4, offset)),
+            merge_obj_pixel(fifo.pixels[11], incoming_row_pixel(row, 11u4, offset)),
+            merge_obj_pixel(fifo.pixels[12], incoming_row_pixel(row, 12u4, offset)),
+            merge_obj_pixel(fifo.pixels[13], incoming_row_pixel(row, 13u4, offset)),
+            merge_obj_pixel(fifo.pixels[14], incoming_row_pixel(row, 14u4, offset)),
+            merge_obj_pixel(fifo.pixels[15], incoming_row_pixel(row, 15u4, offset)),
+        ],
+    )
+}
+
+pub fn cancel_obj_fetch(state: FetcherState) -> FetcherState {
+    FetcherState$(
+        epoch: next_fetcher_epoch(state.epoch),
+        source: FetcherSource::Object,
+        step: FetcherStep::GetTile,
+        tile_id: state.tile_id,
+        tile_lo: state.tile_lo,
+        tile_hi: state.tile_hi,
+        map_x: state.map_x,
+        map_y: state.map_y,
+        row: state.row,
+        pending_push: false,
+        pending_valid: false,
+        pending_read: state.pending_read,
+    )
+}
+
+pub fn zero_obj_fetch_meta() -> ResolvedObjMeta {
+    ResolvedObjMeta$(ticket: SelectedObjTicket$(oam_index: 0u6, x: 0u8, y: 0u8, selection_rank: 0u4), tile: 0u8, flags: zero_obj_flags(), row_index: 0u4)
+}
