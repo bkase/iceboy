@@ -43,6 +43,7 @@ async def prepare_dut(dut) -> None:
     dut.req_kind_i_i.value = REQ_IDLE
     dut.addr_i_i.value = 0
     dut.data_i_i.value = 0
+    dut.buttons_i_i.value = 0
     dut.memory_behavior_profile_i_i.value = PROFILE_DMG_CONSERVATIVE
     dut.oam_dma_active_i_i.value = 0
     dut.ppu_vram_active_i_i.value = 0
@@ -59,6 +60,7 @@ async def sample(
     req_kind: int,
     addr: int,
     data: int = 0,
+    buttons: int = 0,
     m_ce: bool = True,
     memory_behavior_profile: int = PROFILE_DMG_CONSERVATIVE,
     oam_dma_active: bool = False,
@@ -69,6 +71,7 @@ async def sample(
     dut.req_kind_i_i.value = req_kind & 0x3
     dut.addr_i_i.value = addr & 0xFFFF
     dut.data_i_i.value = data & 0xFF
+    dut.buttons_i_i.value = buttons & 0xFF
     dut.memory_behavior_profile_i_i.value = memory_behavior_profile & 0x3
     dut.oam_dma_active_i_i.value = int(oam_dma_active)
     dut.ppu_vram_active_i_i.value = int(ppu_vram_active)
@@ -83,6 +86,7 @@ async def write_then_read(
     *,
     addr: int,
     value: int,
+    buttons: int = 0,
     m_ce: bool = True,
     memory_behavior_profile: int = PROFILE_DMG_CONSERVATIVE,
     oam_dma_active: bool = False,
@@ -93,6 +97,7 @@ async def write_then_read(
     dut.req_kind_i_i.value = REQ_WRITE
     dut.addr_i_i.value = addr & 0xFFFF
     dut.data_i_i.value = value & 0xFF
+    dut.buttons_i_i.value = buttons & 0xFF
     dut.memory_behavior_profile_i_i.value = memory_behavior_profile & 0x3
     dut.oam_dma_active_i_i.value = int(oam_dma_active)
     dut.ppu_vram_active_i_i.value = int(ppu_vram_active)
@@ -260,6 +265,29 @@ async def test_io_and_unimplemented_regions_read_ff_and_ignore_writes(dut):
     _, after_oam = await write_then_read(dut, addr=0xFE00, value=0x77)
     assert after_oam["data"] == 0x77
     assert after_oam["region"] == REGION_OAM
+
+
+@cocotb.test()
+async def test_joypad_register_reads_selected_buttons_and_ignores_low_nibble_writes(dut):
+    clock = Clock(dut.clk_i, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    await prepare_dut(dut)
+
+    default = await sample(dut, req_kind=REQ_READ, addr=0xFF00)
+    assert default["data"] == 0xCF
+    assert default["region"] == REGION_IO
+
+    _, action = await write_then_read(dut, addr=0xFF00, value=0x20, buttons=0x10)
+    assert action["data"] == 0xEE
+    assert action["region"] == REGION_IO
+
+    _, dpad = await write_then_read(dut, addr=0xFF00, value=0x10, buttons=0x04)
+    assert dpad["data"] == 0xDB
+    assert dpad["region"] == REGION_IO
+
+    _, low_nibble_ignored = await write_then_read(dut, addr=0xFF00, value=0x2F, buttons=0x20)
+    assert low_nibble_ignored["data"] == 0xED
+    assert low_nibble_ignored["region"] == REGION_IO
 
 
 @cocotb.test()

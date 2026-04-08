@@ -1,5 +1,8 @@
 pub mod interrupts;
 pub mod interrupts_test_top;
+pub mod joypad;
+pub mod joypad_interrupts_test_top;
+pub mod joypad_test_top;
 pub mod oam_dma;
 pub mod oam_dma_test_top;
 pub mod serial;

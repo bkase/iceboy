@@ -65,7 +65,7 @@ class RunTestsTest(unittest.TestCase):
         lines = coverage_lines(selected_tiers(["meta", "unit", "formal", "lockstep"]), nightly=False)
         self.assertEqual(lines[0], "Implemented tiers: 4/4")
         self.assertIn("Meta/Infrastructure: 31 suite(s)", lines)
-        self.assertIn("Unit Tests: 47 suite(s)", lines)
+        self.assertIn("Unit Tests: 49 suite(s)", lines)
         self.assertIn("Formal Verification: 6 suite(s)", lines)
         self.assertIn("Lockstep: 4 suite(s)", lines)
 
@@ -98,6 +98,11 @@ class RunTestsTest(unittest.TestCase):
         self.assertIn("test_duty_cycle_metrics.py", power_labels)
         self.assertIn("test_halt_quiescence.py", power_labels)
         self.assertIn("test_ppu_power_quiescence.py", power_labels)
+
+    def test_unit_tier_includes_joypad_suite(self) -> None:
+        unit_labels = [suite.label for suite in suites_for_tier("unit", nightly=False)]
+        self.assertIn("test_joypad.py", unit_labels)
+        self.assertIn("test_joypad_interrupts.py", unit_labels)
 
     def test_write_junit_xml_emits_parseable_report(self) -> None:
         results = [

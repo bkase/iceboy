@@ -1,15 +1,5 @@
 use std::option::Option;
-
-pub struct JoypButtons {
-    up: bool,
-    down: bool,
-    left: bool,
-    right: bool,
-    a: bool,
-    b: bool,
-    start: bool,
-    select: bool,
-}
+use lib::periph::joypad::JoypButtons;
 
 pub struct SimStimulus {
     joyp_buttons: Option<JoypButtons>,
@@ -20,19 +10,6 @@ pub struct SimStimulus {
     serial_inject: Option<uint<8>>,
     freeze_arch_time: bool,
     cpu_hold_only: bool,
-}
-
-pub fn idle_joyp_buttons() -> JoypButtons {
-    JoypButtons$(
-        up: false,
-        down: false,
-        left: false,
-        right: false,
-        a: false,
-        b: false,
-        start: false,
-        select: false,
-    )
 }
 
 pub fn idle_sim_stimulus() -> SimStimulus {

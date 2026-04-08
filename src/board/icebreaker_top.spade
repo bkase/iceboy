@@ -3,6 +3,7 @@ use lib::bus::membus::membus;
 use lib::bus::types::{BusReq, BusResp};
 use lib::cpu::core::cpu_core;
 use lib::cpu::types::{HaltState, MemoryBehaviorProfile, no_irq_pending};
+use lib::periph::joypad::idle_joyp_buttons;
 
 fn cpu_bus_req(kind: uint<2>, addr: uint<16>, data: uint<8>) -> BusReq {
     match kind {
@@ -40,6 +41,7 @@ entity hardware_core(clk: clock, rst: bool, LEDR_N: inv bool, LEDG_N: inv bool) 
         rst,
         tb.m_ce,
         cpu_bus_req(cpu.bus_req_kind, cpu.bus_req_addr, cpu.bus_req_data),
+        idle_joyp_buttons(),
         MemoryBehaviorProfile::DmgConservative,
         false,
         false,

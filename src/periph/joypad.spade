@@ -1,0 +1,101 @@
+pub struct JoypButtons {
+    up: bool,
+    down: bool,
+    left: bool,
+    right: bool,
+    a: bool,
+    b: bool,
+    start: bool,
+    select: bool,
+}
+
+pub fn idle_joyp_buttons() -> JoypButtons {
+    JoypButtons$(
+        up: false,
+        down: false,
+        left: false,
+        right: false,
+        a: false,
+        b: false,
+        start: false,
+        select: false,
+    )
+}
+
+pub struct JoypadOut {
+    p1: uint<8>,
+    joypad_irq: bool,
+}
+
+fn io_write(write_en: bool, write_addr: uint<16>) -> bool {
+    write_en && write_addr == 0xff00u16
+}
+
+fn encode_action_pressed(buttons: JoypButtons) -> uint<4> {
+    ((if buttons.start { 1u4 } else { 0u4 }) << 3)
+        | ((if buttons.select { 1u4 } else { 0u4 }) << 2)
+        | ((if buttons.b { 1u4 } else { 0u4 }) << 1)
+        | (if buttons.a { 1u4 } else { 0u4 })
+}
+
+fn encode_dpad_pressed(buttons: JoypButtons) -> uint<4> {
+    ((if buttons.down { 1u4 } else { 0u4 }) << 3)
+        | ((if buttons.up { 1u4 } else { 0u4 }) << 2)
+        | ((if buttons.left { 1u4 } else { 0u4 }) << 1)
+        | (if buttons.right { 1u4 } else { 0u4 })
+}
+
+fn selected_pressed_nibble(select_reg: uint<2>, buttons: JoypButtons) -> uint<4> {
+    let action = encode_action_pressed(buttons);
+    let dpad = encode_dpad_pressed(buttons);
+    let action_selected = (select_reg & 0x1u2) == 0u2;
+    let dpad_selected = (select_reg & 0x2u2) == 0u2;
+
+    match (action_selected, dpad_selected) {
+        (false, false) => 0u4,
+        (true, false) => action,
+        (false, true) => dpad,
+        (true, true) => action | dpad,
+    }
+}
+
+fn visible_low_nibble(select_reg: uint<2>, buttons: JoypButtons) -> uint<4> {
+    trunc(0x0fu8 & ~zext(selected_pressed_nibble(select_reg, buttons)))
+}
+
+fn visible_p1(select_reg: uint<2>, buttons: JoypButtons) -> uint<8> {
+    0xc0u8 | (zext(select_reg) << 4) | zext(visible_low_nibble(select_reg, buttons))
+}
+
+pub entity joypad(
+    clk: clock,
+    rst: bool,
+    write_en: bool,
+    write_addr: uint<16>,
+    write_data: uint<8>,
+    buttons: JoypButtons,
+) -> JoypadOut {
+    let write_p1 = io_write(write_en, write_addr);
+    decl select_reg;
+    decl prev_pressed_reg;
+    decl joypad_irq_reg;
+
+    let next_select_reg =
+        if write_p1 {
+            trunc((write_data >> 4) & 0x3u8)
+        } else {
+            select_reg
+        };
+    let prev_pressed = selected_pressed_nibble(select_reg, buttons);
+    let next_pressed = selected_pressed_nibble(next_select_reg, buttons);
+    let fresh_pressed = next_pressed & ~prev_pressed_reg;
+    let next_joypad_irq_reg = fresh_pressed != 0u4;
+
+    reg(clk) select_reg: uint<2> reset(rst: 0u2) = next_select_reg;
+    reg(clk) prev_pressed_reg: uint<4> reset(rst: 0u4) = next_pressed;
+    reg(clk) joypad_irq_reg: bool reset(rst: false) = next_joypad_irq_reg;
+
+    let _ = prev_pressed;
+
+    JoypadOut$(p1: visible_p1(select_reg, buttons), joypad_irq: joypad_irq_reg)
+}

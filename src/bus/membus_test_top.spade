@@ -1,6 +1,7 @@
 use lib::bus::membus::membus;
 use lib::bus::types::{BusObs, BusOwner, BusRegion, BusReq, BusResp};
 use lib::cpu::types::MemoryBehaviorProfile;
+use lib::periph::joypad::JoypButtons;
 
 fn encode_region(region: BusRegion) -> uint<4> {
     match region {
@@ -40,6 +41,19 @@ fn decode_memory_behavior_profile(profile: uint<2>) -> MemoryBehaviorProfile {
     }
 }
 
+fn decode_buttons(buttons_i: uint<8>) -> JoypButtons {
+    JoypButtons$(
+        right: (buttons_i & 0x01u8) != 0u8,
+        left: (buttons_i & 0x02u8) != 0u8,
+        up: (buttons_i & 0x04u8) != 0u8,
+        down: (buttons_i & 0x08u8) != 0u8,
+        a: (buttons_i & 0x10u8) != 0u8,
+        b: (buttons_i & 0x20u8) != 0u8,
+        select: (buttons_i & 0x40u8) != 0u8,
+        start: (buttons_i & 0x80u8) != 0u8,
+    )
+}
+
 pub entity membus_test_top(
     clk: clock,
     rst: bool,
@@ -47,6 +61,7 @@ pub entity membus_test_top(
     req_kind_i: uint<2>,
     addr_i: uint<16>,
     data_i: uint<8>,
+    buttons_i: uint<8>,
     memory_behavior_profile_i: uint<2>,
     oam_dma_active_i: bool,
     ppu_vram_active_i: bool,
@@ -62,6 +77,7 @@ pub entity membus_test_top(
         rst,
         m_ce_i,
         req,
+        decode_buttons(buttons_i),
         decode_memory_behavior_profile(memory_behavior_profile_i),
         oam_dma_active_i,
         ppu_vram_active_i,

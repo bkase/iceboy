@@ -40,6 +40,7 @@ async def prepare_dut(dut) -> None:
     dut.req_kind_i_i.value = REQ_IDLE
     dut.addr_i_i.value = 0
     dut.data_i_i.value = 0
+    dut.buttons_i_i.value = 0
     dut.memory_behavior_profile_i_i.value = PROFILE_DMG_CONSERVATIVE
     dut.oam_dma_active_i_i.value = 0
     dut.ppu_vram_active_i_i.value = 0
@@ -51,11 +52,20 @@ async def prepare_dut(dut) -> None:
     await Timer(1, units="ns")
 
 
-async def sample(dut, *, req_kind: int, addr: int, data: int = 0, m_ce: bool = True) -> dict[str, int | bool]:
+async def sample(
+    dut,
+    *,
+    req_kind: int,
+    addr: int,
+    data: int = 0,
+    buttons: int = 0,
+    m_ce: bool = True,
+) -> dict[str, int | bool]:
     dut.m_ce_i_i.value = int(m_ce)
     dut.req_kind_i_i.value = req_kind & 0x3
     dut.addr_i_i.value = addr & 0xFFFF
     dut.data_i_i.value = data & 0xFF
+    dut.buttons_i_i.value = buttons & 0xFF
     dut.memory_behavior_profile_i_i.value = PROFILE_DMG_CONSERVATIVE
     dut.oam_dma_active_i_i.value = 0
     dut.ppu_vram_active_i_i.value = 0
@@ -70,6 +80,7 @@ async def write_then_read(dut, *, addr: int, value: int) -> tuple[dict[str, int 
     dut.req_kind_i_i.value = REQ_WRITE
     dut.addr_i_i.value = addr & 0xFFFF
     dut.data_i_i.value = value & 0xFF
+    dut.buttons_i_i.value = 0
     dut.memory_behavior_profile_i_i.value = PROFILE_DMG_CONSERVATIVE
     dut.oam_dma_active_i_i.value = 0
     dut.ppu_vram_active_i_i.value = 0
@@ -168,7 +179,6 @@ async def test_io_stub_and_unmapped_regions_return_ff_without_blocking(dut):
     await prepare_dut(dut)
 
     for addr, region in [
-        (0xFF00, REGION_IO),
         (0x8000, REGION_VRAM),
         (0xA000, REGION_CART_RAM),
         (0xFEA0, REGION_NOT_USABLE),
@@ -188,6 +198,38 @@ async def test_io_stub_and_unmapped_regions_return_ff_without_blocking(dut):
     oam_snapshot = await sample(dut, req_kind=REQ_READ, addr=0xFE00)
     assert oam_snapshot["data"] == 0x00
     assert oam_snapshot["region"] == REGION_OAM
+
+
+@cocotb.test()
+async def test_ff00_is_joypad_register_not_generic_ff_io(dut):
+    clock = Clock(dut.clk_i, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    await prepare_dut(dut)
+
+    default = await sample(dut, req_kind=REQ_READ, addr=0xFF00)
+    assert default["data"] == 0xCF
+    assert default["region"] == REGION_IO
+    assert default["owner"] == OWNER_CPU
+    assert default["blocked"] is False
+
+    dut.m_ce_i_i.value = 1
+    dut.req_kind_i_i.value = REQ_WRITE
+    dut.addr_i_i.value = 0xFF00
+    dut.data_i_i.value = 0x20
+    dut.buttons_i_i.value = 0x10
+    dut.memory_behavior_profile_i_i.value = PROFILE_DMG_CONSERVATIVE
+    dut.oam_dma_active_i_i.value = 0
+    dut.ppu_vram_active_i_i.value = 0
+    dut.ppu_oam_active_i_i.value = 0
+    await RisingEdge(dut.clk_i)
+    await Timer(1, units="ns")
+
+    dut.req_kind_i_i.value = REQ_READ
+    await RisingEdge(dut.clk_i)
+    await Timer(1, units="ns")
+    action = decode_output(int(dut.output__.value))
+    assert action["data"] == 0xEE
+    assert action["region"] == REGION_IO
 
 
 @cocotb.test()

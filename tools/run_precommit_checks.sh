@@ -38,6 +38,8 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/ppu/unit/test_tile.py"
     "test/power/test_ppu_power_quiescence.py"
     "test/unit/test_interrupt_service.py"
+    "test/unit/test_joypad.py"
+    "test/unit/test_joypad_interrupts.py"
     "test/unit/test_timer.py"
     "test/rom/test_loads_basic.py"
 )
@@ -52,6 +54,8 @@ PRECOMMIT_SWIM_TESTS_EXTENDED=(
     "test/unit/test_event_bridge.py"
     "test/unit/test_frame_sink.py"
     "test/unit/test_interrupts_basic.py"
+    "test/unit/test_joypad.py"
+    "test/unit/test_joypad_interrupts.py"
     "test/unit/test_serial.py"
     "test/unit/test_timebase.py"
     "test/unit/test_video_backend_adapter.py"

@@ -2,6 +2,7 @@ use std::mem::{clocked_memory_init, read_memory};
 use lib::bus::types::{BusObs, BusOwner, BusRegion, BusReq, BusResp, idle_bus_obs, idle_bus_resp};
 use lib::cpu::types::MemoryBehaviorProfile;
 use lib::mem::logical::map::{hram_addr, oam_addr, physical_memory_kind, rom_addr, wram_addr};
+use lib::periph::joypad::{JoypButtons, joypad};
 use lib::periph::oam_dma::oam_dma;
 
 fn decode_region(addr: uint<16>) -> BusRegion {
@@ -228,6 +229,7 @@ pub entity membus(
     rst: bool,
     m_ce: bool,
     req: BusReq,
+    joyp_buttons: JoypButtons,
     memory_behavior_profile: MemoryBehaviorProfile,
     oam_dma_active: bool,
     ppu_vram_active: bool,
@@ -240,6 +242,20 @@ pub entity membus(
     let addr = req_addr(req);
     let region = req_region(req);
     let obs = observe_req(rst, m_ce, req, effective_oam_dma_active, ppu_vram_active, ppu_oam_active);
+    let joypad_out = inst joypad(
+        clk,
+        rst,
+        match req {
+            BusReq::Write$(addr: write_addr, data: _) => !obs.blocked && write_addr == 0xff00u16,
+            _ => false,
+        },
+        addr,
+        match req {
+            BusReq::Write$(addr: _, data: data) => data,
+            _ => 0u8,
+        },
+        joyp_buttons,
+    );
     let dma_source_region = decode_region(dma.source_addr);
     let _ = physical_memory_kind(region);
     let _ = physical_memory_kind(dma_source_region);
@@ -311,6 +327,7 @@ pub entity membus(
                     BusRegion::Wram => wram_data,
                     BusRegion::Echo => wram_data,
                     BusRegion::Oam => inst read_memory(oam_mem, oam_addr(region, addr)),
+                    BusRegion::Io => if addr == 0xff00u16 { joypad_out.p1 } else { 0xffu8 },
                     BusRegion::Hram => hram_data,
                     BusRegion::NotUsable => not_usable_read_data(memory_behavior_profile),
                     _ => 0xffu8,

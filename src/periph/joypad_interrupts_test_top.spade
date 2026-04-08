@@ -1,0 +1,56 @@
+use std::option::Option;
+use lib::cpu::types::IrqAck;
+use lib::periph::interrupts::interrupts;
+use lib::periph::joypad::{JoypButtons, joypad};
+
+fn irq_ack_none() -> IrqAck {
+    IrqAck$(ack_bit: Option::None)
+}
+
+fn decode_buttons(buttons_i: uint<8>) -> JoypButtons {
+    JoypButtons$(
+        right: (buttons_i & 0x01u8) != 0u8,
+        left: (buttons_i & 0x02u8) != 0u8,
+        up: (buttons_i & 0x04u8) != 0u8,
+        down: (buttons_i & 0x08u8) != 0u8,
+        a: (buttons_i & 0x10u8) != 0u8,
+        b: (buttons_i & 0x20u8) != 0u8,
+        select: (buttons_i & 0x40u8) != 0u8,
+        start: (buttons_i & 0x80u8) != 0u8,
+    )
+}
+
+pub entity joypad_interrupts_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    write_en_i: bool,
+    write_addr_i: uint<16>,
+    write_data_i: uint<8>,
+    buttons_i: uint<8>,
+) -> uint<21> {
+    let joypad_out = inst joypad(
+        clk_i,
+        rst_i,
+        write_en_i,
+        write_addr_i,
+        write_data_i,
+        decode_buttons(buttons_i),
+    );
+    let controller = inst interrupts(
+        clk_i,
+        rst_i,
+        write_en_i,
+        write_addr_i,
+        write_data_i,
+        false,
+        false,
+        false,
+        false,
+        joypad_out.joypad_irq,
+        irq_ack_none(),
+    );
+
+    (zext(joypad_out.p1) << 13)
+        | (zext(controller.iflags) << 5)
+        | zext(controller.irq_pending.pending)
+}
