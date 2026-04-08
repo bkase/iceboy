@@ -313,10 +313,13 @@ class LocalEntrypointsTest(unittest.TestCase):
     def test_formal_tier_registers_ppu_control_jobs(self) -> None:
         text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
         self.assertIn('SuiteDefinition("formal", "ppu_irq.sby", "shell", "tools/run_formal_ppu_irq.sh")', text)
+        self.assertIn('SuiteDefinition("formal", "ppu_lcd_off_quiescence.sby", "shell", "tools/run_formal_ppu_lcd_off.sh")', text)
         self.assertIn('SuiteDefinition("formal", "ppu_timing.sby", "shell", "tools/run_formal_ppu_timing.sh")', text)
         self.assertTrue((TOOLS / "run_formal_ppu_irq.sh").exists())
+        self.assertTrue((TOOLS / "run_formal_ppu_lcd_off.sh").exists())
         self.assertTrue((TOOLS / "run_formal_ppu_timing.sh").exists())
         self.assertTrue((ROOT / "formal" / "ppu" / "safety" / "ppu_irq.sby").exists())
+        self.assertTrue((ROOT / "formal" / "ppu" / "safety" / "ppu_lcd_off_quiescence.sby").exists())
         self.assertTrue((ROOT / "formal" / "ppu" / "safety" / "ppu_timing.sby").exists())
 
     def test_equivalence_wrapper_dry_run_renders_cpu_refactor_template(self) -> None:

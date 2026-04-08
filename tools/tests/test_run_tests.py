@@ -66,7 +66,7 @@ class RunTestsTest(unittest.TestCase):
         self.assertEqual(lines[0], "Implemented tiers: 4/4")
         self.assertIn("Meta/Infrastructure: 33 suite(s)", lines)
         self.assertIn("Unit Tests: 53 suite(s)", lines)
-        self.assertIn("Formal Verification: 6 suite(s)", lines)
+        self.assertIn("Formal Verification: 7 suite(s)", lines)
         self.assertIn("Lockstep: 4 suite(s)", lines)
 
     def test_command_env_propagates_requested_simulator(self) -> None:

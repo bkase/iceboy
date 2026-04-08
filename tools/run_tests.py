@@ -201,6 +201,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("formal", "cpu_reset.sby", "shell", "tools/run_formal_cpu_reset.sh"),
     SuiteDefinition("formal", "cpu_hold.sby", "shell", "tools/run_formal_cpu_hold.sh"),
     SuiteDefinition("formal", "ppu_irq.sby", "shell", "tools/run_formal_ppu_irq.sh"),
+    SuiteDefinition("formal", "ppu_lcd_off_quiescence.sby", "shell", "tools/run_formal_ppu_lcd_off.sh"),
     SuiteDefinition("formal", "ppu_timing.sby", "shell", "tools/run_formal_ppu_timing.sh"),
     SuiteDefinition("rom", "test_alu16_sp.py", "swim", "test_alu16_sp"),
     SuiteDefinition("rom", "test_alu_flags.py", "swim", "test_alu_flags"),
