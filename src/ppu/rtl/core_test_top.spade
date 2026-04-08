@@ -4,36 +4,7 @@ use lib::ppu::rtl::core::ppu_core;
 use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
 use lib::ppu::sem::events::{idle_oam_dma_state, zero_video_coord};
 use lib::ppu::sem::memory::idle_ppu_mem_resp;
-use lib::ppu::sem::types::{LcdRunState, PpuMode, PpuPhase};
-use lib::sim::ppu_support::timed_events_from_direct;
-
-fn encode_phase(phase: PpuPhase) -> uint<3> {
-    match phase {
-        PpuPhase::LcdOff => 0u3,
-        PpuPhase::OamScan$(index: _, found: _) => 1u3,
-        PpuPhase::Transfer$(x_out: _, discard_scx: _) => 2u3,
-        PpuPhase::HBlank$(dots_left: _) => 3u3,
-        PpuPhase::VBlank$(line: _, dots_left: _) => 4u3,
-    }
-}
-
-fn encode_mode(mode: PpuMode) -> uint<3> {
-    match mode {
-        PpuMode::LcdOff => 0u3,
-        PpuMode::OamScan => 1u3,
-        PpuMode::PixelTransfer => 2u3,
-        PpuMode::HBlank => 3u3,
-        PpuMode::VBlank => 4u3,
-    }
-}
-
-fn encode_run(run: LcdRunState) -> uint<2> {
-    match run {
-        LcdRunState::Disabled => 0u2,
-        LcdRunState::WarmupBlankFrame => 1u2,
-        LcdRunState::Running => 2u2,
-    }
-}
+use lib::sim::ppu_support::{encode_lcd_run, encode_ppu_mode, encode_ppu_phase, timed_events_from_direct};
 
 fn decode_mmio_reg(target_i: uint<4>) -> MmioReg {
     match target_i {
@@ -77,14 +48,14 @@ pub entity core_test_top(
     );
     let trace = core.trace;
 
-    zext(encode_phase(trace.phase_after))
+    zext(encode_ppu_phase(trace.phase_after))
         | (zext(trace.ly_after) << 3)
         | (zext(trace.dot_in_line_after) << 11)
-        | (zext(encode_mode(trace.mode_after)) << 20)
+        | (zext(encode_ppu_mode(trace.mode_after)) << 20)
         | (zext(lib::util::bit(trace.stat_line_after)) << 23)
         | (zext(lib::util::bit(core.irq_req.vblank_req)) << 24)
         | (zext(lib::util::bit(core.irq_req.stat_req)) << 25)
-        | (zext(encode_run(trace.run_after)) << 26)
+        | (zext(encode_lcd_run(trace.run_after)) << 26)
         | (zext(lib::util::bit(trace.first_frame_blank_after)) << 28)
         | (zext(trace.stat_readback_after) << 29)
         | (zext(core.mem_reqs.count) << 37)

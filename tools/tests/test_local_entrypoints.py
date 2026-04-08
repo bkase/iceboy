@@ -291,14 +291,22 @@ class LocalEntrypointsTest(unittest.TestCase):
 
     def test_ppu_support_centralizes_test_helper_constructors(self) -> None:
         support_text = (ROOT / "src" / "sim" / "ppu_support.spade").read_text(encoding="utf-8")
+        self.assertIn("pub fn encode_lcd_run", support_text)
+        self.assertIn("pub fn decode_lcd_run", support_text)
         self.assertIn("pub fn build_test_lcdc", support_text)
         self.assertIn("pub fn pack_u2_row", support_text)
 
         forbidden = (
+            r"fn encode_phase\(",
+            r"fn encode_run\(",
+            r"fn decode_run\(",
             r"fn build_lcdc\(",
             r"fn pack_row\(",
         )
         for relative in (
+            Path("src/ppu/rtl/core_test_top.spade"),
+            Path("src/ppu/rtl/timing_test_top.spade"),
+            Path("src/ppu/rtl/irq_test_top.spade"),
             Path("src/ppu/rtl/fetcher_test_top.spade"),
             Path("src/ppu/rtl/tile_test_top.spade"),
             Path("src/ppu/rtl/fifo_test_top.spade"),
@@ -351,6 +359,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/ppu/unit/test_access_policy.py"', text)
         self.assertIn('"test/ppu/unit/test_bg_fetcher.py"', text)
         self.assertIn('"test/ppu/unit/test_bg_fifo.py"', text)
+        self.assertIn('"test/ppu/unit/test_ppu_core_smoke.py"', text)
         self.assertIn('"test/ppu/unit/test_mixer.py"', text)
         self.assertIn('"test/ppu/unit/test_obj_priority.py"', text)
         self.assertIn('"test/ppu/unit/test_obj_fetch.py"', text)

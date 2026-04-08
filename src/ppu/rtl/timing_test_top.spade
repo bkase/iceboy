@@ -13,14 +13,7 @@ use lib::ppu::sem::types::{
     StatIrqState,
     StatSelect,
 };
-
-fn decode_run(run_i: uint<2>) -> LcdRunState {
-    match run_i {
-        1u2 => LcdRunState::WarmupBlankFrame,
-        2u2 => LcdRunState::Running,
-        _ => LcdRunState::Disabled,
-    }
-}
+use lib::sim::ppu_support::{decode_lcd_run, encode_lcd_run, encode_ppu_phase};
 
 fn decode_phase(
     phase_i: uint<3>,
@@ -44,24 +37,6 @@ fn decode_mode(mode: PpuMode) -> uint<3> {
         PpuMode::OamScan => 2u3,
         PpuMode::PixelTransfer => 3u3,
         PpuMode::LcdOff => 4u3,
-    }
-}
-
-fn encode_run(run: LcdRunState) -> uint<2> {
-    match run {
-        LcdRunState::Disabled => 0u2,
-        LcdRunState::WarmupBlankFrame => 1u2,
-        LcdRunState::Running => 2u2,
-    }
-}
-
-fn encode_phase(phase: PpuPhase) -> uint<3> {
-    match phase {
-        PpuPhase::LcdOff => 0u3,
-        PpuPhase::OamScan$(index: _, found: _) => 1u3,
-        PpuPhase::Transfer$(x_out: _, discard_scx: _) => 2u3,
-        PpuPhase::HBlank$(dots_left: _) => 3u3,
-        PpuPhase::VBlank$(line: _, dots_left: _) => 4u3,
     }
 }
 
@@ -135,7 +110,7 @@ pub entity timing_test_top(
     let state = PpuState$(
         visible: PpuVisibleState$(regs: regs, ly: ly_i),
         status: PpuStatusState$(
-            run: decode_run(run_i),
+            run: decode_lcd_run(run_i),
             phase: phase,
             stat_irq: StatIrqState$(line_high: false),
             lyc_match_flag: ly_i == 0u8,
@@ -162,16 +137,16 @@ pub entity timing_test_top(
     let transitioned = handle_lcd_transition(state, old_lcdc_enable_i, new_lcdc_enable_i);
     let next_run = advance_run_state(state.status.run, frame_start);
 
-    zext(encode_phase(next_phase))
+    zext(encode_ppu_phase(next_phase))
         | (zext(next_ly) << 3)
         | (zext(next_sampled.scx_low3_line) << 11)
         | (zext(lib::util::bit(next_sampled.wy_triggered_this_frame)) << 14)
         | (zext(lib::util::bit(next_sampled.window_enable_at_mode2_start)) << 15)
         | (zext(lib::util::bit(line_start)) << 16)
         | (zext(lib::util::bit(frame_start)) << 17)
-        | (zext(encode_run(next_run)) << 18)
+        | (zext(encode_lcd_run(next_run)) << 18)
         | (zext(decode_mode(visible_mode(transitioned.status))) << 20)
         | (zext(lib::util::bit(lcd_enabled(transitioned.status, transitioned.visible.regs))) << 23)
         | (zext(transitioned.visible.ly) << 24)
-        | (zext(encode_run(transitioned.status.run)) << 32)
+        | (zext(encode_lcd_run(transitioned.status.run)) << 32)
 }

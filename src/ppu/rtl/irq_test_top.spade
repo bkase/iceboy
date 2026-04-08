@@ -1,7 +1,6 @@
 use lib::ppu::rtl::irq::{advance_stat_irq, entered_vblank, irq_req, lyc_match, stat_line, stat_write_quirk_pulse};
 use lib::ppu::sem::profiles::BehaviorFeatureSet;
 use lib::ppu::sem::types::{
-    LcdRunState,
     Lcdc,
     PpuPhase,
     PpuRegs,
@@ -9,14 +8,7 @@ use lib::ppu::sem::types::{
     StatIrqState,
     StatSelect,
 };
-
-fn decode_run(run_i: uint<2>) -> LcdRunState {
-    match run_i {
-        1u2 => LcdRunState::WarmupBlankFrame,
-        2u2 => LcdRunState::Running,
-        _ => LcdRunState::Disabled,
-    }
-}
+use lib::sim::ppu_support::decode_lcd_run;
 
 fn decode_phase(phase_i: uint<3>, line_i: uint<8>) -> PpuPhase {
     match phase_i {
@@ -81,13 +73,13 @@ pub entity irq_test_top(
 ) -> uint<10> {
     let regs = build_regs(lyc_sel_i, mode2_sel_i, mode1_sel_i, mode0_sel_i, lyc_i);
     let prev_status = PpuStatusState$(
-        run: decode_run(prev_run_i),
+        run: decode_lcd_run(prev_run_i),
         phase: decode_phase(prev_phase_i, line_i),
         stat_irq: StatIrqState$(line_high: prev_line_high_i),
         lyc_match_flag: lyc_match(regs, ly_i),
     );
     let next_status = PpuStatusState$(
-        run: decode_run(next_run_i),
+        run: decode_lcd_run(next_run_i),
         phase: decode_phase(next_phase_i, line_i),
         stat_irq: StatIrqState$(line_high: prev_line_high_i),
         lyc_match_flag: lyc_match(regs, ly_i),

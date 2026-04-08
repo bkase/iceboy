@@ -36,6 +36,9 @@ def decode_output(value: int) -> dict[str, int | bool]:
 async def reset_dut(dut) -> None:
     cocotb.start_soon(Clock(dut.clk_i, 10, units="ns").start())
     dut.dot_ce_i.value = 0
+    dut.write_valid_i.value = 0
+    dut.write_target_i.value = 0
+    dut.write_value_i.value = 0
     dut.rst_i.value = 1
     await ClockCycles(dut.clk_i, 3)
     dut.rst_i.value = 0
