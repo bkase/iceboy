@@ -132,6 +132,12 @@ SUITES: tuple[SuiteDefinition, ...] = (
         "python",
         "tools.tests.test_encoding_optimization_evaluation",
     ),
+    SuiteDefinition(
+        "meta",
+        "test_pipeline_insertion_evaluation.py",
+        "python",
+        "tools.tests.test_pipeline_insertion_evaluation",
+    ),
     SuiteDefinition("meta", "test_build_profiles.py", "python", "tools.tests.test_build_profiles"),
     SuiteDefinition("unit", "test_sm83_opcodes.py", "python", "tools.tests.test_sm83_opcodes"),
     SuiteDefinition(
