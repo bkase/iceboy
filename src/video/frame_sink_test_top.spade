@@ -17,6 +17,7 @@ use lib::video::frame_sink::{
     initial_hash_sink_state,
     initial_line_sink_state,
     line_boundary_summary,
+    source_bits,
     zero_frame_summary,
     zero_line_summary,
 };
@@ -35,14 +36,6 @@ fn decode_blank_reason(reason_i: uint<2>) -> BlankReason {
         2u2 => BlankReason::NonVisibleLine,
         3u2 => BlankReason::NonVisibleDot,
         _ => BlankReason::LcdDisabled,
-    }
-}
-
-fn encode_source(source: PixelSource) -> uint<2> {
-    match source {
-        PixelSource::Background => 0u2,
-        PixelSource::Window => 1u2,
-        PixelSource::Object => 2u2,
     }
 }
 
@@ -260,8 +253,8 @@ pub entity frame_sink_test_top(
         | (zext(next_line_state.first_diff_x) << 91)
         | (zext(next_line_state.expected_shade) << 99)
         | (zext(next_line_state.actual_shade) << 101)
-        | (zext(encode_source(next_line_state.expected_source)) << 103)
-        | (zext(encode_source(next_line_state.actual_source)) << 105)
+        | (zext(source_bits(next_line_state.expected_source)) << 103)
+        | (zext(source_bits(next_line_state.actual_source)) << 105)
         | (zext(next_frame_state.frame) << 107)
         | (zext(lib::util::bit(next_frame_state.started)) << 139)
         | (zext(next_frame_state.line_count) << 140)
@@ -274,8 +267,8 @@ pub entity frame_sink_test_top(
         | (zext(next_diff_state.x) << 269)
         | (zext(next_diff_state.expected_shade) << 277)
         | (zext(next_diff_state.actual_shade) << 279)
-        | (zext(encode_source(next_diff_state.expected_source)) << 281)
-        | (zext(encode_source(next_diff_state.actual_source)) << 283)
+        | (zext(source_bits(next_diff_state.expected_source)) << 281)
+        | (zext(source_bits(next_diff_state.actual_source)) << 283)
         | (zext(lib::util::bit(line_summary_valid)) << 285)
         | (zext(line_summary.frame) << 286)
         | (zext(line_summary.line) << 318)
@@ -287,8 +280,8 @@ pub entity frame_sink_test_top(
         | (zext(line_summary.first_diff_x) << 376)
         | (zext(line_summary.expected_shade) << 384)
         | (zext(line_summary.actual_shade) << 386)
-        | (zext(encode_source(line_summary.expected_source)) << 388)
-        | (zext(encode_source(line_summary.actual_source)) << 390)
+        | (zext(source_bits(line_summary.expected_source)) << 388)
+        | (zext(source_bits(line_summary.actual_source)) << 390)
         | (zext(lib::util::bit(frame_summary_valid)) << 392)
         | (zext(frame_summary.frame) << 393)
         | (zext(frame_summary.line_count) << 425)

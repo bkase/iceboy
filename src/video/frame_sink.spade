@@ -69,7 +69,7 @@ pub struct DiffSinkState {
     actual_source: PixelSource,
 }
 
-fn source_bits(source: PixelSource) -> uint<2> {
+pub fn source_bits(source: PixelSource) -> uint<2> {
     match source {
         PixelSource::Background => 0u2,
         PixelSource::Window => 1u2,

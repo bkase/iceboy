@@ -1,23 +1,10 @@
 use std::option::Option;
 use lib::cpu::types::IrqAck;
 use lib::periph::interrupts::interrupts;
-use lib::periph::joypad::{JoypButtons, joypad};
+use lib::periph::joypad::{decode_buttons, joypad};
 
 fn irq_ack_none() -> IrqAck {
     IrqAck$(ack_bit: Option::None)
-}
-
-fn decode_buttons(buttons_i: uint<8>) -> JoypButtons {
-    JoypButtons$(
-        right: (buttons_i & 0x01u8) != 0u8,
-        left: (buttons_i & 0x02u8) != 0u8,
-        up: (buttons_i & 0x04u8) != 0u8,
-        down: (buttons_i & 0x08u8) != 0u8,
-        a: (buttons_i & 0x10u8) != 0u8,
-        b: (buttons_i & 0x20u8) != 0u8,
-        select: (buttons_i & 0x40u8) != 0u8,
-        start: (buttons_i & 0x80u8) != 0u8,
-    )
 }
 
 pub entity joypad_interrupts_test_top(

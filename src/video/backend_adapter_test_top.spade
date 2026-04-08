@@ -1,29 +1,8 @@
 use std::option::Option;
 
-use lib::ppu::sem::memory::{MemClient, MemRegion, MemTxnTag, PendingRead, PpuMemKind, PpuMemReq, PpuMemResp};
+use lib::ppu::sem::memory::{MemClient, MemTxnTag, PendingRead, PpuMemReq, PpuMemResp};
 use lib::video::backend_adapter::{BackendAdapterState, advance_backend_adapter};
-
-fn decode_region(region_i: bool) -> MemRegion {
-    if region_i { MemRegion::Oam } else { MemRegion::Vram }
-}
-
-fn decode_client(client_i: uint<3>) -> MemClient {
-    match client_i {
-        1u3 => MemClient::BgFetcher,
-        2u3 => MemClient::ObjFetcher,
-        3u3 => MemClient::OamScanner,
-        4u3 => MemClient::Dma,
-        _ => MemClient::Cpu,
-    }
-}
-
-fn decode_kind(req_kind_i: bool, write_data_i: uint<8>) -> PpuMemKind {
-    if req_kind_i {
-        PpuMemKind::Write$(data: write_data_i)
-    } else {
-        PpuMemKind::Read
-    }
-}
+use lib::video::test_helpers::{decode_client, decode_kind, decode_region, region_bit};
 
 fn build_req(
     req_region_i: bool,
@@ -58,13 +37,6 @@ fn build_state(
             epoch: pending_epoch_i,
         ),
     )
-}
-
-fn region_bit(region: MemRegion) -> uint<1> {
-    match region {
-        MemRegion::Vram => 0u1,
-        MemRegion::Oam => 1u1,
-    }
 }
 
 fn resp_bits(resp_opt: Option<PpuMemResp>) -> uint<17> {

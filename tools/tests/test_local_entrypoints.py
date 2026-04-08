@@ -426,6 +426,40 @@ class LocalEntrypointsTest(unittest.TestCase):
                 f"found inline 1-bit bool packing in {path.relative_to(ROOT)}",
             )
 
+    def test_periph_and_video_test_helpers_are_centralized(self) -> None:
+        joypad_text = (ROOT / "src" / "periph" / "joypad.spade").read_text(encoding="utf-8")
+        self.assertIn("pub fn decode_buttons(buttons_i: uint<8>)", joypad_text)
+
+        video_text = (ROOT / "src" / "video" / "test_helpers.spade").read_text(encoding="utf-8")
+        self.assertIn("pub fn decode_region(region_i: bool)", video_text)
+        self.assertIn("pub fn decode_client(client_i: uint<3>)", video_text)
+        self.assertIn("pub fn decode_kind(req_kind_i: bool, write_data_i: uint<8>)", video_text)
+        self.assertIn("pub fn region_bit(region: MemRegion)", video_text)
+
+        frame_sink_text = (ROOT / "src" / "video" / "frame_sink.spade").read_text(encoding="utf-8")
+        self.assertIn("pub fn source_bits(source: PixelSource)", frame_sink_text)
+
+        for relative in [
+            "src/periph/joypad_test_top.spade",
+            "src/periph/joypad_interrupts_test_top.spade",
+            "src/bus/membus_test_top.spade",
+        ]:
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            self.assertNotIn("fn decode_buttons(", text)
+
+        for relative in [
+            "src/video/access_test_top.spade",
+            "src/video/backend_adapter_test_top.spade",
+        ]:
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            self.assertNotIn("fn decode_region(", text)
+            self.assertNotIn("fn decode_client(", text)
+            self.assertNotIn("fn decode_kind(", text)
+            self.assertNotIn("fn region_bit(", text)
+
+        frame_sink_test_text = (ROOT / "src" / "video" / "frame_sink_test_top.spade").read_text(encoding="utf-8")
+        self.assertNotIn("fn encode_source(", frame_sink_test_text)
+
     def test_cpu_lockstep_targeted_subset_is_not_marked_expect_fail(self) -> None:
         text = (ROOT / "test" / "lockstep" / "test_cpu_lockstep.py").read_text(encoding="utf-8")
         self.assertIn("test_cpu_lockstep_matches_ei_delay_checkpoints", text)

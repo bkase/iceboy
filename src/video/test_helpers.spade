@@ -1,0 +1,30 @@
+use lib::ppu::sem::memory::{MemClient, MemRegion, PpuMemKind};
+
+pub fn decode_region(region_i: bool) -> MemRegion {
+    if region_i { MemRegion::Oam } else { MemRegion::Vram }
+}
+
+pub fn decode_client(client_i: uint<3>) -> MemClient {
+    match client_i {
+        1u3 => MemClient::BgFetcher,
+        2u3 => MemClient::ObjFetcher,
+        3u3 => MemClient::OamScanner,
+        4u3 => MemClient::Dma,
+        _ => MemClient::Cpu,
+    }
+}
+
+pub fn decode_kind(req_kind_i: bool, write_data_i: uint<8>) -> PpuMemKind {
+    if req_kind_i {
+        PpuMemKind::Write$(data: write_data_i)
+    } else {
+        PpuMemKind::Read
+    }
+}
+
+pub fn region_bit(region: MemRegion) -> uint<1> {
+    match region {
+        MemRegion::Vram => 0u1,
+        MemRegion::Oam => 1u1,
+    }
+}

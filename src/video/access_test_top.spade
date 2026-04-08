@@ -1,28 +1,7 @@
-use lib::ppu::sem::memory::{MemClient, MemRegion, MemTxnTag, PpuMemKind, PpuMemReq, PpuMemResult, VideoBlockReason};
+use lib::ppu::sem::memory::{MemTxnTag, PpuMemReq, PpuMemResult, VideoBlockReason};
 use lib::ppu::sem::types::{LcdRunState, Lcdc, PpuPhase, PpuRegs, PpuStatusState, StatIrqState, StatSelect};
 use lib::video::access::evaluate_access;
-
-fn decode_region(region_i: bool) -> MemRegion {
-    if region_i { MemRegion::Oam } else { MemRegion::Vram }
-}
-
-fn decode_client(client_i: uint<3>) -> MemClient {
-    match client_i {
-        1u3 => MemClient::BgFetcher,
-        2u3 => MemClient::ObjFetcher,
-        3u3 => MemClient::OamScanner,
-        4u3 => MemClient::Dma,
-        _ => MemClient::Cpu,
-    }
-}
-
-fn decode_kind(req_kind_i: bool, write_data_i: uint<8>) -> PpuMemKind {
-    if req_kind_i {
-        PpuMemKind::Write$(data: write_data_i)
-    } else {
-        PpuMemKind::Read
-    }
-}
+use lib::video::test_helpers::{decode_client, decode_kind, decode_region, region_bit};
 
 fn decode_run(run_i: uint<2>) -> LcdRunState {
     match run_i {
@@ -81,13 +60,6 @@ fn reason_bits(reason: VideoBlockReason) -> uint<3> {
         VideoBlockReason::CpuBlockedByMode3 => 2u3,
         VideoBlockReason::CpuBlockedByOamDma => 3u3,
         VideoBlockReason::PpuBlockedByOwnership => 4u3,
-    }
-}
-
-fn region_bit(region: MemRegion) -> uint<1> {
-    match region {
-        MemRegion::Vram => 0u1,
-        MemRegion::Oam => 1u1,
     }
 }
 
