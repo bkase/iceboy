@@ -1,0 +1,164 @@
+use lib::ppu::rtl::mixer::mix_bg_obj_pixel;
+use lib::ppu::rtl::oam_scan::{obj_overlaps_scanline, step_oam_scan_entry, ticket_at};
+use lib::ppu::rtl::obj_fetch::{obj_draw_rank_precedes, resolve_obj_priority};
+use lib::ppu::sem::sample::PpuRenderInputs;
+use lib::ppu::sem::scanout::PixelSource;
+use lib::ppu::sem::types::{
+    BgPixel,
+    Lcdc,
+    LineObjList,
+    ObjDrawRank,
+    ObjPaletteSel,
+    ObjPixel,
+    OamScanState,
+    SelectedObjTicket,
+    zero_obj_pixel,
+    zero_selected_obj_ticket,
+};
+
+fn build_lcdc(obj_enable_i: bool, obj_size_8x16_i: bool, bg_enable_i: bool) -> Lcdc {
+    Lcdc$(
+        lcd_enable: true,
+        win_map_hi: false,
+        win_enable: false,
+        bgwin_data_hi: true,
+        bg_map_hi: false,
+        obj_size_8x16: obj_size_8x16_i,
+        obj_enable: obj_enable_i,
+        bg_enable: bg_enable_i,
+    )
+}
+
+fn build_render(bgp_pop_i: uint<8>, obp0_pop_i: uint<8>, obp1_pop_i: uint<8>, bg_enable_i: bool) -> PpuRenderInputs {
+    PpuRenderInputs$(
+        lcdc_fetch: build_lcdc(true, false, bg_enable_i),
+        scx_fetch: 0u8,
+        scy_fetch: 0u8,
+        scx_low3_line: 0u3,
+        wx_live: 0u8,
+        wy_triggered_this_frame: false,
+        bgp_pop: bgp_pop_i,
+        obp0_pop: obp0_pop_i,
+        obp1_pop: obp1_pop_i,
+        lyc_eq_live: false,
+    )
+}
+
+fn seeded_ticket(slot: uint<4>) -> SelectedObjTicket {
+    SelectedObjTicket$(
+        oam_index: zext(slot),
+        x: trunc(0x40u9 + zext(slot)),
+        y: trunc(0x20u9 + zext(slot)),
+        selection_rank: slot,
+    )
+}
+
+fn seeded_line_obj_list(count_i: uint<4>) -> LineObjList {
+    LineObjList$(
+        count: count_i,
+        slots: [
+            if count_i > 0u4 { seeded_ticket(0u4) } else { zero_selected_obj_ticket() },
+            if count_i > 1u4 { seeded_ticket(1u4) } else { zero_selected_obj_ticket() },
+            if count_i > 2u4 { seeded_ticket(2u4) } else { zero_selected_obj_ticket() },
+            if count_i > 3u4 { seeded_ticket(3u4) } else { zero_selected_obj_ticket() },
+            if count_i > 4u4 { seeded_ticket(4u4) } else { zero_selected_obj_ticket() },
+            if count_i > 5u4 { seeded_ticket(5u4) } else { zero_selected_obj_ticket() },
+            if count_i > 6u4 { seeded_ticket(6u4) } else { zero_selected_obj_ticket() },
+            if count_i > 7u4 { seeded_ticket(7u4) } else { zero_selected_obj_ticket() },
+            if count_i > 8u4 { seeded_ticket(8u4) } else { zero_selected_obj_ticket() },
+            if count_i > 9u4 { seeded_ticket(9u4) } else { zero_selected_obj_ticket() },
+        ],
+    )
+}
+
+fn decode_palette_sel(palette_sel_i: bool) -> ObjPaletteSel {
+    if palette_sel_i { ObjPaletteSel::Obp1 } else { ObjPaletteSel::Obp0 }
+}
+
+fn build_obj_pixel(color_i: uint<2>, palette_sel_i: bool, bg_over_obj_i: bool, x_i: uint<8>, selection_rank_i: uint<4>) -> ObjPixel {
+    ObjPixel$(
+        color: color_i,
+        palette: decode_palette_sel(palette_sel_i),
+        bg_over_obj: bg_over_obj_i,
+        draw_rank: ObjDrawRank$(x: x_i, selection_rank: selection_rank_i),
+    )
+}
+
+fn pixel_source_bits(source: PixelSource) -> uint<2> {
+    match source {
+        PixelSource::Background => 0u2,
+        PixelSource::Window => 1u2,
+        PixelSource::Object => 2u2,
+    }
+}
+
+pub entity obj_priority_test_top(
+    ly_i: uint<8>,
+    scan_obj_y_i: uint<8>,
+    scan_obj_x_i: uint<8>,
+    obj_size_8x16_i: bool,
+    obj_enable_i: bool,
+    scan_index_i: uint<6>,
+    found_i: uint<4>,
+    count_i: uint<4>,
+    bg_color_idx_i: uint<2>,
+    bg_from_window_i: bool,
+    bg_enable_i: bool,
+    bgp_pop_i: uint<8>,
+    obp0_pop_i: uint<8>,
+    obp1_pop_i: uint<8>,
+    existing_color_i: uint<2>,
+    existing_palette_sel_i: bool,
+    existing_bg_over_obj_i: bool,
+    existing_x_i: uint<8>,
+    existing_selection_rank_i: uint<4>,
+    incoming_color_i: uint<2>,
+    incoming_palette_sel_i: bool,
+    incoming_bg_over_obj_i: bool,
+    incoming_x_i: uint<8>,
+    incoming_selection_rank_i: uint<4>,
+) -> uint<58> {
+    let scan = OamScanState$(index: scan_index_i, found: found_i);
+    let line_objs = seeded_line_obj_list(count_i);
+    let lcdc = build_lcdc(obj_enable_i, obj_size_8x16_i, bg_enable_i);
+    let step = step_oam_scan_entry(scan, line_objs, ly_i, lcdc, scan_obj_y_i, scan_obj_x_i);
+    let appended_slot = if count_i < 10u4 { count_i } else { 9u4 };
+    let appended = ticket_at(step.next_list, appended_slot);
+
+    let bg_pixel = BgPixel$(shade: bg_color_idx_i, palette: bgp_pop_i, from_window: bg_from_window_i);
+    let existing = build_obj_pixel(
+        existing_color_i,
+        existing_palette_sel_i,
+        existing_bg_over_obj_i,
+        existing_x_i,
+        existing_selection_rank_i,
+    );
+    let incoming = build_obj_pixel(
+        incoming_color_i,
+        incoming_palette_sel_i,
+        incoming_bg_over_obj_i,
+        incoming_x_i,
+        incoming_selection_rank_i,
+    );
+    let _ = zero_obj_pixel();
+    let chosen = resolve_obj_priority(existing, incoming);
+    let mixed = mix_bg_obj_pixel(bg_pixel, true, chosen, build_render(bgp_pop_i, obp0_pop_i, obp1_pop_i, bg_enable_i), 0u8, 0u8);
+
+    zext(if step.overlap { 1u1 } else { 0u1 })
+        | (zext(if step.selected { 1u1 } else { 0u1 }) << 1)
+        | (zext(step.next_scan.found) << 2)
+        | (zext(step.next_list.count) << 6)
+        | (zext(appended.oam_index) << 10)
+        | (zext(appended.x) << 16)
+        | (zext(appended.y) << 24)
+        | (zext(appended.selection_rank) << 32)
+        | (zext(chosen.color) << 36)
+        | (zext(match chosen.palette { ObjPaletteSel::Obp0 => 0u1, ObjPaletteSel::Obp1 => 1u1 }) << 38)
+        | (zext(if chosen.bg_over_obj { 1u1 } else { 0u1 }) << 39)
+        | (zext(chosen.draw_rank.x) << 40)
+        | (zext(chosen.draw_rank.selection_rank) << 48)
+        | (zext(mixed.shade) << 52)
+        | (zext(pixel_source_bits(mixed.source)) << 54)
+        | (zext(if obj_overlaps_scanline(ly_i, scan_obj_y_i, obj_size_8x16_i) { 1u1 } else { 0u1 }) << 56)
+        | (zext(if obj_draw_rank_precedes(incoming.draw_rank, existing.draw_rank) { 1u1 } else { 0u1 }) << 57)
+}

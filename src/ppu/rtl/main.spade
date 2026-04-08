@@ -8,6 +8,7 @@ pub mod irq;
 pub mod irq_test_top;
 pub mod mixer;
 pub mod mixer_test_top;
+pub mod obj_priority_test_top;
 pub mod obj_fetch;
 pub mod obj_fetch_test_top;
 pub mod oam_scan;

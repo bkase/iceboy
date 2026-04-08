@@ -73,7 +73,7 @@ pub fn step_oam_scan_entry(
         )
     } else {
         let overlap = obj_overlaps_scanline(ly, obj_y, lcdc.obj_size_8x16);
-        let selected = overlap && line_objs.count < 10u4;
+        let selected = lcdc.obj_enable && overlap && line_objs.count < 10u4;
         let next_list =
             if selected {
                 append_ticket(

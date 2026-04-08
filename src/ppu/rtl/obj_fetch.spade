@@ -50,8 +50,24 @@ fn decode_palette(flags_byte: uint<8>) -> ObjPaletteSel {
     if (flags_byte & 0x10u8) != 0u8 { ObjPaletteSel::Obp1 } else { ObjPaletteSel::Obp0 }
 }
 
+pub fn obj_draw_rank_precedes(lhs: ObjDrawRank, rhs: ObjDrawRank) -> bool {
+    lhs.x < rhs.x || (lhs.x == rhs.x && lhs.selection_rank < rhs.selection_rank)
+}
+
+pub fn resolve_obj_priority(existing: ObjPixel, incoming: ObjPixel) -> ObjPixel {
+    if existing.color == 0u2 {
+        incoming
+    } else if incoming.color == 0u2 {
+        existing
+    } else if obj_draw_rank_precedes(incoming.draw_rank, existing.draw_rank) {
+        incoming
+    } else {
+        existing
+    }
+}
+
 fn merge_obj_pixel(existing: ObjPixel, incoming: ObjPixel) -> ObjPixel {
-    if existing.color == 0u2 && incoming.color != 0u2 { incoming } else { existing }
+    resolve_obj_priority(existing, incoming)
 }
 
 fn incoming_row_pixel(row: [ObjPixel; 8], slot: uint<4>, offset: uint<4>) -> ObjPixel {
