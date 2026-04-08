@@ -65,10 +65,32 @@ fn incoming_row_pixel(row: [ObjPixel; 8], slot: uint<4>, offset: uint<4>) -> Obj
     }
 }
 
+fn incoming_row_pixel_clipped(row: [ObjPixel; 8], slot: uint<4>, offset: uint<4>, left_clip: uint<4>) -> ObjPixel {
+    let slot_u8: uint<8> = zext(slot);
+    let offset_u8: uint<8> = zext(offset);
+    let left_clip_u8: uint<8> = zext(left_clip);
+    let row_start: uint<8> = trunc(offset_u8 + left_clip_u8);
+    let row_end: uint<8> = trunc(offset_u8 + 8u8);
+    if slot_u8 >= row_start && slot_u8 < row_end {
+        row[trunc(slot_u8 - offset_u8)]
+    } else {
+        zero_obj_pixel()
+    }
+}
+
 fn overlay_count(fifo: ObjFifo, offset: uint<4>) -> uint<5> {
     let offset_u7: uint<7> = zext(offset);
     let raw_cover: uint<7> = trunc(offset_u7 + 8u7);
     let capped_cover: uint<5> = if raw_cover > 16u7 { 16u5 } else { trunc(raw_cover) };
+    if fifo.count > capped_cover { fifo.count } else { capped_cover }
+}
+
+fn overlay_count_clipped(fifo: ObjFifo, offset: uint<4>, left_clip: uint<4>) -> uint<5> {
+    let offset_u8: uint<8> = zext(offset);
+    let left_clip_u8: uint<8> = zext(left_clip);
+    let visible_pixels: uint<8> = if left_clip_u8 >= 8u8 { 0u8 } else { trunc(8u8 - left_clip_u8) };
+    let visible_cover: uint<8> = trunc(offset_u8 + visible_pixels);
+    let capped_cover: uint<5> = if visible_cover > 16u8 { 16u5 } else { trunc(visible_cover) };
     if fifo.count > capped_cover { fifo.count } else { capped_cover }
 }
 
@@ -130,26 +152,47 @@ pub fn obj_fifo_start_offset(ticket: SelectedObjTicket, x_out: uint<8>) -> uint<
     if sprite_start > x_out { trunc(sprite_start - x_out) } else { 0u4 }
 }
 
+pub fn obj_fifo_left_clip(ticket: SelectedObjTicket, x_out: uint<8>) -> uint<4> {
+    let clip_raw: uint<9> =
+        if ticket.x < 8u8 {
+            let hidden_left: uint<8> = trunc(8u8 - ticket.x);
+            zext(hidden_left) + zext(x_out)
+        } else {
+            let sprite_start = trunc(ticket.x - 8u8);
+            if x_out > sprite_start {
+                let progressed: uint<8> = trunc(x_out - sprite_start);
+                zext(progressed)
+            } else {
+                0u9
+            }
+        };
+    if clip_raw > 8u9 { 8u4 } else { trunc(clip_raw) }
+}
+
 pub fn obj_fifo_overlay_row(fifo: ObjFifo, row: [ObjPixel; 8], offset: uint<4>) -> ObjFifo {
+    obj_fifo_overlay_row_clipped(fifo, row, offset, 0u4)
+}
+
+pub fn obj_fifo_overlay_row_clipped(fifo: ObjFifo, row: [ObjPixel; 8], offset: uint<4>, left_clip: uint<4>) -> ObjFifo {
     ObjFifo$(
-        count: overlay_count(fifo, offset),
+        count: overlay_count_clipped(fifo, offset, left_clip),
         pixels: [
-            merge_obj_pixel(fifo.pixels[0], incoming_row_pixel(row, 0u4, offset)),
-            merge_obj_pixel(fifo.pixels[1], incoming_row_pixel(row, 1u4, offset)),
-            merge_obj_pixel(fifo.pixels[2], incoming_row_pixel(row, 2u4, offset)),
-            merge_obj_pixel(fifo.pixels[3], incoming_row_pixel(row, 3u4, offset)),
-            merge_obj_pixel(fifo.pixels[4], incoming_row_pixel(row, 4u4, offset)),
-            merge_obj_pixel(fifo.pixels[5], incoming_row_pixel(row, 5u4, offset)),
-            merge_obj_pixel(fifo.pixels[6], incoming_row_pixel(row, 6u4, offset)),
-            merge_obj_pixel(fifo.pixels[7], incoming_row_pixel(row, 7u4, offset)),
-            merge_obj_pixel(fifo.pixels[8], incoming_row_pixel(row, 8u4, offset)),
-            merge_obj_pixel(fifo.pixels[9], incoming_row_pixel(row, 9u4, offset)),
-            merge_obj_pixel(fifo.pixels[10], incoming_row_pixel(row, 10u4, offset)),
-            merge_obj_pixel(fifo.pixels[11], incoming_row_pixel(row, 11u4, offset)),
-            merge_obj_pixel(fifo.pixels[12], incoming_row_pixel(row, 12u4, offset)),
-            merge_obj_pixel(fifo.pixels[13], incoming_row_pixel(row, 13u4, offset)),
-            merge_obj_pixel(fifo.pixels[14], incoming_row_pixel(row, 14u4, offset)),
-            merge_obj_pixel(fifo.pixels[15], incoming_row_pixel(row, 15u4, offset)),
+            merge_obj_pixel(fifo.pixels[0], incoming_row_pixel_clipped(row, 0u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[1], incoming_row_pixel_clipped(row, 1u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[2], incoming_row_pixel_clipped(row, 2u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[3], incoming_row_pixel_clipped(row, 3u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[4], incoming_row_pixel_clipped(row, 4u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[5], incoming_row_pixel_clipped(row, 5u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[6], incoming_row_pixel_clipped(row, 6u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[7], incoming_row_pixel_clipped(row, 7u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[8], incoming_row_pixel_clipped(row, 8u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[9], incoming_row_pixel_clipped(row, 9u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[10], incoming_row_pixel_clipped(row, 10u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[11], incoming_row_pixel_clipped(row, 11u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[12], incoming_row_pixel_clipped(row, 12u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[13], incoming_row_pixel_clipped(row, 13u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[14], incoming_row_pixel_clipped(row, 14u4, offset, left_clip)),
+            merge_obj_pixel(fifo.pixels[15], incoming_row_pixel_clipped(row, 15u4, offset, left_clip)),
         ],
     )
 }

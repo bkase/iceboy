@@ -49,11 +49,12 @@ def decode_output(value: int) -> dict[str, int | bool | list[int]]:
         "palette": (value >> 78) & 0x1,
         "bg_over_obj": bool((value >> 79) & 0x1),
         "offset": (value >> 80) & 0xF,
-        "row_colors": unpack_colors((value >> 84) & 0xFFFF, width=8),
-        "fifo_count": (value >> 100) & 0x1F,
-        "fifo_colors": unpack_colors((value >> 105) & 0xFFFF_FFFF, width=16),
-        "cancel_epoch": (value >> 137) & 0xF,
-        "cancel_pending_valid": bool((value >> 141) & 0x1),
+        "left_clip": (value >> 84) & 0xF,
+        "row_colors": unpack_colors((value >> 88) & 0xFFFF, width=8),
+        "fifo_count": (value >> 104) & 0x1F,
+        "fifo_colors": unpack_colors((value >> 109) & 0xFFFF_FFFF, width=16),
+        "cancel_epoch": (value >> 141) & 0xF,
+        "cancel_pending_valid": bool((value >> 145) & 0x1),
     }
 
 
@@ -141,6 +142,7 @@ async def test_object_fetch_builds_oam_and_vram_requests_and_resolves_meta(dut):
             "palette": 1,
             "bg_over_obj": True,
             "offset": 0,
+            "left_clip": 0,
         },
     )
 
@@ -170,6 +172,7 @@ async def test_object_decode_applies_xflip_and_only_overlays_transparent_fifo_sl
         snapshot,
         expected={
             "row_colors": [0, 0, 0, 0, 3, 2, 1, 0],
+            "left_clip": 0,
             "fifo_count": 12,
             "fifo_colors": [0, 1, 0, 2, 0, 0, 0, 0, 3, 2, 1, 0] + [0] * 4,
         },
@@ -199,3 +202,129 @@ async def test_object_fetch_cancel_bumps_epoch_and_clears_pending_state(dut):
         pending_epoch=5,
     )
     require(logger, snapshot, expected={"cancel_epoch": 6, "cancel_pending_valid": False})
+
+
+@cocotb.test()
+async def test_object_fetch_8x8_yflip_mirrors_row_and_selects_obp0(dut):
+    logger = case_logger("test_object_fetch_8x8_yflip_mirrors_row_and_selects_obp0")
+    logger.step("Resolve an 8x8 sprite on LY=0 with Y flip set so row 0 maps to row 7")
+    snapshot = await sample(
+        dut,
+        oam_index=2,
+        x=32,
+        y=16,
+        selection_rank=0,
+        visible_ly=0,
+        obj_size_8x16=False,
+        tile_id=0x24,
+        flags_byte=0x40,
+        tile_lo=0x00,
+        tile_hi=0x00,
+        x_out=24,
+    )
+    require(
+        logger,
+        snapshot,
+        expected={
+            "row_index": 0,
+            "lo_req_addr": 0x824E,
+            "hi_req_addr": 0x824F,
+            "y_flip": True,
+            "x_flip": False,
+            "palette": 0,
+            "bg_over_obj": False,
+            "offset": 0,
+            "left_clip": 0,
+        },
+    )
+
+
+@cocotb.test()
+async def test_object_overlay_preserves_earlier_opaque_pixels_on_overlap(dut):
+    logger = case_logger("test_object_overlay_preserves_earlier_opaque_pixels_on_overlap")
+    logger.step("Overlay an incoming sprite row onto already-opaque OBJ FIFO slots and keep the earlier opaque pixels")
+    snapshot = await sample(
+        dut,
+        oam_index=4,
+        x=16,
+        y=16,
+        selection_rank=3,
+        visible_ly=0,
+        obj_size_8x16=False,
+        tile_id=0x08,
+        flags_byte=0x00,
+        tile_lo=0x50,
+        tile_hi=0x30,
+        x_out=8,
+        fifo_count=8,
+        fifo_colors=[2, 0, 1, 0, 0, 0, 0, 0] + [0] * 8,
+    )
+    require(
+        logger,
+        snapshot,
+        expected={
+            "offset": 0,
+            "left_clip": 0,
+            "row_colors": [0, 1, 2, 3, 0, 0, 0, 0],
+            "fifo_count": 8,
+            "fifo_colors": [2, 1, 1, 3, 0, 0, 0, 0] + [0] * 8,
+        },
+    )
+
+
+@cocotb.test()
+async def test_object_at_x0_is_fetched_but_fully_clipped_from_fifo(dut):
+    logger = case_logger("test_object_at_x0_is_fetched_but_fully_clipped_from_fifo")
+    logger.step("Fetch a sprite at X=0 and verify it issues memory requests but contributes no visible OBJ FIFO pixels")
+    snapshot = await sample(
+        dut,
+        oam_index=5,
+        x=0,
+        y=16,
+        selection_rank=4,
+        visible_ly=0,
+        obj_size_8x16=False,
+        tile_id=0x10,
+        flags_byte=0x00,
+        tile_lo=0xFF,
+        tile_hi=0x00,
+        x_out=0,
+        fifo_count=0,
+    )
+    require(
+        logger,
+        snapshot,
+        expected={
+            "tile_req_addr": 0xFE16,
+            "flags_req_addr": 0xFE17,
+            "offset": 0,
+            "left_clip": 8,
+            "fifo_count": 0,
+            "fifo_colors": [0] * 16,
+        },
+    )
+
+
+@cocotb.test()
+async def test_lcd_disable_cancel_matches_window_cancel_semantics(dut):
+    logger = case_logger("test_lcd_disable_cancel_matches_window_cancel_semantics")
+    logger.step("Use the same cancel helper semantics for LCD disable and verify the pending state is abandoned")
+    snapshot = await sample(
+        dut,
+        oam_index=1,
+        x=12,
+        y=16,
+        selection_rank=0,
+        visible_ly=0,
+        obj_size_8x16=False,
+        tile_id=0,
+        flags_byte=0,
+        tile_lo=0,
+        tile_hi=0,
+        x_out=8,
+        epoch=9,
+        pending_valid=True,
+        pending_id=2,
+        pending_epoch=9,
+    )
+    require(logger, snapshot, expected={"cancel_epoch": 10, "cancel_pending_valid": False})

@@ -2,7 +2,9 @@ use lib::ppu::rtl::obj_fetch::{
     cancel_obj_fetch,
     decode_obj_flags,
     decode_obj_row,
+    obj_fifo_left_clip,
     obj_fifo_overlay_row,
+    obj_fifo_overlay_row_clipped,
     obj_fifo_start_offset,
     obj_fetch_flags_req,
     obj_fetch_hi_req,
@@ -130,8 +132,10 @@ pub entity obj_fetch_test_top(
     let meta = resolve_obj_meta(ticket, tile_id_i, flags, visible_ly_i);
     let row = decode_obj_row(meta, tile_lo_i, tile_hi_i);
     let offset = obj_fifo_start_offset(ticket, x_out_i);
+    let left_clip = obj_fifo_left_clip(ticket, x_out_i);
     let fifo = build_fifo(fifo_count_i, fifo_colors_i);
-    let overlaid = obj_fifo_overlay_row(fifo, row, offset);
+    let _ = obj_fifo_overlay_row(fifo, row, offset);
+    let overlaid = obj_fifo_overlay_row_clipped(fifo, row, offset, left_clip);
     let cancelled = cancel_obj_fetch(build_fetcher_state(epoch_i, pending_valid_i, pending_id_i, pending_epoch_i));
 
     zext(obj_fetch_tile_req(ticket).addr)
@@ -145,9 +149,10 @@ pub entity obj_fetch_test_top(
         | (zext(match meta.flags.palette { lib::ppu::sem::types::ObjPaletteSel::Obp0 => 0u1, lib::ppu::sem::types::ObjPaletteSel::Obp1 => 1u1 }) << 78)
         | (zext(if meta.flags.bg_over_obj { 1u1 } else { 0u1 }) << 79)
         | (zext(offset) << 80)
-        | (zext(pack_row_colors(row)) << 84)
-        | (zext(overlaid.count) << 100)
-        | (zext(pack_fifo_colors(overlaid)) << 105)
-        | (zext(cancelled.epoch) << 137)
-        | (zext(if cancelled.pending_valid { 1u1 } else { 0u1 }) << 141)
+        | (zext(left_clip) << 84)
+        | (zext(pack_row_colors(row)) << 88)
+        | (zext(overlaid.count) << 104)
+        | (zext(pack_fifo_colors(overlaid)) << 109)
+        | (zext(cancelled.epoch) << 141)
+        | (zext(if cancelled.pending_valid { 1u1 } else { 0u1 }) << 145)
 }
