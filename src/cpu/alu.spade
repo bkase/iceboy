@@ -1,4 +1,4 @@
-use lib::cpu::regs::Flags;
+use lib::cpu::regs::{Flags, sign_extend_e8_u16};
 
 pub enum AluKind {
     Add,
@@ -225,14 +225,6 @@ fn add16_result(a: uint<16>, b: uint<16>, z_preserve: bool) -> AluResult {
             c: raw > 0xffffu17,
         ),
     )
-}
-
-fn sign_extend_e8_u16(off: uint<8>) -> uint<16> {
-    if (off & 0x80u8) == 0x80u8 {
-        0xff00u16 | zext(off)
-    } else {
-        zext(off)
-    }
 }
 
 fn add_sp_e8_result(sp: uint<16>, off: uint<8>) -> AluResult {

@@ -5,7 +5,7 @@ use lib::cpu::control::{aluish_fetch_phase, cb_prefixed_fetch_phase, control_flo
 use lib::cpu::debug::{CommitKind, CommitTrace, MicroOutput};
 use lib::cpu::decode::{decode, decode_cb};
 use lib::cpu::decode_types::{AddressingMode, BitOpKind, ConditionCode, ControlTarget, DecodedOp, MiscKind, Operand16, Operand8, PrefixKind, StackOpKind, WordAluKind};
-use lib::cpu::regs::{Flags, R8, RegPair, Registers, flags_from_f, get_r16, get_r8, mask_f, pack_flags};
+use lib::cpu::regs::{Flags, R8, RegPair, Registers, flags_from_f, get_r16, get_r8, hi_byte, lo_byte, mask_f, pack_flags, sign_extend_e8_u16};
 use lib::cpu::types::{
     CpuArchState,
     CpuDelta,
@@ -175,14 +175,6 @@ fn select_halt(write: Option<HaltState>, current: HaltState) -> HaltState {
         Option::Some(value) => value,
         Option::None => current,
     }
-}
-
-fn hi_byte(word: uint<16>) -> uint<8> {
-    trunc(word >> 8)
-}
-
-fn lo_byte(word: uint<16>) -> uint<8> {
-    trunc(word)
 }
 
 fn reg_writes_for_r8(dst: R8, value: uint<8>) -> RegWriteSet {
@@ -618,14 +610,6 @@ fn execute_word_alu_delta(
                 MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, some_u16(alu_result.val16)),
             )
         },
-    }
-}
-
-fn sign_extend_e8_u16(off: uint<8>) -> uint<16> {
-    if (off & 0x80u8) == 0x80u8 {
-        0xff00u16 | zext(off)
-    } else {
-        zext(off)
     }
 }
 

@@ -98,12 +98,20 @@ pub fn set_r8(regs: Registers, sel: R8, val: uint<8>) -> Registers {
     }
 }
 
-fn hi_byte(word: uint<16>) -> uint<8> {
+pub fn hi_byte(word: uint<16>) -> uint<8> {
     trunc(word >> 8)
 }
 
-fn lo_byte(word: uint<16>) -> uint<8> {
+pub fn lo_byte(word: uint<16>) -> uint<8> {
     trunc(word)
+}
+
+pub fn sign_extend_e8_u16(off: uint<8>) -> uint<16> {
+    if (off & 0x80u8) == 0x80u8 {
+        0xff00u16 | zext(off)
+    } else {
+        zext(off)
+    }
 }
 
 pub fn get_r16(regs: Registers, pair: RegPair) -> uint<16> {

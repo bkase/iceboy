@@ -198,6 +198,8 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/unit/test_halt_bug.py"', text)
         self.assertIn('"test/unit/test_membus.py"', text)
         self.assertIn('"test/unit/test_memory_map.py"', text)
+        self.assertIn('"test/unit/test_regs.py"', text)
+        self.assertIn('"test/unit/test_semantics_wordalu.py"', text)
         self.assertIn('"test/unit/test_event_bridge.py"', text)
         self.assertIn('"test/unit/test_frame_sink.py"', text)
         self.assertIn('"test/ppu/unit/test_ppu_modes.py"', text)
