@@ -35,7 +35,7 @@ pub struct BgPipeOutput {
 }
 
 fn build_bg_pixel(shade: uint<2>, palette: uint<8>) -> BgPixel {
-    BgPixel$(shade: shade, palette: palette)
+    BgPixel$(shade: shade, palette: palette, from_window: false)
 }
 
 fn row_pixels(row: [uint<2>; 8], palette: uint<8>) -> [BgPixel; 8] {

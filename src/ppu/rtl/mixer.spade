@@ -2,7 +2,7 @@ use std::option::Option;
 
 use lib::ppu::sem::sample::PpuRenderInputs;
 use lib::ppu::sem::scanout::{PixelEmit, PixelSource, ScanoutEvent};
-use lib::ppu::sem::types::{BgPixel, Lcdc};
+use lib::ppu::sem::types::{BgPixel, Lcdc, ObjPaletteSel, ObjPixel, zero_obj_pixel};
 
 pub fn palette_lookup(color_idx: uint<2>, palette: uint<8>) -> uint<2> {
     match color_idx {
@@ -17,6 +17,17 @@ pub fn bg_pixel_enabled(lcdc: Lcdc) -> bool {
     lcdc.bg_enable
 }
 
+fn bg_pixel_source(pixel: BgPixel) -> PixelSource {
+    if pixel.from_window { PixelSource::Window } else { PixelSource::Background }
+}
+
+fn obj_palette_bits(pixel: ObjPixel, render: PpuRenderInputs) -> uint<8> {
+    match pixel.palette {
+        ObjPaletteSel::Obp0 => render.obp0_pop,
+        ObjPaletteSel::Obp1 => render.obp1_pop,
+    }
+}
+
 pub fn mix_bg_pixel(pixel: BgPixel, render: PpuRenderInputs, x: uint<8>, y: uint<8>) -> PixelEmit {
     let shade =
         if bg_pixel_enabled(render.lcdc_fetch) {
@@ -24,12 +35,47 @@ pub fn mix_bg_pixel(pixel: BgPixel, render: PpuRenderInputs, x: uint<8>, y: uint
         } else {
             0u2
         };
-    PixelEmit$(x: x, y: y, shade: shade, source: PixelSource::Background)
+    PixelEmit$(x: x, y: y, shade: shade, source: bg_pixel_source(pixel))
+}
+
+pub fn mix_bg_obj_pixel(
+    bg_pixel: BgPixel,
+    obj_pixel_valid: bool,
+    obj_pixel: ObjPixel,
+    render: PpuRenderInputs,
+    x: uint<8>,
+    y: uint<8>,
+) -> PixelEmit {
+    let bg_emit = mix_bg_pixel(bg_pixel, render, x, y);
+    let obj_opaque = obj_pixel_valid && obj_pixel.color != 0u2;
+    let bg_blocks_obj = bg_pixel_enabled(render.lcdc_fetch) && bg_pixel.shade != 0u2 && obj_pixel.bg_over_obj;
+    if !obj_opaque || bg_blocks_obj {
+        bg_emit
+    } else {
+        PixelEmit$(
+            x: x,
+            y: y,
+            shade: palette_lookup(obj_pixel.color, obj_palette_bits(obj_pixel, render)),
+            source: PixelSource::Object,
+        )
+    }
 }
 
 pub fn emit_bg_scanout(pixel_valid: bool, pixel: BgPixel, render: PpuRenderInputs, x: uint<8>, y: uint<8>) -> Option<ScanoutEvent> {
+    emit_mixed_scanout(pixel_valid, pixel, false, zero_obj_pixel(), render, x, y)
+}
+
+pub fn emit_mixed_scanout(
+    pixel_valid: bool,
+    bg_pixel: BgPixel,
+    obj_pixel_valid: bool,
+    obj_pixel: ObjPixel,
+    render: PpuRenderInputs,
+    x: uint<8>,
+    y: uint<8>,
+) -> Option<ScanoutEvent> {
     if pixel_valid {
-        Option::Some(ScanoutEvent::Pixel$(emit: mix_bg_pixel(pixel, render, x, y)))
+        Option::Some(ScanoutEvent::Pixel$(emit: mix_bg_obj_pixel(bg_pixel, obj_pixel_valid, obj_pixel, render, x, y)))
     } else {
         Option::None
     }

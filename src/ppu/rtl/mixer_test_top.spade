@@ -1,9 +1,9 @@
 use std::option::Option;
 
-use lib::ppu::rtl::mixer::{bg_pixel_enabled, emit_bg_scanout, mix_bg_pixel, palette_lookup};
+use lib::ppu::rtl::mixer::{bg_pixel_enabled, emit_mixed_scanout, mix_bg_obj_pixel, mix_bg_pixel, palette_lookup};
 use lib::ppu::sem::sample::PpuRenderInputs;
 use lib::ppu::sem::scanout::{PixelSource, ScanoutEvent};
-use lib::ppu::sem::types::{BgPixel, Lcdc};
+use lib::ppu::sem::types::{BgPixel, Lcdc, ObjDrawRank, ObjPaletteSel, ObjPixel};
 
 fn build_lcdc(bg_enable_i: bool) -> Lcdc {
     Lcdc$(
@@ -13,12 +13,12 @@ fn build_lcdc(bg_enable_i: bool) -> Lcdc {
         bgwin_data_hi: true,
         bg_map_hi: false,
         obj_size_8x16: false,
-        obj_enable: false,
+        obj_enable: true,
         bg_enable: bg_enable_i,
     )
 }
 
-fn build_render(bgp_pop_i: uint<8>, bg_enable_i: bool) -> PpuRenderInputs {
+fn build_render(bgp_pop_i: uint<8>, obp0_pop_i: uint<8>, obp1_pop_i: uint<8>, bg_enable_i: bool) -> PpuRenderInputs {
     PpuRenderInputs$(
         lcdc_fetch: build_lcdc(bg_enable_i),
         scx_fetch: 0u8,
@@ -27,10 +27,14 @@ fn build_render(bgp_pop_i: uint<8>, bg_enable_i: bool) -> PpuRenderInputs {
         wx_live: 0u8,
         wy_triggered_this_frame: false,
         bgp_pop: bgp_pop_i,
-        obp0_pop: 0u8,
-        obp1_pop: 0u8,
+        obp0_pop: obp0_pop_i,
+        obp1_pop: obp1_pop_i,
         lyc_eq_live: false,
     )
+}
+
+fn decode_palette_sel(palette_sel_i: bool) -> ObjPaletteSel {
+    if palette_sel_i { ObjPaletteSel::Obp1 } else { ObjPaletteSel::Obp0 }
 }
 
 fn encode_source(source: PixelSource) -> uint<2> {
@@ -42,19 +46,35 @@ fn encode_source(source: PixelSource) -> uint<2> {
 }
 
 pub entity mixer_test_top(
-    color_idx_i: uint<2>,
+    bg_color_idx_i: uint<2>,
+    bg_from_window_i: bool,
     bgp_pop_i: uint<8>,
+    obp0_pop_i: uint<8>,
+    obp1_pop_i: uint<8>,
     bg_enable_i: bool,
     pixel_valid_i: bool,
+    obj_valid_i: bool,
+    obj_color_i: uint<2>,
+    obj_palette_sel_i: bool,
+    obj_bg_over_obj_i: bool,
+    obj_x_i: uint<8>,
+    obj_selection_rank_i: uint<4>,
     x_i: uint<8>,
     y_i: uint<8>,
-) -> uint<25> {
-    let pixel = BgPixel$(shade: color_idx_i, palette: 0u8);
-    let render = build_render(bgp_pop_i, bg_enable_i);
-    let mixed = mix_bg_pixel(pixel, render, x_i, y_i);
-    let event = emit_bg_scanout(pixel_valid_i, pixel, render, x_i, y_i);
+) -> uint<32> {
+    let bg_pixel = BgPixel$(shade: bg_color_idx_i, palette: 0u8, from_window: bg_from_window_i);
+    let obj_pixel = ObjPixel$(
+        color: obj_color_i,
+        palette: decode_palette_sel(obj_palette_sel_i),
+        draw_rank: ObjDrawRank$(x: obj_x_i, selection_rank: obj_selection_rank_i),
+        bg_over_obj: obj_bg_over_obj_i,
+    );
+    let render = build_render(bgp_pop_i, obp0_pop_i, obp1_pop_i, bg_enable_i);
+    let _ = mix_bg_pixel(bg_pixel, render, x_i, y_i);
+    let mixed = mix_bg_obj_pixel(bg_pixel, obj_valid_i, obj_pixel, render, x_i, y_i);
+    let event = emit_mixed_scanout(pixel_valid_i, bg_pixel, obj_valid_i, obj_pixel, render, x_i, y_i);
 
-    zext(palette_lookup(color_idx_i, bgp_pop_i))
+    zext(palette_lookup(bg_color_idx_i, bgp_pop_i))
         | (zext(if bg_pixel_enabled(render.lcdc_fetch) { 1u1 } else { 0u1 }) << 2)
         | (zext(mixed.shade) << 3)
         | (zext(mixed.x) << 5)
@@ -68,4 +88,8 @@ pub entity mixer_test_top(
             Option::None => 0u1,
         }) << 23)
         | (zext(if match event { Option::Some(_) => true, Option::None => false } { 1u1 } else { 0u1 }) << 24)
+        | (zext(obj_color_i) << 25)
+        | (zext(if bg_from_window_i { 1u1 } else { 0u1 }) << 27)
+        | (zext(if obj_bg_over_obj_i { 1u1 } else { 0u1 }) << 28)
+        | (zext(if obj_valid_i { 1u1 } else { 0u1 }) << 29)
 }

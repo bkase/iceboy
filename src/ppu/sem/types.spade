@@ -148,6 +148,7 @@ pub struct FetcherState {
 pub struct BgPixel {
     shade: uint<2>,
     palette: uint<8>,
+    from_window: bool,
 }
 
 pub struct ObjDrawRank {
@@ -280,7 +281,7 @@ pub fn initial_fetcher_state() -> FetcherState {
 }
 
 pub fn zero_bg_pixel() -> BgPixel {
-    BgPixel$(shade: 0u2, palette: 0u8)
+    BgPixel$(shade: 0u2, palette: 0u8, from_window: false)
 }
 
 pub fn zero_obj_draw_rank() -> ObjDrawRank {
