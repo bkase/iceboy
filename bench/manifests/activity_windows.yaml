@@ -1,0 +1,49 @@
+windows:
+  - name: boot_smoke
+    description: First-instruction boot smoke window from cpu_test_top.
+    run: harness_boot
+    command:
+      - swim
+      - test
+      - test/harness/test_e2e_smoke.py
+    wave_glob: build/harness/test_e2e_smoke_test_first_instruction_executes_correctly_against_pyboy_oracle/test_e2e_smoke.fst
+  - name: alu_loop
+    description: ALU-heavy micro-ROM loop activity window.
+    run: cpu_duty
+    command:
+      - swim
+      - test
+      - test/power/test_duty_cycle_metrics.py
+    wave_glob: build/power/test_duty_cycle_metrics_test_cpu_top_reports_expected_logical_duty_cycles/test_duty_cycle_metrics.fst
+  - name: halt_idle
+    description: HALT-heavy idle window with timer wake source armed.
+    run: halt_quiescence
+    command:
+      - swim
+      - test
+      - test/power/test_halt_quiescence.py
+    wave_glob: build/power/test_halt_quiescence_test_halt_quiescence_holds_state_idle_until_timer_wake/test_halt_quiescence.fst
+  - name: ppu_lcd_off
+    description: PPU LCD-off quiescent window from ppu_power_top.
+    run: ppu_power
+    command:
+      - swim
+      - test
+      - test/power/test_ppu_power_quiescence.py
+    wave_glob: build/power/test_ppu_power_quiescence_test_lcd_off_quiescence_zeroes_render_activity/test_ppu_power_quiescence.fst
+  - name: ppu_oam_scan
+    description: PPU mode-2 OAM scan window from ppu_power_top.
+    run: ppu_power
+    command:
+      - swim
+      - test
+      - test/power/test_ppu_power_quiescence.py
+    wave_glob: build/power/test_ppu_power_quiescence_test_oam_scan_keeps_fetcher_and_fifos_quiet/test_ppu_power_quiescence.fst
+  - name: ppu_hblank
+    description: PPU HBlank idle render-pipeline window from ppu_power_top.
+    run: ppu_power
+    command:
+      - swim
+      - test
+      - test/power/test_ppu_power_quiescence.py
+    wave_glob: build/power/test_ppu_power_quiescence_test_hblank_keeps_render_pipe_quiet/test_ppu_power_quiescence.fst

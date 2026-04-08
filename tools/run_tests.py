@@ -124,6 +124,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("meta", "test_ppu_tooling.py", "python", "tools.tests.test_ppu_tooling"),
     SuiteDefinition("meta", "test_ppu_visibility.py", "python", "tools.tests.test_ppu_visibility"),
     SuiteDefinition("meta", "test_ppu_wave_b_reference.py", "python", "tools.tests.test_ppu_wave_b_reference"),
+    SuiteDefinition("meta", "test_activity_capture.py", "python", "tools.tests.test_activity_capture"),
     SuiteDefinition("meta", "test_build_profiles.py", "python", "tools.tests.test_build_profiles"),
     SuiteDefinition("unit", "test_sm83_opcodes.py", "python", "tools.tests.test_sm83_opcodes"),
     SuiteDefinition(
@@ -233,6 +234,13 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("power", "test_duty_cycle_metrics.py", "swim", "test_duty_cycle_metrics"),
     SuiteDefinition("power", "test_halt_quiescence.py", "swim", "test_halt_quiescence"),
     SuiteDefinition("power", "test_ppu_power_quiescence.py", "swim", "test/power/test_ppu_power_quiescence.py"),
+    SuiteDefinition(
+        "power",
+        "activity_capture_windows.sh",
+        "shell",
+        "tools/run_activity_capture_windows.sh",
+        nightly_only=True,
+    ),
 )
 
 

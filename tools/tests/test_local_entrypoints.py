@@ -210,6 +210,14 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("build/ebr_synth_smoke/ebr_synth_test_top.json", completed.stdout)
         self.assertIn("build/ebr_synth_smoke/yosys-stat.txt", completed.stdout)
 
+    def test_activity_capture_windows_dry_run_targets_manifest_runner(self) -> None:
+        completed = self.run_script("run_activity_capture_windows.sh", "--dry-run")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("tools/activity_capture.py", completed.stdout)
+        self.assertIn("bench/manifests/activity_windows.yaml", completed.stdout)
+
     def test_oracle_smoke_main_round_trips_snapshot(self) -> None:
         oracle_smoke_main()
 

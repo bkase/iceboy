@@ -1,0 +1,1133 @@
+{
+  "generated_at": "2026-04-08T18:51:14.233865+00:00",
+  "windows": {
+    "alu_loop": {
+      "description": "ALU-heavy micro-ROM loop activity window.",
+      "duration_ps": 160003,
+      "reportable_signal_count": 25382,
+      "reportable_total_toggles": 48888,
+      "top_signals": [
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 25,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 141
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 845
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_execute_0.commit",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_execute_0.make_commit_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_execute_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 845
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.commit",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.commit_n1",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.commit_n2",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_0.apply_delta_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 298
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_0.next_state",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 298
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_1.apply_delta_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 298
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_1.next_state",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 298
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_1.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_2.apply_delta_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 298
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_2.next_state",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 298
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_2.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 845
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_prefix_0.commit",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_prefix_0.make_commit_0.apply_delta_0.next_arch",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 21,
+          "tx_ps": 160003,
+          "tz_ps": 0,
+          "width": 100
+        }
+      ]
+    },
+    "boot_smoke": {
+      "description": "First-instruction boot smoke window from cpu_test_top.",
+      "duration_ps": 30001,
+      "reportable_signal_count": 25382,
+      "reportable_total_toggles": 1145,
+      "top_signals": [
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.count_inc_0.output__",
+          "t0_ps": 20000,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 10001,
+          "tz_ps": 0,
+          "width": 64
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.count_inc_13.output__",
+          "t0_ps": 20000,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 10001,
+          "tz_ps": 0,
+          "width": 64
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 330
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_bus_req_0.addr",
+          "t0_ps": 20000,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 10001,
+          "tz_ps": 0,
+          "width": 16
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_bus_req_0.addr_i",
+          "t0_ps": 20000,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 10001,
+          "tz_ps": 0,
+          "width": 16
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_bus_req_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 26
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.bus_req_addr_0.addr",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 16
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.bus_req_addr_0.addr_n1",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 16
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.bus_req_addr_0.output__",
+          "t0_ps": 20000,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 10001,
+          "tz_ps": 0,
+          "width": 16
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.bus_req_addr_0.req",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 26
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.bus_req_addr_0.req_i",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 26
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.bus_req_data_0._",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 16
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.bus_req_data_0.__n1",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 16
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.bus_req_data_0.req",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 26
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.bus_req_data_0.req_i",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 26
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.bus_req_kind_0._",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 16
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.bus_req_kind_0.__n1",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 16
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.bus_req_kind_0.req",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 26
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.bus_req_kind_0.req_i",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 26
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 30001,
+          "tz_ps": 0,
+          "width": 330
+        }
+      ]
+    },
+    "halt_idle": {
+      "description": "HALT-heavy idle window with timer wake source armed.",
+      "duration_ps": 190002,
+      "reportable_signal_count": 25382,
+      "reportable_total_toggles": 35750,
+      "top_signals": [
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 26,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 141
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 20,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 845
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 20,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 845
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_halted_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 20,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 845
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 20,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 845
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.commit",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.commit_n1",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.commit_n2",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_0.apply_delta_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 298
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_0.next_state",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 298
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_1.apply_delta_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 298
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_1.next_state",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 298
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_1.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_2.apply_delta_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 298
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_2.next_state",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 298
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_fetch_0.make_commit_2.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_halted_0.commit_n1",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_halted_0.make_commit_1.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 373
+        },
+        {
+          "path": "iceboy::sim::cpu_test_top::cpu_test_top.cpu_core_0.step_mcycle_0.handle_passthrough_0.commit",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 19,
+          "tx_ps": 190002,
+          "tz_ps": 0,
+          "width": 373
+        }
+      ]
+    },
+    "ppu_hblank": {
+      "description": "PPU HBlank idle render-pipeline window from ppu_power_top.",
+      "duration_ps": 2810003,
+      "reportable_signal_count": 1641,
+      "reportable_total_toggles": 41840,
+      "top_signals": [
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.after",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 1382
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.core",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 2933
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.count_inc_0.output__",
+          "t0_ps": 20000,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2790003,
+          "tz_ps": 0,
+          "width": 64
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n2",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n3",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n4",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n5",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n6",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n7",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n8",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n9",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.held_dot_output_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 1412
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.idle_trace_for_state_1.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 1382
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.idle_trace_for_state_1.state",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 914
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.idle_trace_for_state_1.state_i",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 914
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 2933
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.ppu_debug_trace_0.output",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 1412
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.ppu_debug_trace_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 1382
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.ppu_debug_trace_0.output_i",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 280,
+          "tx_ps": 2810003,
+          "tz_ps": 0,
+          "width": 1412
+        }
+      ]
+    },
+    "ppu_lcd_off": {
+      "description": "PPU LCD-off quiescent window from ppu_power_top.",
+      "duration_ps": 350003,
+      "reportable_signal_count": 1641,
+      "reportable_total_toggles": 921,
+      "top_signals": [
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.count_inc_0.output__",
+          "t0_ps": 20000,
+          "t1_ps": 0,
+          "toggles": 34,
+          "tx_ps": 330003,
+          "tz_ps": 0,
+          "width": 64
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.count_inc_0.counter",
+          "t0_ps": 30000,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 320003,
+          "tz_ps": 0,
+          "width": 64
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.count_inc_0.counter_i",
+          "t0_ps": 30000,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 320003,
+          "tz_ps": 0,
+          "width": 64
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.metric_ppu_total_dots",
+          "t0_ps": 30000,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 320003,
+          "tz_ps": 0,
+          "width": 64
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.bus_event_count",
+          "t0_ps": 340003,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 10000,
+          "tz_ps": 0,
+          "width": 4
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.bus_events",
+          "t0_ps": 340003,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 10000,
+          "tz_ps": 0,
+          "width": 508
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.core",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 350003,
+          "tz_ps": 0,
+          "width": 2933
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.count_inc_3.active",
+          "t0_ps": 340003,
+          "t1_ps": 10000,
+          "toggles": 2,
+          "tx_ps": 0,
+          "tz_ps": 0,
+          "width": 1
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.count_inc_3.active_i",
+          "t0_ps": 340003,
+          "t1_ps": 10000,
+          "toggles": 2,
+          "tx_ps": 0,
+          "tz_ps": 0,
+          "width": 1
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ly_mode_mutation",
+          "t0_ps": 340003,
+          "t1_ps": 10000,
+          "toggles": 2,
+          "tx_ps": 0,
+          "tz_ps": 0,
+          "width": 1
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.bus_event_count",
+          "t0_ps": 340003,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 10000,
+          "tz_ps": 0,
+          "width": 4
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.bus_event_count_i",
+          "t0_ps": 340003,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 10000,
+          "tz_ps": 0,
+          "width": 4
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.bus_events",
+          "t0_ps": 340003,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 10000,
+          "tz_ps": 0,
+          "width": 508
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.bus_events_i",
+          "t0_ps": 340003,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 10000,
+          "tz_ps": 0,
+          "width": 508
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 350003,
+          "tz_ps": 0,
+          "width": 2933
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.step_dot_0.advance_timing_0.__n3",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 350003,
+          "tz_ps": 0,
+          "width": 539
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.step_dot_0.advance_timing_0.input",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 350003,
+          "tz_ps": 0,
+          "width": 539
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.step_dot_0.advance_timing_0.input_i",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 350003,
+          "tz_ps": 0,
+          "width": 539
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.step_dot_0.advance_timing_0.state",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 350003,
+          "tz_ps": 0,
+          "width": 914
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.step_dot_0.advance_timing_0.state_i",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 2,
+          "tx_ps": 350003,
+          "tz_ps": 0,
+          "width": 914
+        }
+      ]
+    },
+    "ppu_oam_scan": {
+      "description": "PPU mode-2 OAM scan window from ppu_power_top.",
+      "duration_ps": 340003,
+      "reportable_signal_count": 1641,
+      "reportable_total_toggles": 4061,
+      "top_signals": [
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.after",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 1382
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.core",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 2933
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.count_inc_0.output__",
+          "t0_ps": 20000,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 320003,
+          "tz_ps": 0,
+          "width": 64
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n2",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n3",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n4",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n5",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n6",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n7",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n8",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.lhs_n9",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 54
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.held_dot_output_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 1412
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.idle_trace_for_state_1.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 1382
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.idle_trace_for_state_1.state",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 914
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.idle_trace_for_state_1.state_i",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 914
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 2933
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.ppu_debug_trace_0.output",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 1412
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.ppu_debug_trace_0.output__",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 1382
+        },
+        {
+          "path": "iceboy::sim::ppu_power_top::ppu_power_top.ppu_core_0.ppu_debug_trace_0.output_i",
+          "t0_ps": 0,
+          "t1_ps": 0,
+          "toggles": 33,
+          "tx_ps": 340003,
+          "tz_ps": 0,
+          "width": 1412
+        }
+      ]
+    }
+  }
+}
