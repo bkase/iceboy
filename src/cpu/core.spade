@@ -35,23 +35,23 @@ fn skipboot_sp() -> uint<16> {
 }
 
 fn skipboot_regs() -> Registers {
-    Registers(
-        0x01u8,
-        0xb0u8,
-        0x00u8,
-        0x13u8,
-        0x00u8,
-        0xd8u8,
-        0x01u8,
-        0x4du8,
-        skipboot_sp(),
-        skipboot_pc(),
+    Registers$(
+        a: 0x01u8,
+        f: 0xb0u8,
+        b: 0x00u8,
+        c: 0x13u8,
+        d: 0x00u8,
+        e: 0xd8u8,
+        h: 0x01u8,
+        l: 0x4du8,
+        sp: skipboot_sp(),
+        pc: skipboot_pc(),
     )
 }
 
 fn skipboot_arch_state() -> CpuArchState {
     let regs = skipboot_regs();
-    CpuArchState(regs, ImeState::Disabled, HaltState::Running)
+    CpuArchState$(regs: regs, ime_state: ImeState::Disabled, halt_state: HaltState::Running)
 }
 
 fn bus_req_kind(req: BusReq) -> uint<2> {
@@ -242,8 +242,8 @@ pub entity cpu_core(
 ) -> CpuCoreOut {
     decl arch_state;
     decl micro_state;
-    let state = CpuState(arch_state, micro_state);
-    let step = step_mcycle(state, MicroInput(bus_resp, irq_pending));
+    let state = CpuState$(arch: arch_state, micro: micro_state);
+    let step = step_mcycle(state, MicroInput$(bus_resp: bus_resp, irq_pending: irq_pending));
     let next_state = apply_delta(state, step.delta);
     let preview_bus_req = step.bus_req;
     reg(clk) arch_state: CpuArchState reset(rst: skipboot_arch_state()) =

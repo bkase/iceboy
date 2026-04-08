@@ -49,7 +49,14 @@ fn some_decoded(value: DecodedOp) -> Option<DecodedOp> {
 }
 
 fn micro_with_phase(phase: Phase) -> MicroWriteSet {
-    MicroWriteSet(some_phase(phase), Option::None, Option::None, Option::None, Option::None, Option::None)
+    MicroWriteSet$(
+        phase: some_phase(phase),
+        opcode_latch: Option::None,
+        imm_lo: Option::None,
+        imm_hi: Option::None,
+        decoded: Option::None,
+        temp: Option::None,
+    )
 }
 
 fn fetch_micro_write() -> MicroWriteSet {
@@ -57,11 +64,25 @@ fn fetch_micro_write() -> MicroWriteSet {
 }
 
 fn micro_with_phase_and_temp(phase: Phase, temp: uint<16>) -> MicroWriteSet {
-    MicroWriteSet(some_phase(phase), Option::None, Option::None, Option::None, Option::None, some_u16(temp))
+    MicroWriteSet$(
+        phase: some_phase(phase),
+        opcode_latch: Option::None,
+        imm_lo: Option::None,
+        imm_hi: Option::None,
+        decoded: Option::None,
+        temp: some_u16(temp),
+    )
 }
 
 fn micro_with_phase_imm_hi_temp(phase: Phase, imm_hi: uint<8>, temp: uint<16>) -> MicroWriteSet {
-    MicroWriteSet(some_phase(phase), Option::None, Option::None, some_u8(imm_hi), Option::None, some_u16(temp))
+    MicroWriteSet$(
+        phase: some_phase(phase),
+        opcode_latch: Option::None,
+        imm_lo: Option::None,
+        imm_hi: some_u8(imm_hi),
+        decoded: Option::None,
+        temp: some_u16(temp),
+    )
 }
 
 fn delta_with_micro(
@@ -70,7 +91,14 @@ fn delta_with_micro(
     sp: Option<uint<16>>,
     micro: MicroWriteSet,
 ) -> CpuDelta {
-    CpuDelta(regs, pc, sp, Option::None, Option::None, micro)
+    CpuDelta$(
+        regs_write: regs,
+        pc_write: pc,
+        sp_write: sp,
+        ime_write: Option::None,
+        halt_write: Option::None,
+        micro_write: micro,
+    )
 }
 
 fn phase_only_delta(phase: Phase) -> CpuDelta {
@@ -181,13 +209,13 @@ fn irq_ack_for_sel(irq: IrqSel) -> IrqAck {
 }
 
 fn service_entry_output(state: CpuState, input: MicroInput, irq: IrqSel) -> MicroOutput {
-    let delta = CpuDelta(
-        idle_reg_write_set(),
-        Option::None,
-        Option::None,
-        Option::Some(ImeState::Disabled),
-        Option::Some(HaltState::Running),
-        micro_with_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::Delay1)),
+    let delta = CpuDelta$(
+        regs_write: idle_reg_write_set(),
+        pc_write: Option::None,
+        sp_write: Option::None,
+        ime_write: Option::Some(ImeState::Disabled),
+        halt_write: Option::Some(HaltState::Running),
+        micro_write: micro_with_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::Delay1)),
     );
     let bus_req = idle_bus_req();
     let irq_ack = irq_ack_for_sel(irq);
@@ -205,40 +233,40 @@ fn select_halt(write: Option<HaltState>, current: HaltState) -> HaltState {
 
 fn reg_writes_for_r8(dst: R8, value: uint<8>) -> RegWriteSet {
     match dst {
-        R8::A => RegWriteSet(some_u8(value), Option::None, Option::None, Option::None, Option::None, Option::None, Option::None, Option::None),
-        R8::B => RegWriteSet(Option::None, Option::None, some_u8(value), Option::None, Option::None, Option::None, Option::None, Option::None),
-        R8::C => RegWriteSet(Option::None, Option::None, Option::None, some_u8(value), Option::None, Option::None, Option::None, Option::None),
-        R8::D => RegWriteSet(Option::None, Option::None, Option::None, Option::None, some_u8(value), Option::None, Option::None, Option::None),
-        R8::E => RegWriteSet(Option::None, Option::None, Option::None, Option::None, Option::None, some_u8(value), Option::None, Option::None),
-        R8::H => RegWriteSet(Option::None, Option::None, Option::None, Option::None, Option::None, Option::None, some_u8(value), Option::None),
-        R8::L => RegWriteSet(Option::None, Option::None, Option::None, Option::None, Option::None, Option::None, Option::None, some_u8(value)),
+        R8::A => RegWriteSet$(a: some_u8(value), f: Option::None, b: Option::None, c: Option::None, d: Option::None, e: Option::None, h: Option::None, l: Option::None),
+        R8::B => RegWriteSet$(a: Option::None, f: Option::None, b: some_u8(value), c: Option::None, d: Option::None, e: Option::None, h: Option::None, l: Option::None),
+        R8::C => RegWriteSet$(a: Option::None, f: Option::None, b: Option::None, c: some_u8(value), d: Option::None, e: Option::None, h: Option::None, l: Option::None),
+        R8::D => RegWriteSet$(a: Option::None, f: Option::None, b: Option::None, c: Option::None, d: some_u8(value), e: Option::None, h: Option::None, l: Option::None),
+        R8::E => RegWriteSet$(a: Option::None, f: Option::None, b: Option::None, c: Option::None, d: Option::None, e: some_u8(value), h: Option::None, l: Option::None),
+        R8::H => RegWriteSet$(a: Option::None, f: Option::None, b: Option::None, c: Option::None, d: Option::None, e: Option::None, h: some_u8(value), l: Option::None),
+        R8::L => RegWriteSet$(a: Option::None, f: Option::None, b: Option::None, c: Option::None, d: Option::None, e: Option::None, h: Option::None, l: some_u8(value)),
     }
 }
 
 fn reg_writes_for_pair(pair: RegPair, value: uint<16>) -> RegWriteSet {
     match pair {
-        RegPair::BC => RegWriteSet(Option::None, Option::None, some_u8(hi_byte(value)), some_u8(lo_byte(value)), Option::None, Option::None, Option::None, Option::None),
-        RegPair::DE => RegWriteSet(Option::None, Option::None, Option::None, Option::None, some_u8(hi_byte(value)), some_u8(lo_byte(value)), Option::None, Option::None),
-        RegPair::HL => RegWriteSet(Option::None, Option::None, Option::None, Option::None, Option::None, Option::None, some_u8(hi_byte(value)), some_u8(lo_byte(value))),
-        RegPair::AF => RegWriteSet(some_u8(hi_byte(value)), some_u8(mask_f(lo_byte(value))), Option::None, Option::None, Option::None, Option::None, Option::None, Option::None),
+        RegPair::BC => RegWriteSet$(a: Option::None, f: Option::None, b: some_u8(hi_byte(value)), c: some_u8(lo_byte(value)), d: Option::None, e: Option::None, h: Option::None, l: Option::None),
+        RegPair::DE => RegWriteSet$(a: Option::None, f: Option::None, b: Option::None, c: Option::None, d: some_u8(hi_byte(value)), e: some_u8(lo_byte(value)), h: Option::None, l: Option::None),
+        RegPair::HL => RegWriteSet$(a: Option::None, f: Option::None, b: Option::None, c: Option::None, d: Option::None, e: Option::None, h: some_u8(hi_byte(value)), l: some_u8(lo_byte(value))),
+        RegPair::AF => RegWriteSet$(a: some_u8(hi_byte(value)), f: some_u8(mask_f(lo_byte(value))), b: Option::None, c: Option::None, d: Option::None, e: Option::None, h: Option::None, l: Option::None),
         RegPair::SP => idle_reg_write_set(),
     }
 }
 
 fn reg_writes_for_flags(flags: Flags) -> RegWriteSet {
-    RegWriteSet(Option::None, some_u8(pack_flags(flags)), Option::None, Option::None, Option::None, Option::None, Option::None, Option::None)
+    RegWriteSet$(a: Option::None, f: some_u8(pack_flags(flags)), b: Option::None, c: Option::None, d: Option::None, e: Option::None, h: Option::None, l: Option::None)
 }
 
 fn merge_reg_writes(a: RegWriteSet, b: RegWriteSet) -> RegWriteSet {
-    RegWriteSet(
-        match b.a { Option::Some(value) => Option::Some(value), Option::None => a.a },
-        match b.f { Option::Some(value) => Option::Some(value), Option::None => a.f },
-        match b.b { Option::Some(value) => Option::Some(value), Option::None => a.b },
-        match b.c { Option::Some(value) => Option::Some(value), Option::None => a.c },
-        match b.d { Option::Some(value) => Option::Some(value), Option::None => a.d },
-        match b.e { Option::Some(value) => Option::Some(value), Option::None => a.e },
-        match b.h { Option::Some(value) => Option::Some(value), Option::None => a.h },
-        match b.l { Option::Some(value) => Option::Some(value), Option::None => a.l },
+    RegWriteSet$(
+        a: match b.a { Option::Some(value) => Option::Some(value), Option::None => a.a },
+        f: match b.f { Option::Some(value) => Option::Some(value), Option::None => a.f },
+        b: match b.b { Option::Some(value) => Option::Some(value), Option::None => a.b },
+        c: match b.c { Option::Some(value) => Option::Some(value), Option::None => a.c },
+        d: match b.d { Option::Some(value) => Option::Some(value), Option::None => a.d },
+        e: match b.e { Option::Some(value) => Option::Some(value), Option::None => a.e },
+        h: match b.h { Option::Some(value) => Option::Some(value), Option::None => a.h },
+        l: match b.l { Option::Some(value) => Option::Some(value), Option::None => a.l },
     )
 }
 
@@ -254,28 +282,28 @@ fn merge_value_and_flags(value_writes: RegWriteSet, flags: Flags) -> RegWriteSet
 }
 
 fn apply_reg_writes(regs: Registers, writes: RegWriteSet, pc: uint<16>, sp: uint<16>) -> Registers {
-    Registers(
-        select_u8(writes.a, regs.a),
-        mask_f(select_u8(writes.f, regs.f)),
-        select_u8(writes.b, regs.b),
-        select_u8(writes.c, regs.c),
-        select_u8(writes.d, regs.d),
-        select_u8(writes.e, regs.e),
-        select_u8(writes.h, regs.h),
-        select_u8(writes.l, regs.l),
-        sp,
-        pc,
+    Registers$(
+        a: select_u8(writes.a, regs.a),
+        f: mask_f(select_u8(writes.f, regs.f)),
+        b: select_u8(writes.b, regs.b),
+        c: select_u8(writes.c, regs.c),
+        d: select_u8(writes.d, regs.d),
+        e: select_u8(writes.e, regs.e),
+        h: select_u8(writes.h, regs.h),
+        l: select_u8(writes.l, regs.l),
+        sp: sp,
+        pc: pc,
     )
 }
 
 fn apply_micro_writes(micro: CpuMicroState, writes: MicroWriteSet) -> CpuMicroState {
-    CpuMicroState(
-        select_phase(writes.phase, micro.phase),
-        select_u8(writes.opcode_latch, micro.opcode_latch),
-        select_u8(writes.imm_lo, micro.imm_lo),
-        select_u8(writes.imm_hi, micro.imm_hi),
-        select_decoded(writes.decoded, micro.decoded),
-        select_u16(writes.temp, micro.temp),
+    CpuMicroState$(
+        phase: select_phase(writes.phase, micro.phase),
+        opcode_latch: select_u8(writes.opcode_latch, micro.opcode_latch),
+        imm_lo: select_u8(writes.imm_lo, micro.imm_lo),
+        imm_hi: select_u8(writes.imm_hi, micro.imm_hi),
+        decoded: select_decoded(writes.decoded, micro.decoded),
+        temp: select_u16(writes.temp, micro.temp),
     )
 }
 
