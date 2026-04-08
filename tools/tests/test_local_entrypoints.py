@@ -218,6 +218,16 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("tools/activity_capture.py", completed.stdout)
         self.assertIn("bench/manifests/activity_windows.yaml", completed.stdout)
 
+    def test_gate_milestone_e_dry_run_targets_power_artifacts(self) -> None:
+        completed = self.run_script("gate_milestone_e.sh", "--dry-run")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("MILESTONE E GATE", completed.stdout)
+        self.assertIn("test/power/test_halt_quiescence.py", completed.stdout)
+        self.assertIn("test/power/test_duty_cycle_metrics.py", completed.stdout)
+        self.assertIn("tools/run_activity_capture_windows.sh", completed.stdout)
+        self.assertIn("docs/hardware/icebreaker_up5k_baseline.json", completed.stdout)
+        self.assertIn("tools/verify_hw_build.sh", completed.stdout)
+
     def test_oracle_smoke_main_round_trips_snapshot(self) -> None:
         oracle_smoke_main()
 

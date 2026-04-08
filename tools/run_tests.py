@@ -111,6 +111,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("meta", "test_gate_milestone_b.py", "python", "tools.tests.test_gate_milestone_b"),
     SuiteDefinition("meta", "test_gate_milestone_c.py", "python", "tools.tests.test_gate_milestone_c"),
     SuiteDefinition("meta", "test_gate_milestone_d.py", "python", "tools.tests.test_gate_milestone_d"),
+    SuiteDefinition("meta", "test_gate_milestone_e.py", "python", "tools.tests.test_gate_milestone_e"),
     SuiteDefinition("meta", "test_gate_ppu_timing.py", "python", "tools.tests.test_gate_ppu_timing"),
     SuiteDefinition("meta", "test_gate_ppu_bgwin.py", "python", "tools.tests.test_gate_ppu_bgwin"),
     SuiteDefinition("meta", "test_coverage_tracker.py", "python", "tools.tests.test_coverage_tracker"),
