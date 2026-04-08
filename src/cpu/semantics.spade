@@ -109,6 +109,24 @@ fn fetch_only_delta() -> CpuDelta {
     phase_only_delta(Phase::Fetch)
 }
 
+fn fetch_phase_delta() -> CpuDelta {
+    CpuDelta$(
+        regs_write: idle_reg_write_set(),
+        pc_write: Option::None,
+        sp_write: Option::None,
+        ime_write: Option::None,
+        halt_write: Option::None,
+        micro_write: MicroWriteSet$(
+            phase: some_phase(Phase::Fetch),
+            opcode_latch: Option::None,
+            imm_lo: Option::None,
+            imm_hi: some_u8(0u8),
+            decoded: Option::None,
+            temp: Option::None,
+        ),
+    )
+}
+
 fn select_u8(write: Option<uint<8>>, current: uint<8>) -> uint<8> {
     match write {
         Option::Some(value) => value,
@@ -208,6 +226,29 @@ fn irq_ack_for_sel(irq: IrqSel) -> IrqAck {
     }
 }
 
+fn micro_output_with_irq_ack(
+    state: CpuState,
+    input: MicroInput,
+    bus_req: BusReq,
+    delta: CpuDelta,
+    opcode: Option<uint<8>>,
+    irq_ack: IrqAck,
+) -> MicroOutput {
+    let commit = make_commit(state, input, bus_req, delta, opcode);
+
+    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: irq_ack, commit: Option::Some(commit), sideband: Option::None)
+}
+
+fn standard_micro_output(
+    state: CpuState,
+    input: MicroInput,
+    bus_req: BusReq,
+    delta: CpuDelta,
+    opcode: Option<uint<8>>,
+) -> MicroOutput {
+    micro_output_with_irq_ack(state, input, bus_req, delta, opcode, no_irq_ack())
+}
+
 fn service_entry_output(state: CpuState, input: MicroInput, irq: IrqSel) -> MicroOutput {
     let delta = CpuDelta$(
         regs_write: idle_reg_write_set(),
@@ -219,9 +260,7 @@ fn service_entry_output(state: CpuState, input: MicroInput, irq: IrqSel) -> Micr
     );
     let bus_req = idle_bus_req();
     let irq_ack = irq_ack_for_sel(irq);
-    let commit = make_commit(state, input, bus_req, delta, Option::None);
-
-    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: irq_ack, commit: Option::Some(commit), sideband: Option::None)
+    micro_output_with_irq_ack(state, input, bus_req, delta, Option::None, irq_ack)
 }
 
 fn select_halt(write: Option<HaltState>, current: HaltState) -> HaltState {
@@ -711,40 +750,12 @@ fn execute_control_flow_delta(state: CpuState, condition: Option<ConditionCode>,
                             ),
                         )
                     } else {
-                        CpuDelta$(
-                            regs_write: idle_reg_write_set(),
-                            pc_write: Option::None,
-                            sp_write: Option::None,
-                            ime_write: Option::None,
-                            halt_write: Option::None,
-                            micro_write: MicroWriteSet$(
-                                phase: some_phase(Phase::Fetch),
-                                opcode_latch: Option::None,
-                                imm_lo: Option::None,
-                                imm_hi: some_u8(0u8),
-                                decoded: Option::None,
-                                temp: Option::None,
-                            ),
-                        )
+                        fetch_phase_delta()
                     }
                 },
                 Operand16::RegisterPair$(pair) => {
                     let _ = pair;
-                    CpuDelta$(
-                        regs_write: idle_reg_write_set(),
-                        pc_write: Option::None,
-                        sp_write: Option::None,
-                        ime_write: Option::None,
-                        halt_write: Option::None,
-                        micro_write: MicroWriteSet$(
-                            phase: some_phase(Phase::Fetch),
-                            opcode_latch: Option::None,
-                            imm_lo: Option::None,
-                            imm_hi: some_u8(0u8),
-                            decoded: Option::None,
-                            temp: Option::None,
-                        ),
-                    )
+                    fetch_phase_delta()
                 },
                 _ => idle_cpu_delta(),
             }
@@ -768,21 +779,7 @@ fn execute_control_flow_delta(state: CpuState, condition: Option<ConditionCode>,
                     ),
                 )
             } else {
-                CpuDelta$(
-                    regs_write: idle_reg_write_set(),
-                    pc_write: Option::None,
-                    sp_write: Option::None,
-                    ime_write: Option::None,
-                    halt_write: Option::None,
-                    micro_write: MicroWriteSet$(
-                        phase: some_phase(Phase::Fetch),
-                        opcode_latch: Option::None,
-                        imm_lo: Option::None,
-                        imm_hi: some_u8(0u8),
-                        decoded: Option::None,
-                        temp: Option::None,
-                    ),
-                )
+                fetch_phase_delta()
             }
         },
         ControlTarget::Call$(target) => {
@@ -807,21 +804,7 @@ fn execute_control_flow_delta(state: CpuState, condition: Option<ConditionCode>,
                             ),
                         )
                     } else {
-                        CpuDelta$(
-                            regs_write: idle_reg_write_set(),
-                            pc_write: Option::None,
-                            sp_write: Option::None,
-                            ime_write: Option::None,
-                            halt_write: Option::None,
-                            micro_write: MicroWriteSet$(
-                                phase: some_phase(Phase::Fetch),
-                                opcode_latch: Option::None,
-                                imm_lo: Option::None,
-                                imm_hi: some_u8(0u8),
-                                decoded: Option::None,
-                                temp: Option::None,
-                            ),
-                        )
+                        fetch_phase_delta()
                     }
                 },
                 _ => idle_cpu_delta(),
@@ -850,21 +833,7 @@ fn execute_control_flow_delta(state: CpuState, condition: Option<ConditionCode>,
                                     ),
                                 )
                             } else {
-                                CpuDelta$(
-                                    regs_write: idle_reg_write_set(),
-                                    pc_write: Option::None,
-                                    sp_write: Option::None,
-                                    ime_write: Option::None,
-                                    halt_write: Option::None,
-                                    micro_write: MicroWriteSet$(
-                                        phase: some_phase(Phase::Fetch),
-                                        opcode_latch: Option::None,
-                                        imm_lo: Option::None,
-                                        imm_hi: some_u8(0u8),
-                                        decoded: Option::None,
-                                        temp: Option::None,
-                                    ),
-                                )
+                                fetch_phase_delta()
                             }
                         },
                         _ => CpuDelta$(
@@ -1272,32 +1241,16 @@ fn handle_fetch(state: CpuState, input: MicroInput) -> MicroOutput {
             let opcode = input.bus_resp.data;
             let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
             let delta = halt_bug_fetch_delta(state, opcode);
-            let commit = make_commit(state, input, bus_req, delta, Option::Some(opcode));
-
-            MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+            standard_micro_output(state, input, bus_req, delta, Option::Some(opcode))
         },
         _ => {
-            match state.arch.ime_state {
-                ImeState::Enabled => {
-                    if any_irq_pending(input.irq_pending) {
-                        service_entry_output(state, input, irq_sel_from_pending(input.irq_pending.pending))
-                    } else {
-                        let opcode = input.bus_resp.data;
-                        let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
-                        let delta = fetch_delta(state, opcode);
-                        let commit = make_commit(state, input, bus_req, delta, Option::Some(opcode));
-
-                        MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
-                    }
-                },
-                _ => {
-                    let opcode = input.bus_resp.data;
-                    let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
-                    let delta = fetch_delta(state, opcode);
-                    let commit = make_commit(state, input, bus_req, delta, Option::Some(opcode));
-
-                    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
-                },
+            if match state.arch.ime_state { ImeState::Enabled => any_irq_pending(input.irq_pending), _ => false } {
+                service_entry_output(state, input, irq_sel_from_pending(input.irq_pending.pending))
+            } else {
+                let opcode = input.bus_resp.data;
+                let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
+                let delta = fetch_delta(state, opcode);
+                standard_micro_output(state, input, bus_req, delta, Option::Some(opcode))
             }
         },
     }
@@ -1370,9 +1323,7 @@ fn handle_fetch_prefix(state: CpuState, input: MicroInput, prefix: PrefixKind) -
             }
         },
     };
-    let commit = make_commit(state, input, bus_req, delta, Option::Some(opcode));
-
-    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+    standard_micro_output(state, input, bus_req, delta, Option::Some(opcode))
 }
 
 fn handle_halted(state: CpuState, input: MicroInput) -> MicroOutput {
@@ -1389,17 +1340,13 @@ fn handle_halted(state: CpuState, input: MicroInput) -> MicroOutput {
                     micro_write: fetch_micro_write(),
                 );
                 let bus_req = idle_bus_req();
-                let commit = make_commit(state, input, bus_req, delta, Option::None);
-
-                MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+                standard_micro_output(state, input, bus_req, delta, Option::None)
             },
         }
     } else {
         let delta = idle_cpu_delta();
         let bus_req = idle_bus_req();
-        let commit = make_commit(state, input, bus_req, delta, Option::None);
-
-        MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+        standard_micro_output(state, input, bus_req, delta, Option::None)
     }
 }
 
@@ -1574,9 +1521,7 @@ fn handle_read_imm8(state: CpuState, input: MicroInput, k: Imm8Cont) -> MicroOut
             micro_write: base_micro,
         ),
     };
-    let commit = make_commit(state, input, bus_req, delta, Option::None);
-
-    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+    standard_micro_output(state, input, bus_req, delta, Option::None)
 }
 
 fn handle_read_imm16_lo(state: CpuState, input: MicroInput, k: Imm16Cont) -> MicroOutput {
@@ -1606,9 +1551,7 @@ fn handle_read_imm16_lo(state: CpuState, input: MicroInput, k: Imm16Cont) -> Mic
             temp: Option::None,
         ),
     );
-    let commit = make_commit(state, input, bus_req, delta, Option::None);
-
-    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+    standard_micro_output(state, input, bus_req, delta, Option::None)
 }
 
 fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm16HiCont) -> MicroOutput {
@@ -1779,9 +1722,7 @@ fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm1
             ),
         ),
     };
-    let commit = make_commit(state, input, bus_req, delta, Option::None);
-
-    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+    standard_micro_output(state, input, bus_req, delta, Option::None)
 }
 
 fn load_hl_adjust(op: DecodedOp, regs: Registers) -> RegWriteSet {
@@ -2013,9 +1954,7 @@ fn handle_read_mem(state: CpuState, input: MicroInput, addr: uint<16>, k: ReadCo
             ),
         ),
     };
-    let commit = make_commit(state, input, bus_req, delta, Option::None);
-
-    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+    standard_micro_output(state, input, bus_req, delta, Option::None)
 }
 
 fn handle_write_mem(state: CpuState, input: MicroInput, addr: uint<16>, data: uint<8>, k: WriteCont) -> MicroOutput {
@@ -2149,9 +2088,7 @@ fn handle_write_mem(state: CpuState, input: MicroInput, addr: uint<16>, data: ui
             ),
         ),
     };
-    let commit = make_commit(state, input, bus_req, delta, Option::None);
-
-    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+    standard_micro_output(state, input, bus_req, delta, Option::None)
 }
 
 fn handle_service_interrupt(state: CpuState, input: MicroInput, irq: IrqSel, subphase: IrqPhase) -> MicroOutput {
@@ -2183,9 +2120,7 @@ fn handle_service_interrupt(state: CpuState, input: MicroInput, irq: IrqSel, sub
         },
         IrqPhase::Jump => delta_with_micro(idle_reg_write_set(), some_u16(irq_vector(irq)), Option::None, fetch_micro_write()),
     };
-    let commit = make_commit(state, input, bus_req, delta, Option::None);
-
-    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+    standard_micro_output(state, input, bus_req, delta, Option::None)
 }
 
 fn handle_execute(state: CpuState, input: MicroInput, op: DecodedOp) -> MicroOutput {
@@ -2266,17 +2201,13 @@ fn handle_execute(state: CpuState, input: MicroInput, op: DecodedOp) -> MicroOut
         _ => fetch_only_delta(),
     };
     let bus_req = idle_bus_req();
-    let commit = make_commit(state, input, bus_req, delta, Option::None);
-
-    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+    standard_micro_output(state, input, bus_req, delta, Option::None)
 }
 
 fn handle_passthrough(state: CpuState, input: MicroInput) -> MicroOutput {
     let delta = idle_cpu_delta();
     let bus_req = idle_bus_req();
-    let commit = make_commit(state, input, bus_req, delta, Option::None);
-
-    MicroOutput$(delta: delta, bus_req: bus_req, irq_ack: no_irq_ack(), commit: Option::Some(commit), sideband: Option::None)
+    standard_micro_output(state, input, bus_req, delta, Option::None)
 }
 
 pub fn step_mcycle(state: CpuState, input: MicroInput) -> MicroOutput {

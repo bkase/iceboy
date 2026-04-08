@@ -125,8 +125,10 @@ class RunTestsTest(unittest.TestCase):
         self.assertIn("test_oam_ebr.py", unit_labels)
         self.assertIn("test_obj_priority.py", unit_labels)
         self.assertIn("test_obj_fetch.py", unit_labels)
+        self.assertIn("test_semantics_flow.py", unit_labels)
         self.assertIn("test_rom_spram.py", unit_labels)
         self.assertIn("test_spram.py", unit_labels)
+        self.assertIn("test_write_enable.py", unit_labels)
 
     def test_write_junit_xml_emits_parseable_report(self) -> None:
         results = [
