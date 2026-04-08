@@ -7,7 +7,7 @@ use lib::ppu::sem::memory::{MemClient, MemRegion, PpuMemReq, PpuMemResp, PpuMemR
 use lib::ppu::sem::scanout::ScanoutEvent;
 use lib::ppu::sem::types::{BgFifo, FetcherSource, FetcherState, FetcherStep, LcdRunState, LineObjList, OamScanState, ObjFifo, PpuMode, WindowState};
 use lib::sim::encode::count_inc;
-use lib::sim::ppu_support::timed_events_from_direct;
+use lib::sim::ppu_support::{encode_lcd_run, encode_ppu_mode, timed_events_from_direct};
 
 fn decode_mmio_reg(target_i: uint<4>) -> MmioReg {
     match target_i {
@@ -21,24 +21,6 @@ fn decode_mmio_reg(target_i: uint<4>) -> MmioReg {
         8u4 => MmioReg::Obp0,
         9u4 => MmioReg::Obp1,
         _ => MmioReg::Lcdc,
-    }
-}
-
-fn encode_mode(mode: PpuMode) -> uint<3> {
-    match mode {
-        PpuMode::LcdOff => 0u3,
-        PpuMode::OamScan => 1u3,
-        PpuMode::PixelTransfer => 2u3,
-        PpuMode::HBlank => 3u3,
-        PpuMode::VBlank => 4u3,
-    }
-}
-
-fn encode_run(run: LcdRunState) -> uint<2> {
-    match run {
-        LcdRunState::Disabled => 0u2,
-        LcdRunState::WarmupBlankFrame => 1u2,
-        LcdRunState::Running => 2u2,
     }
 }
 
@@ -215,8 +197,8 @@ pub entity ppu_power_top(
     let pixel_emit_active = scanout_is_pixel(core.scanout);
     let ly_mode_mutation =
         before.ly_after != after.ly_after
-            || encode_run(before.run_after) != encode_run(after.run_after)
-            || encode_mode(before.mode_after) != encode_mode(after.mode_after);
+            || encode_lcd_run(before.run_after) != encode_lcd_run(after.run_after)
+            || encode_ppu_mode(before.mode_after) != encode_ppu_mode(after.mode_after);
     let window_mutation =
         encode_window_state(before.window_state) != encode_window_state(after.window_state)
             || before.window_line != after.window_line;
@@ -257,7 +239,7 @@ pub entity ppu_power_top(
     reg(clk_i) pending_resp_valid_reg: bool reset(rst_i: false) =
         if dot_ce_i { after.mem_reqs.count != 0u3 } else { pending_resp_valid_reg };
 
-    zext(encode_mode(after.mode_after))
+    zext(encode_ppu_mode(after.mode_after))
         | (zext(after.ly_after) << 3)
         | (zext(after.dot_in_line_after) << 11)
         | (zext(after.bg_fifo.count) << 20)

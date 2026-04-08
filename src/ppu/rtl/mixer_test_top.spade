@@ -3,24 +3,13 @@ use std::option::Option;
 use lib::ppu::rtl::mixer::{bg_pixel_enabled, emit_mixed_scanout, mix_bg_obj_pixel, mix_bg_pixel, palette_lookup};
 use lib::ppu::sem::sample::PpuRenderInputs;
 use lib::ppu::sem::scanout::{PixelSource, ScanoutEvent};
-use lib::ppu::sem::types::{BgPixel, Lcdc, ObjDrawRank, ObjPaletteSel, ObjPixel};
-
-fn build_lcdc(bg_enable_i: bool) -> Lcdc {
-    Lcdc$(
-        lcd_enable: true,
-        win_map_hi: false,
-        win_enable: false,
-        bgwin_data_hi: true,
-        bg_map_hi: false,
-        obj_size_8x16: false,
-        obj_enable: true,
-        bg_enable: bg_enable_i,
-    )
-}
+use lib::ppu::sem::types::{BgPixel, ObjDrawRank, ObjPaletteSel, ObjPixel};
+use lib::sim::encode::encode_pixel_source;
+use lib::sim::ppu_support::build_test_lcdc;
 
 fn build_render(bgp_pop_i: uint<8>, obp0_pop_i: uint<8>, obp1_pop_i: uint<8>, bg_enable_i: bool) -> PpuRenderInputs {
     PpuRenderInputs$(
-        lcdc_fetch: build_lcdc(bg_enable_i),
+        lcdc_fetch: build_test_lcdc(false, false, true, false, false, true, bg_enable_i),
         scx_fetch: 0u8,
         scy_fetch: 0u8,
         scx_low3_line: 0u3,
@@ -35,14 +24,6 @@ fn build_render(bgp_pop_i: uint<8>, obp0_pop_i: uint<8>, obp1_pop_i: uint<8>, bg
 
 fn decode_palette_sel(palette_sel_i: bool) -> ObjPaletteSel {
     if palette_sel_i { ObjPaletteSel::Obp1 } else { ObjPaletteSel::Obp0 }
-}
-
-fn encode_source(source: PixelSource) -> uint<2> {
-    match source {
-        PixelSource::Background => 0u2,
-        PixelSource::Window => 1u2,
-        PixelSource::Object => 2u2,
-    }
 }
 
 pub entity mixer_test_top(
@@ -79,7 +60,7 @@ pub entity mixer_test_top(
         | (zext(mixed.shade) << 3)
         | (zext(mixed.x) << 5)
         | (zext(mixed.y) << 13)
-        | (zext(encode_source(mixed.source)) << 21)
+        | (zext(encode_pixel_source(mixed.source)) << 21)
         | (zext(match event {
             Option::Some(scanout) => match scanout {
                 ScanoutEvent::Pixel$(emit) => lib::util::bit(emit.shade == mixed.shade),

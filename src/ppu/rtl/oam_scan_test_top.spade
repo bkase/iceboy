@@ -1,18 +1,6 @@
 use lib::ppu::rtl::oam_scan::{obj_overlaps_scanline, oam_scan_req, step_oam_scan_entry, ticket_at};
-use lib::ppu::sem::types::{Lcdc, LineObjList, OamScanState, SelectedObjTicket, zero_selected_obj_ticket};
-
-fn build_lcdc(obj_size_8x16_i: bool) -> Lcdc {
-    Lcdc$(
-        lcd_enable: true,
-        win_map_hi: false,
-        win_enable: false,
-        bgwin_data_hi: true,
-        bg_map_hi: false,
-        obj_size_8x16: obj_size_8x16_i,
-        obj_enable: true,
-        bg_enable: true,
-    )
-}
+use lib::ppu::sem::types::{LineObjList, OamScanState, SelectedObjTicket, zero_selected_obj_ticket};
+use lib::sim::ppu_support::build_test_lcdc;
 
 fn seeded_ticket(slot: uint<4>) -> SelectedObjTicket {
     SelectedObjTicket$(
@@ -52,7 +40,7 @@ pub entity oam_scan_test_top(
 ) -> uint<105> {
     let scan = OamScanState$(index: scan_index_i, found: found_i);
     let line_objs = seeded_line_obj_list(count_i);
-    let step = step_oam_scan_entry(scan, line_objs, ly_i, build_lcdc(obj_size_8x16_i), obj_y_i, obj_x_i);
+    let step = step_oam_scan_entry(scan, line_objs, ly_i, build_test_lcdc(false, false, true, false, obj_size_8x16_i, true, true), obj_y_i, obj_x_i);
     let appended_slot = if count_i < 10u4 { count_i } else { 9u4 };
     let appended = ticket_at(step.next_list, appended_slot);
 

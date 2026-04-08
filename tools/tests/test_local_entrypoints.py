@@ -289,6 +289,32 @@ class LocalEntrypointsTest(unittest.TestCase):
                     f"{relative} still defines shared sim helper matching {pattern}",
                 )
 
+    def test_ppu_support_centralizes_test_helper_constructors(self) -> None:
+        support_text = (ROOT / "src" / "sim" / "ppu_support.spade").read_text(encoding="utf-8")
+        self.assertIn("pub fn build_test_lcdc", support_text)
+        self.assertIn("pub fn pack_u2_row", support_text)
+
+        forbidden = (
+            r"fn build_lcdc\(",
+            r"fn pack_row\(",
+        )
+        for relative in (
+            Path("src/ppu/rtl/fetcher_test_top.spade"),
+            Path("src/ppu/rtl/tile_test_top.spade"),
+            Path("src/ppu/rtl/fifo_test_top.spade"),
+            Path("src/ppu/rtl/mixer_test_top.spade"),
+            Path("src/ppu/rtl/oam_scan_test_top.spade"),
+            Path("src/ppu/rtl/obj_priority_test_top.spade"),
+        ):
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            for pattern in forbidden:
+                self.assertIsNone(
+                    re.search(pattern, text),
+                    f"{relative} still defines PPU helper matching {pattern}",
+                )
+        power_text = (ROOT / "src" / "sim" / "ppu_power_top.spade").read_text(encoding="utf-8")
+        self.assertIsNone(re.search(r"fn encode_mode\(", power_text))
+
     def test_gate_milestone_e_dry_run_targets_power_artifacts(self) -> None:
         completed = self.run_script("gate_milestone_e.sh", "--dry-run")
         self.assertEqual(completed.returncode, 0, completed.stderr)

@@ -1,6 +1,7 @@
 use lib::ppu::rtl::fifo::{advance_bg_pipe, note_window_tile_push};
 use lib::ppu::sem::sample::PpuRenderInputs;
-use lib::ppu::sem::types::{BgFifo, BgPixel, PpuSamplingState, WindowState, zero_bg_pixel, Lcdc};
+use lib::ppu::sem::types::{BgFifo, BgPixel, PpuSamplingState, WindowState, zero_bg_pixel};
+use lib::sim::ppu_support::build_test_lcdc;
 
 fn decode_window_state(window_state_i: uint<2>, active_win_x_i: uint<5>, active_win_line_i: uint<8>) -> WindowState {
     match window_state_i {
@@ -8,19 +9,6 @@ fn decode_window_state(window_state_i: uint<2>, active_win_x_i: uint<5>, active_
         2u2 => WindowState::ActiveOnLine$(win_x: active_win_x_i, win_line: active_win_line_i),
         _ => WindowState::Inactive,
     }
-}
-
-fn build_lcdc(win_enable_i: bool) -> Lcdc {
-    Lcdc$(
-        lcd_enable: true,
-        win_map_hi: false,
-        win_enable: win_enable_i,
-        bgwin_data_hi: true,
-        bg_map_hi: false,
-        obj_size_8x16: false,
-        obj_enable: false,
-        bg_enable: true,
-    )
 }
 
 fn build_sampled(scx_low3_i: uint<3>, wy_triggered_i: bool, window_enable_at_mode2_start_i: bool) -> PpuSamplingState {
@@ -33,7 +21,7 @@ fn build_sampled(scx_low3_i: uint<3>, wy_triggered_i: bool, window_enable_at_mod
 
 fn build_render(wx_live_i: uint<8>, push_palette_i: uint<8>, win_enable_i: bool) -> PpuRenderInputs {
     PpuRenderInputs$(
-        lcdc_fetch: build_lcdc(win_enable_i),
+        lcdc_fetch: build_test_lcdc(false, win_enable_i, true, false, false, false, true),
         scx_fetch: 0u8,
         scy_fetch: 0u8,
         scx_low3_line: 0u3,

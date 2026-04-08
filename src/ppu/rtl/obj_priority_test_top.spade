@@ -2,10 +2,8 @@ use lib::ppu::rtl::mixer::mix_bg_obj_pixel;
 use lib::ppu::rtl::oam_scan::{obj_overlaps_scanline, step_oam_scan_entry, ticket_at};
 use lib::ppu::rtl::obj_fetch::{obj_draw_rank_precedes, resolve_obj_priority};
 use lib::ppu::sem::sample::PpuRenderInputs;
-use lib::ppu::sem::scanout::PixelSource;
 use lib::ppu::sem::types::{
     BgPixel,
-    Lcdc,
     LineObjList,
     ObjDrawRank,
     ObjPaletteSel,
@@ -15,23 +13,12 @@ use lib::ppu::sem::types::{
     zero_obj_pixel,
     zero_selected_obj_ticket,
 };
-
-fn build_lcdc(obj_enable_i: bool, obj_size_8x16_i: bool, bg_enable_i: bool) -> Lcdc {
-    Lcdc$(
-        lcd_enable: true,
-        win_map_hi: false,
-        win_enable: false,
-        bgwin_data_hi: true,
-        bg_map_hi: false,
-        obj_size_8x16: obj_size_8x16_i,
-        obj_enable: obj_enable_i,
-        bg_enable: bg_enable_i,
-    )
-}
+use lib::sim::encode::encode_pixel_source;
+use lib::sim::ppu_support::build_test_lcdc;
 
 fn build_render(bgp_pop_i: uint<8>, obp0_pop_i: uint<8>, obp1_pop_i: uint<8>, bg_enable_i: bool) -> PpuRenderInputs {
     PpuRenderInputs$(
-        lcdc_fetch: build_lcdc(true, false, bg_enable_i),
+        lcdc_fetch: build_test_lcdc(false, false, true, false, false, true, bg_enable_i),
         scx_fetch: 0u8,
         scy_fetch: 0u8,
         scx_low3_line: 0u3,
@@ -84,14 +71,6 @@ fn build_obj_pixel(color_i: uint<2>, palette_sel_i: bool, bg_over_obj_i: bool, x
     )
 }
 
-fn pixel_source_bits(source: PixelSource) -> uint<2> {
-    match source {
-        PixelSource::Background => 0u2,
-        PixelSource::Window => 1u2,
-        PixelSource::Object => 2u2,
-    }
-}
-
 pub entity obj_priority_test_top(
     ly_i: uint<8>,
     scan_obj_y_i: uint<8>,
@@ -120,7 +99,7 @@ pub entity obj_priority_test_top(
 ) -> uint<58> {
     let scan = OamScanState$(index: scan_index_i, found: found_i);
     let line_objs = seeded_line_obj_list(count_i);
-    let lcdc = build_lcdc(obj_enable_i, obj_size_8x16_i, bg_enable_i);
+    let lcdc = build_test_lcdc(false, false, true, false, obj_size_8x16_i, obj_enable_i, bg_enable_i);
     let step = step_oam_scan_entry(scan, line_objs, ly_i, lcdc, scan_obj_y_i, scan_obj_x_i);
     let appended_slot = if count_i < 10u4 { count_i } else { 9u4 };
     let appended = ticket_at(step.next_list, appended_slot);
@@ -158,7 +137,7 @@ pub entity obj_priority_test_top(
         | (zext(chosen.draw_rank.x) << 40)
         | (zext(chosen.draw_rank.selection_rank) << 48)
         | (zext(mixed.shade) << 52)
-        | (zext(pixel_source_bits(mixed.source)) << 54)
+        | (zext(encode_pixel_source(mixed.source)) << 54)
         | (zext(lib::util::bit(obj_overlaps_scanline(ly_i, scan_obj_y_i, obj_size_8x16_i))) << 56)
         | (zext(lib::util::bit(obj_draw_rank_precedes(incoming.draw_rank, existing.draw_rank))) << 57)
 }

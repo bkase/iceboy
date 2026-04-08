@@ -1,20 +1,8 @@
 use lib::ppu::rtl::fetcher::{advance_bg_fetcher, initial_bg_fetcher_state, restart_window_fetcher, start_bg_fetcher};
 use lib::ppu::sem::memory::{MemClient, MemRegion, MemTxnTag, PendingRead, PpuMemResp, PpuMemResult};
 use lib::ppu::sem::sample::PpuRenderInputs;
-use lib::ppu::sem::types::{FetcherSource, FetcherState, FetcherStep, Lcdc};
-
-fn build_lcdc(bg_map_hi_i: bool, win_map_hi_i: bool, bgwin_data_hi_i: bool) -> Lcdc {
-    Lcdc$(
-        lcd_enable: true,
-        win_map_hi: win_map_hi_i,
-        win_enable: true,
-        bgwin_data_hi: bgwin_data_hi_i,
-        bg_map_hi: bg_map_hi_i,
-        obj_size_8x16: false,
-        obj_enable: false,
-        bg_enable: true,
-    )
-}
+use lib::ppu::sem::types::{FetcherSource, FetcherState, FetcherStep};
+use lib::sim::ppu_support::{build_test_lcdc, pack_u2_row};
 
 fn decode_source(source_i: uint<2>) -> FetcherSource {
     match source_i {
@@ -42,7 +30,7 @@ fn build_render_inputs(
     scy_fetch_i: uint<8>,
 ) -> PpuRenderInputs {
     PpuRenderInputs$(
-        lcdc_fetch: build_lcdc(bg_map_hi_i, win_map_hi_i, bgwin_data_hi_i),
+        lcdc_fetch: build_test_lcdc(win_map_hi_i, true, bgwin_data_hi_i, bg_map_hi_i, false, false, true),
         scx_fetch: scx_fetch_i,
         scy_fetch: scy_fetch_i,
         scx_low3_line: 0u3,
@@ -92,17 +80,6 @@ fn build_state(
 fn build_resp(resp_valid_i: bool, resp_id_i: uint<4>, resp_data_i: uint<8>) -> PpuMemResp {
     let result = if resp_valid_i { PpuMemResult::Ok$(data: resp_data_i) } else { PpuMemResult::Denied };
     PpuMemResp$(tag: MemTxnTag$(region: MemRegion::Vram, client: MemClient::BgFetcher, id: resp_id_i), result: result)
-}
-
-fn pack_row(row: [uint<2>; 8]) -> uint<16> {
-    zext(row[0])
-        | (zext(row[1]) << 2)
-        | (zext(row[2]) << 4)
-        | (zext(row[3]) << 6)
-        | (zext(row[4]) << 8)
-        | (zext(row[5]) << 10)
-        | (zext(row[6]) << 12)
-        | (zext(row[7]) << 14)
 }
 
 fn pack_source(source: FetcherSource) -> uint<2> {
@@ -210,5 +187,5 @@ pub entity fetcher_test_top(
         | (zext(output.next_state.pending_read.epoch) << 73)
         | (zext(lib::util::bit(output.push_valid)) << 77)
         | (zext(lib::util::bit(output.stale_resp)) << 78)
-        | (zext(pack_row(output.push_row)) << 79)
+        | (zext(pack_u2_row(output.push_row)) << 79)
 }

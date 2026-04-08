@@ -13,7 +13,7 @@ use lib::ppu::sem::observe::{
 };
 use lib::ppu::sem::scanout::{BlankReason, ScanoutEvent, blank_scanout_event};
 use lib::ppu::sem::stimulus::RasterStimulus;
-use lib::ppu::sem::types::{PpuMode, PpuPhase, PpuState, visible_mode};
+use lib::ppu::sem::types::{LcdRunState, Lcdc, PpuMode, PpuPhase, PpuState, visible_mode};
 use lib::ppu::rtl::regs::read_stat;
 
 pub fn encode_ppu_phase(phase: PpuPhase) -> uint<3> {
@@ -34,6 +34,54 @@ pub fn encode_ppu_mode(mode: PpuMode) -> uint<3> {
         PpuMode::HBlank => 3u3,
         PpuMode::VBlank => 4u3,
     }
+}
+
+pub fn encode_lcd_run(run: LcdRunState) -> uint<2> {
+    match run {
+        LcdRunState::Disabled => 0u2,
+        LcdRunState::WarmupBlankFrame => 1u2,
+        LcdRunState::Running => 2u2,
+    }
+}
+
+pub fn decode_lcd_run(run_i: uint<2>) -> LcdRunState {
+    match run_i {
+        1u2 => LcdRunState::WarmupBlankFrame,
+        2u2 => LcdRunState::Running,
+        _ => LcdRunState::Disabled,
+    }
+}
+
+pub fn build_test_lcdc(
+    win_map_hi: bool,
+    win_enable: bool,
+    bgwin_data_hi: bool,
+    bg_map_hi: bool,
+    obj_size_8x16: bool,
+    obj_enable: bool,
+    bg_enable: bool,
+) -> Lcdc {
+    Lcdc$(
+        lcd_enable: true,
+        win_map_hi: win_map_hi,
+        win_enable: win_enable,
+        bgwin_data_hi: bgwin_data_hi,
+        bg_map_hi: bg_map_hi,
+        obj_size_8x16: obj_size_8x16,
+        obj_enable: obj_enable,
+        bg_enable: bg_enable,
+    )
+}
+
+pub fn pack_u2_row(row: [uint<2>; 8]) -> uint<16> {
+    zext(row[0])
+        | (zext(row[1]) << 2)
+        | (zext(row[2]) << 4)
+        | (zext(row[3]) << 6)
+        | (zext(row[4]) << 8)
+        | (zext(row[5]) << 10)
+        | (zext(row[6]) << 12)
+        | (zext(row[7]) << 14)
 }
 
 fn mmio_event(seq: uint<64>, at: VideoCoord, write: MmioWrite) -> TimedPpuEvent {
