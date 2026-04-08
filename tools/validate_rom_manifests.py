@@ -34,6 +34,7 @@ EXPECTED_ROM_IDS = [
     "MBC1_RAM",
     "MBC3_SWITCH",
     "MBC3_RAM",
+    "CPU_INSTRS_BLARGG",
     "PPU_OFF_ON_BASIC",
     "LY_LYC_BASIC",
     "STAT_MODE_SEQ",
@@ -170,8 +171,8 @@ def main() -> int:
 
         expect_type(rom_id, str, "rom id")
         expect_type(path, str, f"{rom_id}.path")
-        if not path.startswith("bench/roms/out/") or not path.endswith(".gb"):
-            fail(f"{rom_id}.path must point at bench/roms/out/*.gb")
+        if not path.endswith(".gb") or not (path.startswith("bench/roms/out/") or path.startswith("roms/")):
+            fail(f"{rom_id}.path must point at bench/roms/out/*.gb or roms/*.gb")
         if path in seen_paths:
             fail(f"duplicate ROM path detected: {path}")
         seen_paths.add(path)
@@ -278,14 +279,33 @@ def main() -> int:
 
         pass_condition = rom["pass_condition"]
         expect_type(pass_condition, dict, f"{rom_id}.pass_condition")
-        if pass_condition.get("kind") not in allowed_pass_kinds:
+        pass_kind = pass_condition.get("kind")
+        if pass_kind not in allowed_pass_kinds:
             fail(f"{rom_id}.pass_condition.kind is not allowed")
-        if pass_condition.get("pass_label") != "__pass":
-            fail(f"{rom_id}.pass_condition.pass_label must be __pass")
-        if pass_condition.get("fail_label") != "__fail":
-            fail(f"{rom_id}.pass_condition.fail_label must be __fail")
-        if pass_condition.get("signature_block") != inventory_abi["wram_signature_block"]["id"]:
-            fail(f"{rom_id}.pass_condition.signature_block must reference the shared WRAM signature block")
+        if pass_kind == "serial_substring":
+            expected_substring = pass_condition.get("expected_substring")
+            expect_type(expected_substring, str, f"{rom_id}.pass_condition.expected_substring")
+            if not expected_substring:
+                fail(f"{rom_id}.pass_condition.expected_substring must not be empty")
+            fail_substrings = expect_string_list(
+                pass_condition.get("fail_substrings", []),
+                f"{rom_id}.pass_condition.fail_substrings",
+            )
+            if not fail_substrings:
+                fail(f"{rom_id}.pass_condition.fail_substrings must not be empty")
+            if pass_condition.get("pass_label") is not None:
+                fail(f"{rom_id}.pass_condition.pass_label must be null for serial_substring")
+            if pass_condition.get("fail_label") is not None:
+                fail(f"{rom_id}.pass_condition.fail_label must be null for serial_substring")
+            if pass_condition.get("signature_block") is not None:
+                fail(f"{rom_id}.pass_condition.signature_block must be null for serial_substring")
+        else:
+            if pass_condition.get("pass_label") != "__pass":
+                fail(f"{rom_id}.pass_condition.pass_label must be __pass")
+            if pass_condition.get("fail_label") != "__fail":
+                fail(f"{rom_id}.pass_condition.fail_label must be __fail")
+            if pass_condition.get("signature_block") != inventory_abi["wram_signature_block"]["id"]:
+                fail(f"{rom_id}.pass_condition.signature_block must reference the shared WRAM signature block")
 
         compare_scope = rom["compare_scope"]
         expect_type(compare_scope, dict, f"{rom_id}.compare_scope")
@@ -303,6 +323,14 @@ def main() -> int:
             fail(f"{rom_id} must use compare_scope.domains [frame_semantic] with oracle_mode frame_semantic")
         if "frame_semantic" in domains and oracle_mode != "frame_semantic":
             fail(f"{rom_id} uses frame_semantic compare scope without oracle_mode frame_semantic")
+        if oracle_mode == "serial_terminal" and domains != ["serial_output"]:
+            fail(f"{rom_id} must use compare_scope.domains [serial_output] with oracle_mode serial_terminal")
+        if "serial_output" in domains and oracle_mode != "serial_terminal":
+            fail(f"{rom_id} uses serial_output compare scope without oracle_mode serial_terminal")
+        if oracle_mode == "serial_terminal" and pass_kind != "serial_substring":
+            fail(f"{rom_id} must use pass_condition.kind serial_substring with oracle_mode serial_terminal")
+        if pass_kind == "serial_substring" and oracle_mode != "serial_terminal":
+            fail(f"{rom_id} uses serial_substring pass condition without oracle_mode serial_terminal")
 
         action_script = rom["action_script"]
         if action_script is not None and not isinstance(action_script, str):

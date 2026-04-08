@@ -138,6 +138,19 @@ class RomManifestSchemaTest(unittest.TestCase):
             asm_path = ROOT / "bench" / "roms" / f"{rom_id}.asm"
             self.assertTrue(asm_path.exists(), f"missing source for {rom_id}: {asm_path}")
 
+    def test_cpu_instrs_blargg_entry_uses_serial_terminal_contract(self) -> None:
+        inventory = yaml.safe_load(ROM_INVENTORY_PATH.read_text(encoding="utf-8"))
+        rom = next(entry for entry in inventory["roms"] if entry["id"] == "CPU_INSTRS_BLARGG")
+
+        self.assertEqual(rom["path"], "roms/cpu_instrs.gb")
+        self.assertEqual(rom["requires"], ["cpu", "mbc1", "joypad"])
+        self.assertEqual(rom["oracle_mode"], "serial_terminal")
+        self.assertEqual(rom["compare_scope"]["domains"], ["serial_output"])
+        self.assertEqual(rom["pass_condition"]["kind"], "serial_substring")
+        self.assertEqual(rom["pass_condition"]["expected_substring"], "Passed all tests")
+        self.assertEqual(rom["pass_condition"]["fail_substrings"], ["Failed"])
+        self.assertRegex(rom["rom_sha256"], r"^[0-9a-f]{64}$")
+
 
 if __name__ == "__main__":
     unittest.main()

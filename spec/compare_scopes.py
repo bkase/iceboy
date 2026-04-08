@@ -17,6 +17,7 @@ class OracleMode(str, Enum):
     Checkpoint = "checkpoint"
     FrameSemantic = "frame_semantic"
     FrameHash = "frame_hash"
+    SerialTerminal = "serial_terminal"
 
 
 class CompareField(str, Enum):
@@ -36,6 +37,7 @@ class CompareField(str, Enum):
     WramSignature = "wram_signature"
     FrameSemantic = "frame_semantic"
     FrameHash = "frame_hash"
+    SerialOutput = "serial_output"
 
 
 INSTR_COMMIT_FIELDS = frozenset(
@@ -70,6 +72,7 @@ COMPARISON_FIELDS_BY_ORACLE_MODE = {
     OracleMode.Checkpoint: COMPARISON_FIELDS_BY_COMMIT_KIND[CommitKind.Checkpoint],
     OracleMode.FrameSemantic: frozenset({CompareField.FrameSemantic}),
     OracleMode.FrameHash: frozenset({CompareField.FrameHash}),
+    OracleMode.SerialTerminal: frozenset({CompareField.SerialOutput}),
 }
 
 DEFAULT_COMMIT_KIND_BY_ORACLE_MODE = {
@@ -79,6 +82,7 @@ DEFAULT_COMMIT_KIND_BY_ORACLE_MODE = {
     OracleMode.Checkpoint: CommitKind.Checkpoint,
     OracleMode.FrameSemantic: CommitKind.Checkpoint,
     OracleMode.FrameHash: CommitKind.Checkpoint,
+    OracleMode.SerialTerminal: None,
 }
 
 

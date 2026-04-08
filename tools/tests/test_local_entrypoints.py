@@ -167,6 +167,17 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("soc_rom_top_verilator_wrapper.sv", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
+    def test_cpu_instrs_blargg_verilator_wrapper_dry_run_uses_cpu_wrapper(self) -> None:
+        completed = self.run_script("run_cpu_instrs_blargg_verilator.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("tools/prepare_verilator_sv.py", completed.stdout)
+        self.assertIn("build/spade.verilator.sv", completed.stdout)
+        self.assertIn("cpu_test_top_verilator_wrapper.sv", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+
     def test_ppu_wave_b_mealybug_verilator_wrapper_dry_run_uses_sanitized_verilog_path(self) -> None:
         completed = self.run_script("run_ppu_wave_b_mealybug_verilator.sh", "--dry-run", "--skip-build")
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -220,6 +231,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/rom/test_mbc1_switch.py"', text)
         self.assertIn('"test/rom/test_mbc3_ram.py"', text)
         self.assertIn('"test/rom/test_mbc3_switch.py"', text)
+        self.assertIn('"tools/run_cpu_instrs_blargg_verilator.sh"', text)
         self.assertIn('"test/rom/test_ppu_wave_a.py"', text)
         self.assertIn('"test/rom/test_ppu_wave_b.py"', text)
         self.assertIn('"tools/run_ppu_wave_a_mooneye_verilator.sh"', text)

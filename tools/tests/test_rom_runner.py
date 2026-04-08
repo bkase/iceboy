@@ -15,6 +15,8 @@ from test.harness.rom_runner import (
     ABI_RESULT_PASS,
     ABI_RESULT_RUNNING,
     ABI_SIGNATURE_SIZE,
+    BLARGG_FAIL_MARKER,
+    BLARGG_PASS_STRING,
     JOYPAD_IF_BIT,
     LCDC_ADDR,
     LY_ADDR,
@@ -33,6 +35,7 @@ from test.harness.rom_runner import (
     _blob_frame_mismatch,
     _decode_png_1bit_grayscale,
     _scanout_blob_bit,
+    classify_blargg_serial_capture,
     classify_mooneye_register_signature,
     classify_mooneye_screen_text,
     classify_mooneye_serial_capture,
@@ -527,6 +530,11 @@ class RomRunnerTest(unittest.TestCase):
         self.assertEqual(classify_mooneye_serial_capture(MOONEYE_PASS_BYTES), "pass")
         self.assertEqual(classify_mooneye_serial_capture(MOONEYE_FAIL_BYTES), "fail")
         self.assertEqual(classify_mooneye_serial_capture((0x99, 0x01, 0x02)), "unknown")
+
+    def test_blargg_serial_capture_classification_distinguishes_pass_fail_and_incomplete(self) -> None:
+        self.assertEqual(classify_blargg_serial_capture(BLARGG_PASS_STRING.encode("ascii")), "pass")
+        self.assertEqual(classify_blargg_serial_capture(BLARGG_FAIL_MARKER.encode("ascii")), "fail")
+        self.assertEqual(classify_blargg_serial_capture(b"cpu_instrs\n01:ok"), "incomplete")
 
     def test_mooneye_register_signature_classification_distinguishes_pass_fail_and_unknown(self) -> None:
         self.assertEqual(classify_mooneye_register_signature(MOONEYE_PASS_BYTES), "pass")

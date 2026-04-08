@@ -96,6 +96,8 @@ VBLANK_IF_BIT = 0x01
 STAT_IF_BIT = 0x02
 MOONEYE_PASS_BYTES = (3, 5, 8, 13, 21, 34)
 MOONEYE_FAIL_BYTES = (0x42, 0x42, 0x42, 0x42, 0x42, 0x42)
+BLARGG_PASS_STRING = "Passed all tests"
+BLARGG_FAIL_MARKER = "Failed"
 
 
 def _cartridge_ram_size_bytes(size_code: int) -> int:
@@ -2123,6 +2125,15 @@ def classify_mooneye_serial_capture(capture: list[int] | tuple[int, ...]) -> str
     if prefix == MOONEYE_FAIL_BYTES:
         return "fail"
     return "unknown"
+
+
+def classify_blargg_serial_capture(capture: list[int] | tuple[int, ...]) -> str:
+    text = bytes(int(value) & 0xFF for value in capture).decode("ascii", errors="replace")
+    if BLARGG_PASS_STRING in text:
+        return "pass"
+    if BLARGG_FAIL_MARKER in text:
+        return "fail"
+    return "incomplete"
 
 
 async def assert_mooneye_ppu_rom_passes(driver: Any, *, rom_path: str | Path, max_mcycles: int = 250000) -> SerialTerminalState:

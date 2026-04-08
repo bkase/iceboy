@@ -86,12 +86,20 @@ class RunTestsTest(unittest.TestCase):
 
     def test_rom_tier_includes_wave_a_ppu_rom_and_mooneye_suites(self) -> None:
         rom_labels = [suite.label for suite in suites_for_tier("rom", nightly=False)]
+        self.assertIn("test_cpu_instrs_blargg.py", rom_labels)
         self.assertIn("test_ppu_wave_a.py", rom_labels)
         self.assertIn("test_ppu_wave_a_mooneye.py", rom_labels)
         self.assertIn("test_ppu_wave_b.py", rom_labels)
+        blargg_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_cpu_instrs_blargg.py")
+        self.assertEqual(blargg_suite.runner, "shell")
+        self.assertEqual(blargg_suite.target, "tools/run_cpu_instrs_blargg_verilator.sh")
         mooneye_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_ppu_wave_a_mooneye.py")
         self.assertEqual(mooneye_suite.runner, "shell")
         self.assertEqual(mooneye_suite.target, "tools/run_ppu_wave_a_mooneye_verilator.sh")
+
+    def test_cpu_instrs_native_runner_sources_exist(self) -> None:
+        self.assertTrue((ROOT / "tools" / "verilator" / "cpu_instrs_blargg_main.cpp").is_file())
+        self.assertTrue((ROOT / "test" / "harness" / "verilog" / "cpu_test_top_verilator_wrapper.sv").is_file())
 
     def test_power_tier_includes_ppu_quiescence_suite(self) -> None:
         power_labels = [suite.label for suite in suites_for_tier("power", nightly=False)]

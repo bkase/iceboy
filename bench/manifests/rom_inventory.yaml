@@ -241,6 +241,25 @@ roms:
     compare_scope:
       domains: [cpu_core, mbc_rom_bank, mbc_ram, wram_signature]
 
+  - id: CPU_INSTRS_BLARGG
+    <<: *dmg_entry
+    path: roms/cpu_instrs.gb
+    rom_sha256: 8c5e12f41e0ba5bbca796944f92ffe6de28809198682c4332e38d1b3cf56fcf2
+    requires: [cpu, mbc1, joypad]
+    oracle_mode: serial_terminal
+    raster_event_coord_space: symbolic
+    timeout_commits: 80000000
+    checkpoint_symbols: []
+    pass_condition:
+      kind: serial_substring
+      pass_label: null
+      fail_label: null
+      signature_block: null
+      expected_substring: Passed all tests
+      fail_substrings: [Failed]
+    compare_scope:
+      domains: [serial_output]
+
   # Wave A: PPU timing and access architecture
   - id: PPU_OFF_ON_BASIC
     <<: *dmg_entry

@@ -16,6 +16,7 @@ allowed_values:
     - mbc1
     - mbc3
     - ppu
+    - joypad
   oracle_mode:
     - unit
     - instr_commit
@@ -23,6 +24,7 @@ allowed_values:
     - checkpoint
     - frame_semantic
     - frame_hash
+    - serial_terminal
   memory_behavior_profile:
     - DmgConservative
     - DmgRevisionSpecific
@@ -44,12 +46,14 @@ allowed_values:
     - mbc_rom_bank
     - oam
     - ppu_irq_counters
+    - serial_output
     - timer_registers
     - wram_signature
   pass_condition_kinds:
     - label_hit
     - wram_signature
     - label_or_wram_signature
+    - serial_substring
   action_generators:
     - striped
   rule_confidence:
@@ -129,7 +133,7 @@ inventory_contract:
     model_profile: Console model profile recorded in manifests and replay capsules.
     reset_profile: Reset-state profile recorded in manifests and replay capsules.
     requires: Hardware capabilities that must exist before the ROM can run.
-    oracle_mode: Comparison cadence for the ROM.
+    oracle_mode: Comparison cadence for the ROM, including serial-terminal external ROMs.
     memory_behavior_profile: DMG memory behavior policy used by the harness.
     build_flavor: Build profile used to produce the ROM and its expected artifacts.
     memory_backend: Expected memory implementation backend for the run.
@@ -139,8 +143,8 @@ inventory_contract:
     raster_event_coord_space: Coordinate space for raster scripts and replay artifacts.
     timeout_commits: Maximum commit boundaries before timeout.
     checkpoint_symbols: Optional __checkpoint_* symbols expected from the ROM.
-    pass_condition: Success and failure contract for the ROM.
-    compare_scope: Domains to compare at each commit or frame boundary.
+    pass_condition: Success and failure contract for the ROM, including serial substring matches for external ROMs.
+    compare_scope: Domains to compare at each commit, frame boundary, or serial terminal boundary.
     expected_soc_revisions: Optional SoC revisions the ROM explicitly targets.
     required_behavior_features: Behavior features that must be enabled for a valid run.
     forbidden_behavior_features: Behavior features that must stay disabled for a valid run.

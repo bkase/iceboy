@@ -136,6 +136,7 @@ class CompareScopesTest(unittest.TestCase):
         self.assertIsNone(DEFAULT_COMMIT_KIND_BY_ORACLE_MODE[OracleMode.Unit])
         self.assertEqual(DEFAULT_COMMIT_KIND_BY_ORACLE_MODE[OracleMode.InstrCommit], CommitKind.InstrCommit)
         self.assertEqual(DEFAULT_COMMIT_KIND_BY_ORACLE_MODE[OracleMode.MCycleCommit], CommitKind.MCycle)
+        self.assertIsNone(DEFAULT_COMMIT_KIND_BY_ORACLE_MODE[OracleMode.SerialTerminal])
         self.assertEqual(
             comparison_fields_for_commit_kind(CommitKind.InterruptAck),
             {
@@ -147,6 +148,10 @@ class CompareScopesTest(unittest.TestCase):
                 CompareField.HaltState,
                 CompareField.IoTouch,
             },
+        )
+        self.assertEqual(
+            COMPARISON_FIELDS_BY_ORACLE_MODE[OracleMode.SerialTerminal],
+            {CompareField.SerialOutput},
         )
 
 
