@@ -1,0 +1,77 @@
+use lib::ppu::rtl::oam_scan::{obj_overlaps_scanline, oam_scan_req, step_oam_scan_entry, ticket_at};
+use lib::ppu::sem::types::{Lcdc, LineObjList, OamScanState, SelectedObjTicket, zero_selected_obj_ticket};
+
+fn build_lcdc(obj_size_8x16_i: bool) -> Lcdc {
+    Lcdc$(
+        lcd_enable: true,
+        win_map_hi: false,
+        win_enable: false,
+        bgwin_data_hi: true,
+        bg_map_hi: false,
+        obj_size_8x16: obj_size_8x16_i,
+        obj_enable: true,
+        bg_enable: true,
+    )
+}
+
+fn seeded_ticket(slot: uint<4>) -> SelectedObjTicket {
+    SelectedObjTicket$(
+        oam_index: zext(slot),
+        x: trunc(0x40u9 + zext(slot)),
+        y: trunc(0x20u9 + zext(slot)),
+        selection_rank: slot,
+    )
+}
+
+fn seeded_line_obj_list(count_i: uint<4>) -> LineObjList {
+    LineObjList$(
+        count: count_i,
+        slots: [
+            if count_i > 0u4 { seeded_ticket(0u4) } else { zero_selected_obj_ticket() },
+            if count_i > 1u4 { seeded_ticket(1u4) } else { zero_selected_obj_ticket() },
+            if count_i > 2u4 { seeded_ticket(2u4) } else { zero_selected_obj_ticket() },
+            if count_i > 3u4 { seeded_ticket(3u4) } else { zero_selected_obj_ticket() },
+            if count_i > 4u4 { seeded_ticket(4u4) } else { zero_selected_obj_ticket() },
+            if count_i > 5u4 { seeded_ticket(5u4) } else { zero_selected_obj_ticket() },
+            if count_i > 6u4 { seeded_ticket(6u4) } else { zero_selected_obj_ticket() },
+            if count_i > 7u4 { seeded_ticket(7u4) } else { zero_selected_obj_ticket() },
+            if count_i > 8u4 { seeded_ticket(8u4) } else { zero_selected_obj_ticket() },
+            if count_i > 9u4 { seeded_ticket(9u4) } else { zero_selected_obj_ticket() },
+        ],
+    )
+}
+
+pub entity oam_scan_test_top(
+    ly_i: uint<8>,
+    obj_y_i: uint<8>,
+    obj_x_i: uint<8>,
+    obj_size_8x16_i: bool,
+    scan_index_i: uint<6>,
+    found_i: uint<4>,
+    count_i: uint<4>,
+) -> uint<105> {
+    let scan = OamScanState$(index: scan_index_i, found: found_i);
+    let line_objs = seeded_line_obj_list(count_i);
+    let step = step_oam_scan_entry(scan, line_objs, ly_i, build_lcdc(obj_size_8x16_i), obj_y_i, obj_x_i);
+    let appended_slot = if count_i < 10u4 { count_i } else { 9u4 };
+    let appended = ticket_at(step.next_list, appended_slot);
+
+    zext(step.req_y.addr)
+        | (zext(step.req_x.addr) << 16)
+        | (zext(step.req_y.tag.id) << 32)
+        | (zext(step.req_x.tag.id) << 36)
+        | (zext(if step.overlap { 1u1 } else { 0u1 }) << 40)
+        | (zext(if step.selected { 1u1 } else { 0u1 }) << 41)
+        | (zext(step.next_scan.index) << 42)
+        | (zext(step.next_scan.found) << 48)
+        | (zext(step.next_list.count) << 52)
+        | (zext(appended.oam_index) << 56)
+        | (zext(appended.x) << 62)
+        | (zext(appended.y) << 70)
+        | (zext(appended.selection_rank) << 78)
+        | (zext(if obj_overlaps_scanline(ly_i, obj_y_i, obj_size_8x16_i) { 1u1 } else { 0u1 }) << 82)
+        | (zext(if step.req_y.addr == 0xfe00u16 { 1u1 } else { 0u1 }) << 83)
+        | (zext(if step.req_x.addr == 0xfe01u16 { 1u1 } else { 0u1 }) << 84)
+        | (zext(step.next_list.slots[0].oam_index) << 85)
+        | (zext(step.next_list.slots[0].selection_rank) << 91)
+}

@@ -33,6 +33,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/ppu/unit/test_bg_fetcher.py"
     "test/ppu/unit/test_bg_fifo.py"
     "test/ppu/unit/test_mixer.py"
+    "test/ppu/unit/test_oam_scan.py"
     "test/ppu/unit/test_window.py"
     "test/ppu/unit/test_tile.py"
     "test/unit/test_interrupt_service.py"

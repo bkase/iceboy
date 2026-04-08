@@ -1,0 +1,116 @@
+use lib::ppu::sem::memory::{MemClient, MemRegion, MemTxnTag, PpuMemKind, PpuMemReq, idle_ppu_mem_req};
+use lib::ppu::sem::types::{Lcdc, LineObjList, OamScanState, SelectedObjTicket, zero_selected_obj_ticket};
+
+pub struct OamScanStepOutput {
+    next_scan: OamScanState,
+    next_list: LineObjList,
+    overlap: bool,
+    selected: bool,
+    req_y: PpuMemReq,
+    req_x: PpuMemReq,
+}
+
+fn oam_scan_tag(id: uint<4>) -> MemTxnTag {
+    MemTxnTag$(region: MemRegion::Oam, client: MemClient::OamScanner, id: id)
+}
+
+pub fn oam_scan_req(oam_index: uint<6>, byte_offset: uint<2>) -> PpuMemReq {
+    let base: uint<16> = trunc(0xfe00u17 + (zext(oam_index) << 2));
+    PpuMemReq$(
+        tag: oam_scan_tag(zext(byte_offset)),
+        kind: PpuMemKind::Read,
+        addr: trunc(base + zext(byte_offset)),
+    )
+}
+
+pub fn obj_height(obj_size_8x16: bool) -> uint<5> {
+    if obj_size_8x16 { 16u5 } else { 8u5 }
+}
+
+pub fn obj_overlaps_scanline(ly: uint<8>, obj_y: uint<8>, obj_size_8x16: bool) -> bool {
+    let ly_plus_bias = zext(ly) + 16u9;
+    let top = zext(obj_y) + 0u9;
+    let bottom = zext(obj_y) + zext(obj_height(obj_size_8x16));
+    ly_plus_bias >= top && ly_plus_bias < bottom
+}
+
+pub fn oam_scan_done(scan: OamScanState) -> bool {
+    scan.index >= 40u6
+}
+
+fn append_ticket(list: LineObjList, ticket: SelectedObjTicket) -> LineObjList {
+    match list.count {
+        0u4 => LineObjList$(count: 1u4, slots: [ticket, list.slots[1], list.slots[2], list.slots[3], list.slots[4], list.slots[5], list.slots[6], list.slots[7], list.slots[8], list.slots[9]]),
+        1u4 => LineObjList$(count: 2u4, slots: [list.slots[0], ticket, list.slots[2], list.slots[3], list.slots[4], list.slots[5], list.slots[6], list.slots[7], list.slots[8], list.slots[9]]),
+        2u4 => LineObjList$(count: 3u4, slots: [list.slots[0], list.slots[1], ticket, list.slots[3], list.slots[4], list.slots[5], list.slots[6], list.slots[7], list.slots[8], list.slots[9]]),
+        3u4 => LineObjList$(count: 4u4, slots: [list.slots[0], list.slots[1], list.slots[2], ticket, list.slots[4], list.slots[5], list.slots[6], list.slots[7], list.slots[8], list.slots[9]]),
+        4u4 => LineObjList$(count: 5u4, slots: [list.slots[0], list.slots[1], list.slots[2], list.slots[3], ticket, list.slots[5], list.slots[6], list.slots[7], list.slots[8], list.slots[9]]),
+        5u4 => LineObjList$(count: 6u4, slots: [list.slots[0], list.slots[1], list.slots[2], list.slots[3], list.slots[4], ticket, list.slots[6], list.slots[7], list.slots[8], list.slots[9]]),
+        6u4 => LineObjList$(count: 7u4, slots: [list.slots[0], list.slots[1], list.slots[2], list.slots[3], list.slots[4], list.slots[5], ticket, list.slots[7], list.slots[8], list.slots[9]]),
+        7u4 => LineObjList$(count: 8u4, slots: [list.slots[0], list.slots[1], list.slots[2], list.slots[3], list.slots[4], list.slots[5], list.slots[6], ticket, list.slots[8], list.slots[9]]),
+        8u4 => LineObjList$(count: 9u4, slots: [list.slots[0], list.slots[1], list.slots[2], list.slots[3], list.slots[4], list.slots[5], list.slots[6], list.slots[7], ticket, list.slots[9]]),
+        9u4 => LineObjList$(count: 10u4, slots: [list.slots[0], list.slots[1], list.slots[2], list.slots[3], list.slots[4], list.slots[5], list.slots[6], list.slots[7], list.slots[8], ticket]),
+        _ => list,
+    }
+}
+
+pub fn step_oam_scan_entry(
+    scan: OamScanState,
+    line_objs: LineObjList,
+    ly: uint<8>,
+    lcdc: Lcdc,
+    obj_y: uint<8>,
+    obj_x: uint<8>,
+) -> OamScanStepOutput {
+    if oam_scan_done(scan) {
+        OamScanStepOutput$(
+            next_scan: scan,
+            next_list: line_objs,
+            overlap: false,
+            selected: false,
+            req_y: idle_ppu_mem_req(),
+            req_x: idle_ppu_mem_req(),
+        )
+    } else {
+        let overlap = obj_overlaps_scanline(ly, obj_y, lcdc.obj_size_8x16);
+        let selected = overlap && line_objs.count < 10u4;
+        let next_list =
+            if selected {
+                append_ticket(
+                    line_objs,
+                    SelectedObjTicket$(
+                        oam_index: scan.index,
+                        x: obj_x,
+                        y: obj_y,
+                        selection_rank: line_objs.count,
+                    ),
+                )
+            } else {
+                line_objs
+            };
+        OamScanStepOutput$(
+            next_scan: OamScanState$(index: trunc(scan.index + 1u6), found: next_list.count),
+            next_list: next_list,
+            overlap: overlap,
+            selected: selected,
+            req_y: oam_scan_req(scan.index, 0u2),
+            req_x: oam_scan_req(scan.index, 1u2),
+        )
+    }
+}
+
+pub fn ticket_at(list: LineObjList, slot: uint<4>) -> SelectedObjTicket {
+    match slot {
+        0u4 => list.slots[0],
+        1u4 => list.slots[1],
+        2u4 => list.slots[2],
+        3u4 => list.slots[3],
+        4u4 => list.slots[4],
+        5u4 => list.slots[5],
+        6u4 => list.slots[6],
+        7u4 => list.slots[7],
+        8u4 => list.slots[8],
+        9u4 => list.slots[9],
+        _ => zero_selected_obj_ticket(),
+    }
+}

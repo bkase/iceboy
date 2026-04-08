@@ -19,6 +19,8 @@ PPU_RTL_IRQ_PATH = ROOT / "src" / "ppu" / "rtl" / "irq.spade"
 PPU_RTL_IRQ_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "irq_test_top.spade"
 PPU_RTL_MIXER_PATH = ROOT / "src" / "ppu" / "rtl" / "mixer.spade"
 PPU_RTL_MIXER_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "mixer_test_top.spade"
+PPU_RTL_OAM_SCAN_PATH = ROOT / "src" / "ppu" / "rtl" / "oam_scan.spade"
+PPU_RTL_OAM_SCAN_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "oam_scan_test_top.spade"
 PPU_RTL_REGS_PATH = ROOT / "src" / "ppu" / "rtl" / "regs.spade"
 PPU_RTL_TILE_PATH = ROOT / "src" / "ppu" / "rtl" / "tile.spade"
 PPU_RTL_TILE_TEST_TOP_PATH = ROOT / "src" / "ppu" / "rtl" / "tile_test_top.spade"
@@ -50,6 +52,8 @@ class PpuScaffoldTest(unittest.TestCase):
         self.assertIn("pub mod irq_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod mixer;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod mixer_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod oam_scan;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
+        self.assertIn("pub mod oam_scan_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod regs;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod tile;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
         self.assertIn("pub mod tile_test_top;", PPU_RTL_MAIN_PATH.read_text(encoding="utf-8"))
@@ -205,6 +209,40 @@ class PpuScaffoldTest(unittest.TestCase):
             "(StatIrqState, bool)",
             "pub fn irq_req(",
             "(StatIrqState, PpuIrqReq)",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_oam_scan_helpers_match_architecture_contract(self) -> None:
+        text = PPU_RTL_OAM_SCAN_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub struct OamScanStepOutput",
+            "next_scan: OamScanState",
+            "next_list: LineObjList",
+            "req_y: PpuMemReq",
+            "req_x: PpuMemReq",
+            "pub fn oam_scan_req(oam_index: uint<6>, byte_offset: uint<2>) -> PpuMemReq",
+            "client: MemClient::OamScanner",
+            "region: MemRegion::Oam",
+            "pub fn obj_overlaps_scanline(ly: uint<8>, obj_y: uint<8>, obj_size_8x16: bool) -> bool",
+            "pub fn oam_scan_done(scan: OamScanState) -> bool",
+            "pub fn step_oam_scan_entry(",
+            "selection_rank: line_objs.count",
+            "pub fn ticket_at(list: LineObjList, slot: uint<4>) -> SelectedObjTicket",
+        ]:
+            self.assertIn(symbol, text)
+
+    def test_ppu_oam_scan_test_top_provides_stable_projection(self) -> None:
+        text = PPU_RTL_OAM_SCAN_TEST_TOP_PATH.read_text(encoding="utf-8")
+        for symbol in [
+            "pub entity oam_scan_test_top(",
+            "scan_index_i: uint<6>",
+            "count_i: uint<4>",
+            "let step = step_oam_scan_entry(",
+            "let appended_slot = if count_i < 10u4 { count_i } else { 9u4 };",
+            "let appended = ticket_at(step.next_list, appended_slot);",
+            "zext(step.req_y.addr)",
+            "zext(step.next_scan.index)",
+            "zext(appended.selection_rank)",
         ]:
             self.assertIn(symbol, text)
 
