@@ -1,0 +1,155 @@
+pub struct SpramDrive {
+    address: uint<14>,
+    datain: uint<16>,
+    maskwren: uint<4>,
+    wren: bool,
+    chipselect: bool,
+    read_valid: bool,
+    read_aux: bool,
+    read_high: bool,
+    standby: bool,
+    sleep: bool,
+    poweroff: bool,
+}
+
+#[no_mangle(all)]
+pub extern entity SB_SPRAM256KA(
+    ADDRESS: uint<14>,
+    DATAIN: uint<16>,
+    MASKWREN: uint<4>,
+    WREN: bool,
+    CHIPSELECT: bool,
+    CLOCK: clock,
+    STANDBY: bool,
+    SLEEP: bool,
+    POWEROFF: bool,
+    DATAOUT: inv uint<16>,
+);
+
+pub fn low_byte(word: uint<16>) -> uint<8> {
+    trunc(word)
+}
+
+pub fn high_byte(word: uint<16>) -> uint<8> {
+    trunc(word >> 8)
+}
+
+pub fn select_byte(word: uint<16>, high: bool) -> uint<8> {
+    if high { high_byte(word) } else { low_byte(word) }
+}
+
+pub fn rom_word_addr(addr: uint<15>) -> uint<14> {
+    trunc(addr >> 1)
+}
+
+pub fn spram8k_word_addr(addr: uint<13>) -> uint<14> {
+    let word_addr: uint<12> = trunc(addr >> 1);
+    zext(word_addr)
+}
+
+pub fn byte_is_high15(addr: uint<15>) -> bool {
+    (addr & 0x0001u15) == 0x0001u15
+}
+
+pub fn byte_is_high13(addr: uint<13>) -> bool {
+    (addr & 0x0001u13) == 0x0001u13
+}
+
+pub fn write_datain(write_data: uint<8>, high: bool) -> uint<16> {
+    if high { zext(write_data) << 8 } else { zext(write_data) }
+}
+
+pub fn write_mask(high: bool) -> uint<4> {
+    if high { 0xcu4 } else { 0x3u4 }
+}
+
+fn idle_drive() -> SpramDrive {
+    SpramDrive$(
+        address: 0u14,
+        datain: 0u16,
+        maskwren: 0u4,
+        wren: false,
+        chipselect: false,
+        read_valid: false,
+        read_aux: false,
+        read_high: false,
+        standby: false,
+        sleep: false,
+        poweroff: true,
+    )
+}
+
+fn read_drive(address: uint<14>, high: bool, read_aux: bool) -> SpramDrive {
+    SpramDrive$(
+        address: address,
+        datain: 0u16,
+        maskwren: 0u4,
+        wren: false,
+        chipselect: true,
+        read_valid: true,
+        read_aux: read_aux,
+        read_high: high,
+        standby: false,
+        sleep: false,
+        poweroff: true,
+    )
+}
+
+fn write_drive(address: uint<14>, data: uint<8>, high: bool) -> SpramDrive {
+    SpramDrive$(
+        address: address,
+        datain: write_datain(data, high),
+        maskwren: write_mask(high),
+        wren: true,
+        chipselect: true,
+        read_valid: false,
+        read_aux: false,
+        read_high: false,
+        standby: false,
+        sleep: false,
+        poweroff: true,
+    )
+}
+
+pub fn rom_schedule(t_index: uint<2>, cpu_addr: uint<15>, dma_addr: uint<15>) -> SpramDrive {
+    match t_index {
+        0u2 => read_drive(rom_word_addr(cpu_addr), byte_is_high15(cpu_addr), false),
+        1u2 => read_drive(rom_word_addr(dma_addr), byte_is_high15(dma_addr), true),
+        _ => idle_drive(),
+    }
+}
+
+pub fn rw8k_schedule(
+    t_index: uint<2>,
+    cpu_addr: uint<13>,
+    aux_addr: uint<13>,
+    write_en: bool,
+    write_addr: uint<13>,
+    write_data: uint<8>,
+) -> SpramDrive {
+    match t_index {
+        0u2 => read_drive(spram8k_word_addr(cpu_addr), byte_is_high13(cpu_addr), false),
+        1u2 => read_drive(spram8k_word_addr(aux_addr), byte_is_high13(aux_addr), true),
+        2u2 => if write_en {
+            write_drive(spram8k_word_addr(write_addr), write_data, byte_is_high13(write_addr))
+        } else {
+            idle_drive()
+        },
+        _ => idle_drive(),
+    }
+}
+
+pub fn update_read_capture(
+    current: uint<8>,
+    dataout: uint<16>,
+    last_read_valid: bool,
+    last_read_aux: bool,
+    target_aux: bool,
+    last_read_high: bool,
+) -> uint<8> {
+    if last_read_valid && last_read_aux == target_aux {
+        select_byte(dataout, last_read_high)
+    } else {
+        current
+    }
+}

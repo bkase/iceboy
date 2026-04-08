@@ -1,0 +1,75 @@
+use lib::mem::phys::ice40_spram::{rom_schedule, rw8k_schedule};
+use lib::mem::phys::spram::{rom_image_spram, wram_spram};
+
+fn bit(b: bool) -> uint<1> {
+    if b { 1u1 } else { 0u1 }
+}
+
+fn pack_drive(drive: lib::mem::phys::ice40_spram::SpramDrive) -> uint<60> {
+    let address_bits: uint<60> = zext(drive.address) << 30;
+    let mask_bits: uint<60> = zext(drive.maskwren) << 26;
+    let read_high_bits: uint<60> = zext(bit(drive.read_high)) << 25;
+    let read_aux_bits: uint<60> = zext(bit(drive.read_aux)) << 24;
+    let read_valid_bits: uint<60> = zext(bit(drive.read_valid)) << 23;
+    let wren_bits: uint<60> = zext(bit(drive.wren)) << 22;
+    let chipselect_bits: uint<60> = zext(bit(drive.chipselect)) << 21;
+    let standby_bits: uint<60> = zext(bit(drive.standby)) << 20;
+    let sleep_bits: uint<60> = zext(bit(drive.sleep)) << 19;
+    let poweroff_bits: uint<60> = zext(bit(drive.poweroff)) << 18;
+    let datain_bits: uint<60> = zext(drive.datain);
+
+    address_bits
+    | mask_bits
+    | read_high_bits
+    | read_aux_bits
+    | read_valid_bits
+    | wren_bits
+    | chipselect_bits
+    | standby_bits
+    | sleep_bits
+    | poweroff_bits
+    | datain_bits
+}
+
+pub entity wram_spram_test_top(
+    clk_i: clock,
+    t_index_i: uint<2>,
+    cpu_addr_i: uint<13>,
+    aux_addr_i: uint<13>,
+    write_en_i: bool,
+    write_addr_i: uint<13>,
+    write_data_i: uint<8>,
+) -> uint<60> {
+    let drive = rw8k_schedule(t_index_i, cpu_addr_i, aux_addr_i, write_en_i, write_addr_i, write_data_i);
+    let (cpu_data, aux_data) = inst wram_spram(
+        clk_i,
+        t_index_i,
+        cpu_addr_i,
+        aux_addr_i,
+        write_en_i,
+        write_addr_i,
+        write_data_i,
+    );
+    let cpu_bits: uint<60> = zext(cpu_data) << 52;
+    let aux_bits: uint<60> = zext(aux_data) << 44;
+
+    cpu_bits
+    | aux_bits
+    | pack_drive(drive)
+}
+
+pub entity rom_image_spram_test_top(
+    clk_i: clock,
+    t_index_i: uint<2>,
+    cpu_addr_i: uint<15>,
+    dma_addr_i: uint<15>,
+) -> uint<60> {
+    let drive = rom_schedule(t_index_i, cpu_addr_i, dma_addr_i);
+    let (cpu_data, dma_data) = inst rom_image_spram(clk_i, t_index_i, cpu_addr_i, dma_addr_i);
+    let cpu_bits: uint<60> = zext(cpu_data) << 52;
+    let dma_bits: uint<60> = zext(dma_data) << 44;
+
+    cpu_bits
+    | dma_bits
+    | pack_drive(drive)
+}

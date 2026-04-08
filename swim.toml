@@ -1,5 +1,8 @@
 name = "iceboy"
 
+[verilog]
+sources = ["test/harness/verilog/SB_SPRAM256KA.v"]
+
 [synthesis]
 top = "icebreaker_top"
 command = "synth_ice40"
