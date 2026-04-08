@@ -199,6 +199,16 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("build/spram_synth_smoke/wram_spram_test_top.json", completed.stdout)
         self.assertIn("build/spram_synth_smoke/yosys-stat.txt", completed.stdout)
 
+    def test_ebr_synth_smoke_dry_run_targets_named_test_top(self) -> None:
+        completed = self.run_script("run_ebr_synth_smoke.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
+        self.assertIn("ebr_synth_smoke_top", completed.stdout)
+        self.assertIn("tools/verilog/ebr_synth_smoke_top.v", completed.stdout)
+        self.assertIn("build/ebr_synth_smoke/ebr_synth_test_top.json", completed.stdout)
+        self.assertIn("build/ebr_synth_smoke/yosys-stat.txt", completed.stdout)
+
     def test_oracle_smoke_main_round_trips_snapshot(self) -> None:
         oracle_smoke_main()
 
@@ -208,8 +218,10 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/unit/test_halt_bug.py"', text)
         self.assertIn('"test/unit/test_membus.py"', text)
         self.assertIn('"test/unit/test_memory_map.py"', text)
+        self.assertIn('"test/unit/test_hram_ebr.py"', text)
         self.assertIn('"test/unit/test_rom_spram.py"', text)
         self.assertIn('"test/unit/test_regs.py"', text)
+        self.assertIn('"test/unit/test_oam_ebr.py"', text)
         self.assertIn('"test/unit/test_spram.py"', text)
         self.assertIn('"test/unit/test_semantics_alu.py"', text)
         self.assertIn('"test/unit/test_semantics_loads.py"', text)

@@ -1,4 +1,5 @@
 pub mod ice40_spram;
 pub mod ebr;
+pub mod ebr_test_top;
 pub mod spram;
 pub mod spram_test_top;

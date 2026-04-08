@@ -1,0 +1,73 @@
+use lib::mem::phys::ebr::{hram_ebr, oam_ebr};
+
+pub entity hram_ebr_test_top(
+    clk: clock,
+    cpu_addr_i: uint<7>,
+    dma_addr_i: uint<7>,
+    write_en_i: bool,
+    write_addr_i: uint<7>,
+    write_data_i: uint<8>,
+) -> uint<16> {
+    let (cpu_data, dma_data) = inst hram_ebr(clk, cpu_addr_i, dma_addr_i, write_en_i, write_addr_i, write_data_i);
+
+    (zext(cpu_data) << 8) | zext(dma_data)
+}
+
+pub entity oam_ebr_test_top(
+    clk: clock,
+    read_addr_i: uint<8>,
+    cpu_write_en_i: bool,
+    cpu_write_addr_i: uint<8>,
+    cpu_write_data_i: uint<8>,
+    dma_write_en_i: bool,
+    dma_write_addr_i: uint<8>,
+    dma_write_data_i: uint<8>,
+) -> uint<8> {
+    inst oam_ebr(
+        clk,
+        read_addr_i,
+        cpu_write_en_i,
+        cpu_write_addr_i,
+        cpu_write_data_i,
+        dma_write_en_i,
+        dma_write_addr_i,
+        dma_write_data_i,
+    )
+}
+
+pub entity ebr_synth_test_top(
+    clk: clock,
+    hram_cpu_addr_i: uint<7>,
+    hram_dma_addr_i: uint<7>,
+    hram_write_en_i: bool,
+    hram_write_addr_i: uint<7>,
+    hram_write_data_i: uint<8>,
+    oam_read_addr_i: uint<8>,
+    oam_cpu_write_en_i: bool,
+    oam_cpu_write_addr_i: uint<8>,
+    oam_cpu_write_data_i: uint<8>,
+    oam_dma_write_en_i: bool,
+    oam_dma_write_addr_i: uint<8>,
+    oam_dma_write_data_i: uint<8>,
+) -> uint<24> {
+    let hram_out = inst hram_ebr_test_top(
+        clk,
+        hram_cpu_addr_i,
+        hram_dma_addr_i,
+        hram_write_en_i,
+        hram_write_addr_i,
+        hram_write_data_i,
+    );
+    let oam_out = inst oam_ebr_test_top(
+        clk,
+        oam_read_addr_i,
+        oam_cpu_write_en_i,
+        oam_cpu_write_addr_i,
+        oam_cpu_write_data_i,
+        oam_dma_write_en_i,
+        oam_dma_write_addr_i,
+        oam_dma_write_data_i,
+    );
+
+    (zext(hram_out) << 8) | zext(oam_out)
+}

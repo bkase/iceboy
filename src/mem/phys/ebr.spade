@@ -1,4 +1,12 @@
-use std::mem::{clocked_memory_init, read_memory};
+use std::mem::{dp_bram, read_read_port};
+
+fn maybe_write(enabled: bool, data: uint<8>) -> Option<uint<8>> {
+    if enabled {
+        Option::Some(data)
+    } else {
+        Option::None
+    }
+}
 
 pub entity hram_ebr(
     clk: clock,
@@ -8,16 +16,22 @@ pub entity hram_ebr(
     write_addr: uint<7>,
     write_data: uint<8>,
 ) -> (uint<8>, uint<8>) {
-    let mem = inst clocked_memory_init::<127, 1, 7, uint<8>>(
-        clk,
-        [(write_en, write_addr, write_data)],
-        [0u8; 127],
-    );
+    // dp_bram exposes one write port and one read port, so mirror writes into
+    // two small EBR-backed memories to preserve the existing dual-read wrapper
+    // surface needed by the bus fabric.
+    let (cpu_write_port, cpu_read_port) = inst dp_bram::<7, uint<8>, 128>(clk, clk);
+    let (dma_write_port, dma_read_port) = inst dp_bram::<7, uint<8>, 128>(clk, clk);
+    let write_value = maybe_write(write_en, write_data);
 
-    (
-        inst read_memory(mem, cpu_addr),
-        inst read_memory(mem, dma_addr),
-    )
+    set cpu_write_port.addr = write_addr;
+    set cpu_write_port.write = write_value;
+    set dma_write_port.addr = write_addr;
+    set dma_write_port.write = write_value;
+
+    let cpu_data = inst(1) read_read_port(clk, cpu_addr, cpu_read_port);
+    let dma_data = inst(1) read_read_port(clk, dma_addr, dma_read_port);
+
+    (cpu_data, dma_data)
 }
 
 pub entity oam_ebr(
@@ -30,14 +44,13 @@ pub entity oam_ebr(
     dma_write_addr: uint<8>,
     dma_write_data: uint<8>,
 ) -> uint<8> {
-    let mem = inst clocked_memory_init::<256, 2, 8, uint<8>>(
-        clk,
-        [
-            (cpu_write_en, cpu_write_addr, cpu_write_data),
-            (dma_write_en, dma_write_addr, dma_write_data),
-        ],
-        [0u8; 256],
-    );
+    let (write_port, read_port) = inst dp_bram::<8, uint<8>, 256>(clk, clk);
+    let selected_write_en = dma_write_en || cpu_write_en;
+    let selected_write_addr = if dma_write_en { dma_write_addr } else { cpu_write_addr };
+    let selected_write_data = if dma_write_en { dma_write_data } else { cpu_write_data };
 
-    inst read_memory(mem, read_addr)
+    set write_port.addr = if selected_write_en { selected_write_addr } else { read_addr };
+    set write_port.write = maybe_write(selected_write_en, selected_write_data);
+
+    inst(1) read_read_port(clk, read_addr, read_port)
 }
