@@ -54,11 +54,8 @@ pub fn access_block_reason(
                     }
                 },
                 lib::ppu::sem::types::PpuMode::PixelTransfer => {
-                    if region_is_vram(req.tag.region) || region_is_oam(req.tag.region) {
-                        Option::Some(VideoBlockReason::CpuBlockedByMode3)
-                    } else {
-                        Option::None
-                    }
+                    // MemRegion is exhaustive here: the video path only carries VRAM and OAM.
+                    Option::Some(VideoBlockReason::CpuBlockedByMode3)
                 },
                 _ => Option::None,
             }

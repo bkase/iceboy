@@ -158,6 +158,12 @@ pub fn pixel_sample(emit: PixelEmit) -> uint<8> {
     zext(emit.shade) | (zext(source_bits(emit.source)) << 2)
 }
 
+fn pixel_mismatch(reference: PixelReference, emit: PixelEmit) -> bool {
+    !reference.valid
+        || reference.shade != emit.shade
+        || source_bits(reference.source) != source_bits(emit.source)
+}
+
 fn line_has_payload(state: LineSinkState) -> bool {
     state.pixel_count != 0u8 || state.blank_count != 0u8 || state.first_diff_valid
 }
@@ -240,8 +246,7 @@ pub fn advance_line_sink(
             reset_line_for_frame(state, next_frame, true)
         },
         ScanoutEvent::LineStart$(y) => start_line(state, y),
-        ScanoutEvent::Blank$(y, reason) => {
-            let _ = reason;
+        ScanoutEvent::Blank$(y: y, reason: _) => {
             if state.active && state.line == y {
                 LineSinkState$(
                     frame: state.frame,
@@ -263,10 +268,7 @@ pub fn advance_line_sink(
             }
         },
         ScanoutEvent::Pixel$(emit) => {
-            let mismatch =
-                !reference.valid
-                || reference.shade != emit.shade
-                || source_bits(reference.source) != source_bits(emit.source);
+            let mismatch = pixel_mismatch(reference, emit);
             let capture_diff = state.active && state.line == emit.y && !state.first_diff_valid && mismatch;
             if state.active && state.line == emit.y {
                 LineSinkState$(
@@ -358,10 +360,7 @@ pub fn advance_diff_sink(
 ) -> DiffSinkState {
     match event {
         ScanoutEvent::Pixel$(emit) => {
-            let mismatch =
-                !reference.valid
-                || reference.shade != emit.shade
-                || source_bits(reference.source) != source_bits(emit.source);
+            let mismatch = pixel_mismatch(reference, emit);
             if state.has_diff || !mismatch {
                 state
             } else {

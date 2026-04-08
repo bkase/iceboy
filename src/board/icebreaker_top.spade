@@ -49,6 +49,7 @@ entity hardware_core(clk: clock, rst: bool, LEDR_N: inv bool, LEDG_N: inv bool) 
         false,
         false,
     );
+    // Keep the observable bus tap instantiated even though the hardware top does not expose it.
     let _ = bus_obs;
 
     set LEDR_N = heartbeat_led(tb.sys_counter);

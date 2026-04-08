@@ -11,11 +11,6 @@ use lib::video::frame_sink::{
     advance_frame_sink,
     advance_hash_sink,
     advance_line_sink,
-    blank_reason_bits,
-    initial_diff_sink_state,
-    initial_frame_sink_state,
-    initial_hash_sink_state,
-    initial_line_sink_state,
     line_boundary_summary,
     source_bits,
     zero_frame_summary,
@@ -70,7 +65,6 @@ fn build_line_state(
     expected_source_i: uint<2>,
     actual_source_i: uint<2>,
 ) -> LineSinkState {
-    let _ = initial_line_sink_state();
     LineSinkState$(
         frame: frame_i,
         frame_started: frame_started_i,
@@ -94,12 +88,10 @@ fn build_frame_state(
     line_count_i: uint<8>,
     frame_hash_i: uint<32>,
 ) -> FrameSinkState {
-    let _ = initial_frame_sink_state();
     FrameSinkState$(frame: frame_i, started: started_i, line_count: line_count_i, frame_hash: frame_hash_i)
 }
 
 fn build_hash_state(sample_count_i: uint<16>, rolling_hash_i: uint<32>) -> HashSinkState {
-    let _ = initial_hash_sink_state();
     HashSinkState$(sample_count: sample_count_i, rolling_hash: rolling_hash_i)
 }
 
@@ -113,7 +105,6 @@ fn build_diff_state(
     expected_source_i: uint<2>,
     actual_source_i: uint<2>,
 ) -> DiffSinkState {
-    let _ = initial_diff_sink_state();
     DiffSinkState$(
         has_diff: has_diff_i,
         frame: frame_i,
