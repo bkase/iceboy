@@ -35,6 +35,18 @@ pub fn hl_post_adjust(regs: Registers, addressing: AddressingMode) -> uint<16> {
     }
 }
 
+fn hl_incdec_load_store_phase(regs: Registers, dst8: Option<Operand8>, src8: Option<Operand8>) -> Phase {
+    match (dst8, src8) {
+        (Option::Some(Operand8::Register$(r8)), Option::Some(_)) => {
+            Phase::ReadMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), k: ReadCont::LoadReg8$(dst: r8))
+        },
+        (Option::Some(_), Option::Some(Operand8::Register$(r8))) => {
+            Phase::WriteMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), data: get_r8(regs, r8), k: WriteCont::StoreDone)
+        },
+        _ => Phase::Fetch,
+    }
+}
+
 pub fn loadish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase {
     match op {
         DecodedOp::Load$(dst8, src8, dst16, src16, addressing) => {
@@ -184,56 +196,10 @@ pub fn loadish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase {
                     }
                 },
                 AddressingMode::MemoryViaHlIncrement => {
-                    match dst8 {
-                        Option::Some(dst8_value) => {
-                            match src8 {
-                                Option::Some(src8_value) => {
-                                    match dst8_value {
-                                        Operand8::Register$(r8) => {
-                                            let _ = src8_value;
-                                            Phase::ReadMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), k: ReadCont::LoadReg8$(dst: r8))
-                                        },
-                                        _ => {
-                                            match src8_value {
-                                                Operand8::Register$(r8) => {
-                                                    Phase::WriteMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), data: get_r8(regs, r8), k: WriteCont::StoreDone)
-                                                },
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                    }
-                                },
-                                Option::None => Phase::Fetch,
-                            }
-                        },
-                        Option::None => Phase::Fetch,
-                    }
+                    hl_incdec_load_store_phase(regs, dst8, src8)
                 },
                 AddressingMode::MemoryViaHlDecrement => {
-                    match dst8 {
-                        Option::Some(dst8_value) => {
-                            match src8 {
-                                Option::Some(src8_value) => {
-                                    match dst8_value {
-                                        Operand8::Register$(r8) => {
-                                            let _ = src8_value;
-                                            Phase::ReadMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), k: ReadCont::LoadReg8$(dst: r8))
-                                        },
-                                        _ => {
-                                            match src8_value {
-                                                Operand8::Register$(r8) => {
-                                                    Phase::WriteMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), data: get_r8(regs, r8), k: WriteCont::StoreDone)
-                                                },
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                    }
-                                },
-                                Option::None => Phase::Fetch,
-                            }
-                        },
-                        Option::None => Phase::Fetch,
-                    }
+                    hl_incdec_load_store_phase(regs, dst8, src8)
                 },
                 AddressingMode::MemoryImm16 => {
                     match dst8 {
