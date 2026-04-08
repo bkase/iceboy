@@ -126,6 +126,12 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("meta", "test_ppu_visibility.py", "python", "tools.tests.test_ppu_visibility"),
     SuiteDefinition("meta", "test_ppu_wave_b_reference.py", "python", "tools.tests.test_ppu_wave_b_reference"),
     SuiteDefinition("meta", "test_activity_capture.py", "python", "tools.tests.test_activity_capture"),
+    SuiteDefinition(
+        "meta",
+        "test_encoding_optimization_evaluation.py",
+        "python",
+        "tools.tests.test_encoding_optimization_evaluation",
+    ),
     SuiteDefinition("meta", "test_build_profiles.py", "python", "tools.tests.test_build_profiles"),
     SuiteDefinition("unit", "test_sm83_opcodes.py", "python", "tools.tests.test_sm83_opcodes"),
     SuiteDefinition(

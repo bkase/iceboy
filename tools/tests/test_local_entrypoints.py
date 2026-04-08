@@ -218,6 +218,14 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("tools/activity_capture.py", completed.stdout)
         self.assertIn("bench/manifests/activity_windows.yaml", completed.stdout)
 
+    def test_encoding_optimization_evaluation_assets_exist(self) -> None:
+        text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
+        self.assertIn('"test_encoding_optimization_evaluation.py"', text)
+        self.assertIn('"tools.tests.test_encoding_optimization_evaluation"', text)
+        self.assertTrue((TOOLS / "encoding_optimization_evaluation.py").exists())
+        self.assertTrue((ROOT / "docs" / "hardware" / "icebreaker_up5k_baseline.json").exists())
+        self.assertTrue((ROOT / "bench" / "manifests" / "activity_windows_baseline.json").exists())
+
     def test_gate_milestone_e_dry_run_targets_power_artifacts(self) -> None:
         completed = self.run_script("gate_milestone_e.sh", "--dry-run")
         self.assertEqual(completed.returncode, 0, completed.stderr)
