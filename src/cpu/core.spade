@@ -54,27 +54,11 @@ fn skipboot_arch_state() -> CpuArchState {
     CpuArchState$(regs: regs, ime_state: ImeState::Disabled, halt_state: HaltState::Running)
 }
 
-fn bus_req_kind(req: BusReq) -> uint<2> {
+fn bus_req_fields(req: BusReq) -> (uint<2>, uint<16>, uint<8>) {
     match req {
-        BusReq::Idle => 0u2,
-        BusReq::Read$(addr: _) => 1u2,
-        BusReq::Write$(addr: _, data: _) => 2u2,
-    }
-}
-
-fn bus_req_addr(req: BusReq) -> uint<16> {
-    match req {
-        BusReq::Idle => 0u16,
-        BusReq::Read$(addr: addr) => addr,
-        BusReq::Write$(addr: addr, data: _) => addr,
-    }
-}
-
-fn bus_req_data(req: BusReq) -> uint<8> {
-    match req {
-        BusReq::Idle => 0u8,
-        BusReq::Read$(addr: _) => 0u8,
-        BusReq::Write$(addr: _, data: data) => data,
+        BusReq::Idle => (0u2, 0u16, 0u8),
+        BusReq::Read$(addr: addr) => (1u2, addr, 0u8),
+        BusReq::Write$(addr: addr, data: data) => (2u2, addr, data),
     }
 }
 
@@ -242,6 +226,7 @@ pub entity cpu_core(
 ) -> CpuCoreOut {
     decl arch_state;
     decl micro_state;
+    decl next_commit_seq;
     let state = CpuState$(arch: arch_state, micro: micro_state);
     let step = step_mcycle(state, MicroInput$(bus_resp: bus_resp, irq_pending: irq_pending));
     let next_state = apply_delta(state, step.delta);
@@ -250,8 +235,8 @@ pub entity cpu_core(
         if m_ce { next_state.arch } else { arch_state };
     reg(clk) micro_state: CpuMicroState reset(rst: initial_cpu_micro_state()) =
         if m_ce { next_state.micro } else { micro_state };
-    reg(clk) commit_seq: uint<64> reset(rst: 0u64) =
-        if m_ce { trunc(commit_seq + 1u64) } else { commit_seq };
+    reg(clk) commit_seq: uint<64> reset(rst: 0u64) = next_commit_seq;
+    let next_commit_seq = if m_ce { trunc(commit_seq + 1u64) } else { commit_seq };
     let visible_arch = arch_state;
     let visible_phase = micro_state.phase;
     let visible_bus_req = if m_ce { step.bus_req } else { BusReq::Idle };
@@ -260,18 +245,20 @@ pub entity cpu_core(
     let visible_reg_we_mask = if m_ce { reg_we_mask_from_delta(step.delta.regs_write, step.delta.sp_write, step.delta.pc_write) } else { 0u10 };
     let visible_alu_active = if m_ce { alu_active_for_phase(micro_state.phase) } else { false };
     let visible_delta_active = if m_ce { delta_active(step.delta) } else { false };
+    let (visible_bus_req_kind, visible_bus_req_addr, visible_bus_req_data) = bus_req_fields(visible_bus_req);
+    let (preview_bus_req_kind, preview_bus_req_addr, preview_bus_req_data) = bus_req_fields(preview_bus_req);
 
     CpuCoreOut$(
-        commit_seq: if m_ce { trunc(commit_seq + 1u64) } else { commit_seq },
+        commit_seq: next_commit_seq,
         regs: visible_arch.regs,
         ime_state: visible_arch.ime_state,
         halt_state: visible_arch.halt_state,
         phase: visible_phase,
         pc: if m_ce { next_state.arch.regs.pc } else { arch_state.regs.pc },
         f_low_nibble_zero: mask_f(visible_f) == visible_f,
-        bus_req_kind: bus_req_kind(visible_bus_req),
-        bus_req_addr: bus_req_addr(visible_bus_req),
-        bus_req_data: bus_req_data(visible_bus_req),
+        bus_req_kind: visible_bus_req_kind,
+        bus_req_addr: visible_bus_req_addr,
+        bus_req_data: visible_bus_req_data,
         irq_ack_valid: match visible_irq_ack.ack_bit {
             Option::Some(value) => { let _ = value; true },
             Option::None => false,
@@ -283,8 +270,8 @@ pub entity cpu_core(
         reg_we_mask: visible_reg_we_mask,
         alu_active: visible_alu_active,
         delta_active: visible_delta_active,
-        preview_bus_req_kind: bus_req_kind(preview_bus_req),
-        preview_bus_req_addr: bus_req_addr(preview_bus_req),
-        preview_bus_req_data: bus_req_data(preview_bus_req),
+        preview_bus_req_kind: preview_bus_req_kind,
+        preview_bus_req_addr: preview_bus_req_addr,
+        preview_bus_req_data: preview_bus_req_data,
     )
 }

@@ -413,6 +413,6 @@ pub fn alu(req: AluReq) -> AluResult {
         AluReq::Ccf$(f_prev) => ccf_result(f_prev),
         AluReq::RotShift$(kind, x, f_prev, zero_on_result) => rot_shift_result(kind, x, f_prev, zero_on_result),
         AluReq::BitResSet$(kind, bit_index, x, f_prev) => bit_res_set_result(kind, bit_index, x, f_prev),
-        _ => idle_alu_result(),
+        AluReq::Idle => idle_alu_result(),
     }
 }

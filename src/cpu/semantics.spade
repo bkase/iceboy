@@ -920,21 +920,7 @@ fn execute_stack_delta(state: CpuState, kind: StackOpKind, pair: RegPair, addres
                 ),
             )
         },
-        StackOpKind::Pop => CpuDelta$(
-            regs_write: idle_reg_write_set(),
-            pc_write: Option::None,
-            sp_write: Option::None,
-            ime_write: Option::None,
-            halt_write: Option::None,
-            micro_write: MicroWriteSet$(
-                phase: some_phase(Phase::Fetch),
-                opcode_latch: Option::None,
-                imm_lo: Option::None,
-                imm_hi: Option::None,
-                decoded: Option::None,
-                temp: Option::None,
-            ),
-        ),
+        StackOpKind::Pop => fetch_only_delta(),
     }
 }
 
@@ -1653,46 +1639,21 @@ fn load_hl_adjust(op: DecodedOp, regs: Registers) -> RegWriteSet {
     match op {
         DecodedOp::Load$(dst8, src8, dst16, src16, addressing) => {
             let _ = (dst16, src16);
-            let touches_hl = match dst8 {
-                Option::Some(dst8_value) => {
-                    match src8 {
-                        Option::Some(src8_value) => {
-                            match dst8_value {
-                                Operand8::Register$(r8) => {
-                                    match src8_value {
-                                        Operand8::AddrHli => match r8 { R8::A => true, _ => false },
-                                        Operand8::AddrHld => match r8 { R8::A => true, _ => false },
-                                        _ => false,
-                                    }
-                                },
-                                Operand8::AddrHli => {
-                                    match src8_value {
-                                        Operand8::Register$(r8) => match r8 { R8::A => true, _ => false },
-                                        _ => false,
-                                    }
-                                },
-                                Operand8::AddrHld => {
-                                    match src8_value {
-                                        Operand8::Register$(r8) => match r8 { R8::A => true, _ => false },
-                                        _ => false,
-                                    }
-                                },
-                                _ => false,
-                            }
-                        },
-                        Option::None => false,
-                    }
-                },
-                Option::None => false,
-            };
-
-            if touches_hl {
+            if operand_is_hli_hld(dst8) || operand_is_hli_hld(src8) {
                 reg_writes_for_pair(RegPair::HL, hl_post_adjust(regs, addressing))
             } else {
                 idle_reg_write_set()
             }
         },
         _ => idle_reg_write_set(),
+    }
+}
+
+fn operand_is_hli_hld(op: Option<Operand8>) -> bool {
+    match op {
+        Option::Some(Operand8::AddrHli) => true,
+        Option::Some(Operand8::AddrHld) => true,
+        _ => false,
     }
 }
 
@@ -2146,6 +2107,5 @@ pub fn step_mcycle(state: CpuState, input: MicroInput) -> MicroOutput {
         Phase::Execute$(op) => handle_execute(state, input, op),
         Phase::ServiceInterrupt$(irq, subphase) => handle_service_interrupt(state, input, irq, subphase),
         Phase::Halted => handle_halted(state, input),
-        _ => handle_passthrough(state, input),
     }
 }
