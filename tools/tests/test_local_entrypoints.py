@@ -199,6 +199,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/ppu/unit/test_mixer.py"', text)
         self.assertIn('"test/ppu/unit/test_oam_scan.py"', text)
         self.assertIn('"test/ppu/unit/test_window.py"', text)
+        self.assertIn('"test/power/test_ppu_power_quiescence.py"', text)
         self.assertIn('"test/unit/test_video_backend_adapter.py"', text)
         self.assertIn('"test/unit/test_oam_dma.py"', text)
         self.assertIn('"test/unit/test_serial.py"', text)

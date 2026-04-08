@@ -93,6 +93,12 @@ class RunTestsTest(unittest.TestCase):
         self.assertEqual(mooneye_suite.runner, "shell")
         self.assertEqual(mooneye_suite.target, "tools/run_ppu_wave_a_mooneye_verilator.sh")
 
+    def test_power_tier_includes_ppu_quiescence_suite(self) -> None:
+        power_labels = [suite.label for suite in suites_for_tier("power", nightly=False)]
+        self.assertIn("test_duty_cycle_metrics.py", power_labels)
+        self.assertIn("test_halt_quiescence.py", power_labels)
+        self.assertIn("test_ppu_power_quiescence.py", power_labels)
+
     def test_write_junit_xml_emits_parseable_report(self) -> None:
         results = [
             SuiteResult(

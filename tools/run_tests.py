@@ -225,6 +225,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("invariant", "test_write_enable_hold.py", "swim", "test_write_enable_hold"),
     SuiteDefinition("power", "test_duty_cycle_metrics.py", "swim", "test_duty_cycle_metrics"),
     SuiteDefinition("power", "test_halt_quiescence.py", "swim", "test_halt_quiescence"),
+    SuiteDefinition("power", "test_ppu_power_quiescence.py", "swim", "test/power/test_ppu_power_quiescence.py"),
 )
 
 

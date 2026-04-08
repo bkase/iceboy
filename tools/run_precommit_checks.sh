@@ -36,6 +36,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/ppu/unit/test_oam_scan.py"
     "test/ppu/unit/test_window.py"
     "test/ppu/unit/test_tile.py"
+    "test/power/test_ppu_power_quiescence.py"
     "test/unit/test_interrupt_service.py"
     "test/unit/test_timer.py"
     "test/rom/test_loads_basic.py"

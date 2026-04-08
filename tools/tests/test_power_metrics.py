@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, str(ROOT / "test" / "harness"))
 
 import power_metrics
-from power_metrics import PowerMetrics
+from power_metrics import PowerMetrics, PpuPowerMetrics
 
 
 class PowerMetricsTest(unittest.TestCase):
@@ -73,6 +73,28 @@ class PowerMetricsTest(unittest.TestCase):
                 self.assertEqual([entry["case"] for entry in payload["cases"]], ["case_one", "case_two"])
         finally:
             power_metrics.ARTIFACT_ROOT = original_root
+
+    def test_ppu_summary_lines_cover_expected_ratios(self) -> None:
+        metrics = PpuPowerMetrics(
+            total_dots=8,
+            mem_req_cycles=2,
+            pixel_emit_cycles=1,
+            ly_mode_mutation_cycles=1,
+            window_mutation_cycles=0,
+            oam_scan_mutation_cycles=2,
+            line_objs_mutation_cycles=0,
+            fetcher_mutation_cycles=0,
+            bg_fifo_mutation_cycles=0,
+            obj_fifo_mutation_cycles=0,
+            bg_fifo_nonempty_cycles=0,
+            obj_fifo_nonempty_cycles=0,
+        )
+
+        summary = metrics.summary_lines()
+        self.assertIn("total_dots=8", summary[0])
+        self.assertIn("mem_req=2/8 (0.250)", summary[1])
+        self.assertIn("pixel_emit=1/8 (0.125)", summary[2])
+        self.assertEqual(metrics.anomaly_lines(), [])
 
 
 if __name__ == "__main__":
