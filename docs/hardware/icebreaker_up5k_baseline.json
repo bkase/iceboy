@@ -6,16 +6,16 @@
     "yosys_stat": "/Users/bkase/Documents/iceboy/build/hw_baseline/synth/yosys-stat.txt"
   },
   "board": "iCEBreaker",
-  "captured_on": "2026-04-04",
+  "captured_on": "2026-04-08",
   "clock_constraint": {
-    "achieved_mhz": null,
-    "clock_name": "CLK",
-    "constraint_mhz": 12.0,
+    "achieved_mhz": 15.17197322845459,
+    "clock_name": "CLK$SB_IO_IN_$glb_clk",
+    "constraint_mhz": 12.00004768371582,
     "target_mhz": 12.0,
-    "timing_met": null
+    "timing_met": true
   },
   "clock_enable": {
-    "board_top_loads": 3,
+    "board_top_loads": 4,
     "method": "source_occurrence_count",
     "signal": "tb.m_ce"
   },
@@ -26,9 +26,9 @@
   "device": "iCE40UP5K-SG48",
   "pin_constraints": "icebreaker.pcf",
   "pnr": {
-    "error": "ERROR: Unable to place cell 'hardware_core_0.membus_0.wram_spram_0.mem[5316]_SB_DFFE_Q_3_DFFLC', no BELs remaining to implement cell type 'ICESTORM_LC'",
-    "status": "failed",
-    "timing_report_available": false
+    "error": null,
+    "status": "passed",
+    "timing_report_available": true
   },
   "tool_versions": {
     "nextpnr-ice40": "\"nextpnr-ice40\" -- Next Generation Place and Route (Version nextpnr-0.10-15-g77ccf518)",
@@ -37,18 +37,18 @@
   },
   "top": "board::icebreaker_top::icebreaker_top",
   "utilization": {
-    "carry_used": 413,
+    "carry_used": 494,
     "dff_available": 1024,
-    "dff_used": 68099,
+    "dff_used": 359,
     "ebr_available": 30,
-    "ebr_used": 0,
-    "fits_up5k_dff": false,
-    "fits_up5k_lut4": false,
+    "ebr_used": 3,
+    "fits_up5k_dff": true,
+    "fits_up5k_lut4": true,
     "logic_cells_available": 5280,
-    "logic_cells_used": 140235,
+    "logic_cells_used": 4165,
     "lut4_available": 5280,
-    "lut4_used": 72190,
+    "lut4_used": 3796,
     "spram_available": 4,
-    "spram_used": 0
+    "spram_used": 2
   }
 }
