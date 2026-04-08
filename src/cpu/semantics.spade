@@ -599,20 +599,7 @@ fn execute_word_alu_delta(
             match dst {
                 Operand16::RegisterPair$(pair) => {
                     let next_value = trunc(get_r16(state.arch.regs, pair) + 1u16);
-                    match pair {
-                        RegPair::SP => delta_with_micro(
-                            idle_reg_write_set(),
-                            Option::None,
-                            some_u16(next_value),
-                            micro_with_phase_imm_hi_temp(Phase::Fetch, 0u8, next_value),
-                        ),
-                        _ => delta_with_micro(
-                            reg_writes_for_pair(pair, next_value),
-                            Option::None,
-                            Option::None,
-                            micro_with_phase_imm_hi_temp(Phase::Fetch, 0u8, next_value),
-                        ),
-                    }
+                    word_inc_dec_delta(pair, next_value)
                 },
                 _ => idle_cpu_delta(),
             }
@@ -622,20 +609,7 @@ fn execute_word_alu_delta(
             match dst {
                 Operand16::RegisterPair$(pair) => {
                     let next_value = trunc(get_r16(state.arch.regs, pair) - 1u16);
-                    match pair {
-                        RegPair::SP => delta_with_micro(
-                            idle_reg_write_set(),
-                            Option::None,
-                            some_u16(next_value),
-                            micro_with_phase_imm_hi_temp(Phase::Fetch, 0u8, next_value),
-                        ),
-                        _ => delta_with_micro(
-                            reg_writes_for_pair(pair, next_value),
-                            Option::None,
-                            Option::None,
-                            micro_with_phase_imm_hi_temp(Phase::Fetch, 0u8, next_value),
-                        ),
-                    }
+                    word_inc_dec_delta(pair, next_value)
                 },
                 _ => idle_cpu_delta(),
             }
@@ -677,6 +651,23 @@ fn execute_word_alu_delta(
     }
 }
 
+fn word_inc_dec_delta(pair: RegPair, next_value: uint<16>) -> CpuDelta {
+    match pair {
+        RegPair::SP => delta_with_micro(
+            idle_reg_write_set(),
+            Option::None,
+            some_u16(next_value),
+            micro_with_phase_imm_hi_temp(Phase::Fetch, 0u8, next_value),
+        ),
+        _ => delta_with_micro(
+            reg_writes_for_pair(pair, next_value),
+            Option::None,
+            Option::None,
+            micro_with_phase_imm_hi_temp(Phase::Fetch, 0u8, next_value),
+        ),
+    }
+}
+
 fn condition_matches(regs: Registers, condition: Option<ConditionCode>) -> bool {
     let flags = flags_from_f(regs.f);
 
@@ -690,6 +681,20 @@ fn condition_matches(regs: Registers, condition: Option<ConditionCode>) -> bool 
                 ConditionCode::C => flags.c,
             }
         },
+    }
+}
+
+fn condition_gated_phase(state: CpuState, op: DecodedOp) -> Phase {
+    match op {
+        DecodedOp::ControlFlow$(condition, target, addressing) => {
+            let _ = (target, addressing);
+            if condition_matches(state.arch.regs, condition) {
+                Phase::Execute$(op: op)
+            } else {
+                Phase::Fetch
+            }
+        },
+        _ => Phase::Fetch,
     }
 }
 
@@ -1003,58 +1008,22 @@ fn direct_load_reg_writes(op: DecodedOp, regs: Registers) -> RegWriteSet {
 }
 
 fn direct_load_sp_write(op: DecodedOp, regs: Registers) -> Option<uint<16>> {
-    match op {
-        DecodedOp::Load$(dst8, src8, dst16, src16, addressing) => {
-            match addressing {
-                AddressingMode::Register16 => {
-                    match dst8 {
-                        Option::None => {
-                            match src8 {
-                                Option::None => {
-                                    match dst16 {
-                                        Option::Some(dst16_value) => {
-                                            match src16 {
-                                                Option::Some(src16_value) => {
-                                                    match dst16_value {
-                                                        Operand16::RegisterPair$(pair) => {
-                                                            match pair {
-                                                                RegPair::SP => {
-                                                                    match src16_value {
-                                                                        Operand16::RegisterPair$(pair) => {
-                                                                            match pair {
-                                                                                RegPair::HL => Option::Some(get_r16(regs, RegPair::HL)),
-                                                                                _ => Option::None,
-                                                                            }
-                                                                        },
-                                                                        _ => Option::None,
-                                                                    }
-                                                                },
-                                                                _ => Option::None,
-                                                            }
-                                                        },
-                                                        _ => Option::None,
-                                                    }
-                                                },
-                                                Option::None => Option::None,
-                                            }
-                                        },
-                                        Option::None => Option::None,
-                                    }
-                                },
-                                _ => Option::None,
-                            }
-                        },
-                        _ => Option::None,
-                    }
-                },
-                _ => Option::None,
-            }
-        },
-        _ => Option::None,
+    if is_ld_sp_hl(op) {
+        Option::Some(get_r16(regs, RegPair::HL))
+    } else {
+        Option::None
     }
 }
 
 fn direct_load_phase(op: DecodedOp) -> Option<Phase> {
+    if is_ld_sp_hl(op) {
+        some_phase(Phase::Execute$(op: op))
+    } else {
+        Option::None
+    }
+}
+
+fn is_ld_sp_hl(op: DecodedOp) -> bool {
     match op {
         DecodedOp::Load$(dst8, src8, dst16, src16, addressing) => {
             match addressing {
@@ -1074,35 +1043,35 @@ fn direct_load_phase(op: DecodedOp) -> Option<Phase> {
                                                                     match src16_value {
                                                                         Operand16::RegisterPair$(pair) => {
                                                                             match pair {
-                                                                                RegPair::HL => some_phase(Phase::Execute$(op: op)),
-                                                                                _ => Option::None,
+                                                                                RegPair::HL => true,
+                                                                                _ => false,
                                                                             }
                                                                         },
-                                                                        _ => Option::None,
+                                                                        _ => false,
                                                                     }
                                                                 },
-                                                                _ => Option::None,
+                                                                _ => false,
                                                             }
                                                         },
-                                                        _ => Option::None,
+                                                        _ => false,
                                                     }
                                                 },
-                                                Option::None => Option::None,
+                                                Option::None => false,
                                             }
                                         },
-                                        Option::None => Option::None,
+                                        Option::None => false,
                                     }
                                 },
-                                _ => Option::None,
+                                _ => false,
                             }
                         },
-                        _ => Option::None,
+                        _ => false,
                     }
                 },
-                _ => Option::None,
+                _ => false,
             }
         },
-        _ => Option::None,
+        _ => false,
     }
 }
 
@@ -1584,17 +1553,7 @@ fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm1
             }
         },
         Imm16Cont::JumpAbs => {
-            let next_phase = match state.micro.decoded {
-                DecodedOp::ControlFlow$(condition, target, addressing) => {
-                    let _ = (target, addressing);
-                    if condition_matches(state.arch.regs, condition) {
-                        Phase::Execute$(op: state.micro.decoded)
-                    } else {
-                        Phase::Fetch
-                    }
-                },
-                _ => Phase::Fetch,
-            };
+            let next_phase = condition_gated_phase(state, state.micro.decoded);
             CpuDelta$(
                 regs_write: idle_reg_write_set(),
                 pc_write: some_u16(trunc(state.arch.regs.pc + 1u16)),
@@ -1612,17 +1571,7 @@ fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm1
             )
         },
         Imm16Cont::CallTarget => {
-            let next_phase = match state.micro.decoded {
-                DecodedOp::ControlFlow$(condition, target, addressing) => {
-                    let _ = (target, addressing);
-                    if condition_matches(state.arch.regs, condition) {
-                        Phase::Execute$(op: state.micro.decoded)
-                    } else {
-                        Phase::Fetch
-                    }
-                },
-                _ => Phase::Fetch,
-            };
+            let next_phase = condition_gated_phase(state, state.micro.decoded);
             CpuDelta$(
                 regs_write: idle_reg_write_set(),
                 pc_write: some_u16(trunc(state.arch.regs.pc + 1u16)),
