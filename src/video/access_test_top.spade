@@ -1,15 +1,8 @@
 use lib::ppu::sem::memory::{MemTxnTag, PpuMemReq, PpuMemResult, VideoBlockReason};
 use lib::ppu::sem::types::{LcdRunState, Lcdc, PpuPhase, PpuRegs, PpuStatusState, StatIrqState, StatSelect};
+use lib::sim::ppu_support::decode_lcd_run;
 use lib::video::access::evaluate_access;
 use lib::video::test_helpers::{decode_client, decode_kind, decode_region, region_bit};
-
-fn decode_run(run_i: uint<2>) -> LcdRunState {
-    match run_i {
-        1u2 => LcdRunState::WarmupBlankFrame,
-        2u2 => LcdRunState::Running,
-        _ => LcdRunState::Disabled,
-    }
-}
 
 fn decode_phase(phase_i: uint<3>) -> PpuPhase {
     match phase_i {
@@ -47,7 +40,7 @@ fn build_regs(lcd_enable_i: bool) -> PpuRegs {
 
 fn build_status(run_i: uint<2>, phase_i: uint<3>) -> PpuStatusState {
     PpuStatusState$(
-        run: decode_run(run_i),
+        run: decode_lcd_run(run_i),
         phase: decode_phase(phase_i),
         stat_irq: StatIrqState$(line_high: false),
         lyc_match_flag: false,

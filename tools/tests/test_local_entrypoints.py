@@ -459,6 +459,12 @@ class LocalEntrypointsTest(unittest.TestCase):
 
         frame_sink_test_text = (ROOT / "src" / "video" / "frame_sink_test_top.spade").read_text(encoding="utf-8")
         self.assertNotIn("fn encode_source(", frame_sink_test_text)
+        self.assertNotIn("fn decode_run(", (ROOT / "src" / "video" / "access_test_top.spade").read_text(encoding="utf-8"))
+
+        bridge_text = (ROOT / "src" / "bus" / "ppu_bridge_core_test_top.spade").read_text(encoding="utf-8")
+        self.assertNotIn("fn encode_phase(", bridge_text)
+        self.assertNotIn("fn encode_mode(", bridge_text)
+        self.assertNotIn("fn encode_run(", bridge_text)
 
     def test_cpu_lockstep_targeted_subset_is_not_marked_expect_fail(self) -> None:
         text = (ROOT / "test" / "lockstep" / "test_cpu_lockstep.py").read_text(encoding="utf-8")
