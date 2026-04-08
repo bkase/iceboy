@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "scenario": "warmup_blank_smoke",
+  "backend": "sim_array",
+  "dot_commit": [
+    {
+      "ly_after": 0,
+      "mode_after": "OamScan",
+      "stat_line_after": false,
+      "irq_edge": "None",
+      "scanout": null
+    },
+    {
+      "ly_after": 0,
+      "mode_after": "OamScan",
+      "stat_line_after": false,
+      "irq_edge": "None",
+      "scanout": null
+    },
+    {
+      "ly_after": 0,
+      "mode_after": "OamScan",
+      "stat_line_after": false,
+      "irq_edge": "None",
+      "scanout": null
+    }
+  ],
+  "scanline_summary": [
+    {
+      "frame": 0,
+      "ly": 0,
+      "mode3_len": 0,
+      "window_start_x": null,
+      "window_line_after": 0,
+      "obj_count": 0,
+      "selected_objs": [null, null, null, null, null, null, null, null, null, null],
+      "transfer": {
+        "event_count": 0,
+        "event_hash": 0,
+        "window_restart_count": 0,
+        "obj_fetch_count": 0
+      },
+      "line_hash": 0
+    }
+  ],
+  "frame_hash": [0]
+}

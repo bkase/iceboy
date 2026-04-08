@@ -123,6 +123,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("meta", "test_ppu_ref.py", "python", "tools.tests.test_ppu_ref"),
     SuiteDefinition("meta", "test_ppu_test_infra.py", "python", "tools.tests.test_ppu_test_infra"),
     SuiteDefinition("meta", "test_ppu_tooling.py", "python", "tools.tests.test_ppu_tooling"),
+    SuiteDefinition("meta", "test_ppu_backend_diff.py", "python", "tools.tests.test_ppu_backend_diff"),
     SuiteDefinition("meta", "test_ppu_visibility.py", "python", "tools.tests.test_ppu_visibility"),
     SuiteDefinition("meta", "test_ppu_wave_b_reference.py", "python", "tools.tests.test_ppu_wave_b_reference"),
     SuiteDefinition("meta", "test_activity_capture.py", "python", "tools.tests.test_activity_capture"),
@@ -139,6 +140,13 @@ SUITES: tuple[SuiteDefinition, ...] = (
         "tools.tests.test_pipeline_insertion_evaluation",
     ),
     SuiteDefinition("meta", "test_build_profiles.py", "python", "tools.tests.test_build_profiles"),
+    SuiteDefinition(
+        "meta",
+        "test_backend_diff_smoke.py",
+        "python",
+        "test.ppu.backend_diff.test_backend_diff_smoke",
+        nightly_only=True,
+    ),
     SuiteDefinition("unit", "test_sm83_opcodes.py", "python", "tools.tests.test_sm83_opcodes"),
     SuiteDefinition(
         "unit",

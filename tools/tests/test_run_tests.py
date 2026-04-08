@@ -64,7 +64,7 @@ class RunTestsTest(unittest.TestCase):
     def test_coverage_lines_report_implemented_tiers(self) -> None:
         lines = coverage_lines(selected_tiers(["meta", "unit", "formal", "lockstep"]), nightly=False)
         self.assertEqual(lines[0], "Implemented tiers: 4/4")
-        self.assertIn("Meta/Infrastructure: 35 suite(s)", lines)
+        self.assertIn("Meta/Infrastructure: 36 suite(s)", lines)
         self.assertIn("Unit Tests: 53 suite(s)", lines)
         self.assertIn("Formal Verification: 7 suite(s)", lines)
         self.assertIn("Lockstep: 4 suite(s)", lines)
@@ -96,6 +96,12 @@ class RunTestsTest(unittest.TestCase):
         mooneye_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_ppu_wave_a_mooneye.py")
         self.assertEqual(mooneye_suite.runner, "shell")
         self.assertEqual(mooneye_suite.target, "tools/run_ppu_wave_a_mooneye_verilator.sh")
+
+    def test_nightly_meta_includes_backend_diff_smoke(self) -> None:
+        meta_labels = [suite.label for suite in suites_for_tier("meta", nightly=False)]
+        nightly_meta_labels = [suite.label for suite in suites_for_tier("meta", nightly=True)]
+        self.assertNotIn("test_backend_diff_smoke.py", meta_labels)
+        self.assertIn("test_backend_diff_smoke.py", nightly_meta_labels)
 
     def test_cpu_instrs_native_runner_sources_exist(self) -> None:
         self.assertTrue((ROOT / "tools" / "verilator" / "cpu_instrs_blargg_main.cpp").is_file())

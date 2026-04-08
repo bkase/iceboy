@@ -233,6 +233,17 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((TOOLS / "pipeline_insertion_evaluation.py").exists())
         self.assertTrue((ROOT / "docs" / "hardware" / "icebreaker_up5k_baseline.json").exists())
 
+    def test_ppu_backend_diff_assets_exist(self) -> None:
+        text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
+        self.assertIn('"test_ppu_backend_diff.py"', text)
+        self.assertIn('"tools.tests.test_ppu_backend_diff"', text)
+        self.assertIn('"test_backend_diff_smoke.py"', text)
+        self.assertIn('"test.ppu.backend_diff.test_backend_diff_smoke"', text)
+        self.assertTrue((TOOLS / "ppu_backend_diff.py").exists())
+        self.assertTrue((TOOLS / "run_ppu_backend_diff.sh").exists())
+        self.assertTrue((ROOT / "bench" / "manifests" / "ppu_backend_diff_scenarios.yaml").exists())
+        self.assertTrue((ROOT / "test" / "ppu" / "backend_diff" / "test_backend_diff_smoke.py").exists())
+
     def test_gate_milestone_e_dry_run_targets_power_artifacts(self) -> None:
         completed = self.run_script("gate_milestone_e.sh", "--dry-run")
         self.assertEqual(completed.returncode, 0, completed.stderr)
