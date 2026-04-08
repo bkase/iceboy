@@ -107,21 +107,21 @@ entity semantics_test_top(
         Option::None,
         Option::None,
     );
-    let micro_writes = MicroWriteSet(
-        maybe_phase(delta_phase_we_i, delta_phase_i),
-        maybe_u8(delta_opcode_we_i, delta_opcode_i),
-        Option::None,
-        Option::None,
-        Option::None,
-        Option::None,
+    let micro_writes = MicroWriteSet$(
+        phase: maybe_phase(delta_phase_we_i, delta_phase_i),
+        opcode_latch: maybe_u8(delta_opcode_we_i, delta_opcode_i),
+        imm_lo: Option::None,
+        imm_hi: Option::None,
+        decoded: Option::None,
+        temp: Option::None,
     );
-    let delta = CpuDelta(
-        reg_writes,
-        maybe_u16(delta_pc_we_i, delta_pc_i),
-        Option::None,
-        Option::None,
-        Option::None,
-        micro_writes,
+    let delta = CpuDelta$(
+        regs_write: reg_writes,
+        pc_write: maybe_u16(delta_pc_we_i, delta_pc_i),
+        sp_write: Option::None,
+        ime_write: Option::None,
+        halt_write: Option::None,
+        micro_write: micro_writes,
     );
     let applied = apply_delta(state, delta);
     let step = step_mcycle(state, MicroInput(BusResp$(data: bus_resp_i), IrqPending$(pending: irq_pending_i)));
