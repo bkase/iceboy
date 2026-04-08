@@ -245,6 +245,50 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((ROOT / "bench" / "manifests" / "ppu_backend_diff_scenarios.yaml").exists())
         self.assertTrue((ROOT / "test" / "ppu" / "backend_diff" / "test_backend_diff_smoke.py").exists())
 
+    def test_sim_encode_module_centralizes_shared_sim_helpers(self) -> None:
+        util_text = (ROOT / "src" / "util.spade").read_text(encoding="utf-8")
+        encode_text = (ROOT / "src" / "sim" / "encode.spade").read_text(encoding="utf-8")
+        self.assertIn("pub fn cpu_bus_req", util_text)
+        self.assertIn("pub fn encode_bus_region", encode_text)
+        self.assertIn("pub fn encode_scanout_kind", encode_text)
+        self.assertIn("pub fn count_inc", encode_text)
+
+        forbidden = (
+            r"fn cpu_bus_req\(",
+            r"fn encode_bus_region\(",
+            r"fn encode_bus_owner\(",
+            r"fn encode_ime\(",
+            r"fn encode_halt\(",
+            r"fn encode_phase\(",
+            r"fn encode_scanout_kind\(",
+            r"fn encode_pixel_source\(",
+            r"fn encode_blank_reason\(",
+            r"fn scanout_x\(",
+            r"fn scanout_y\(",
+            r"fn scanout_shade\(",
+            r"fn scanout_source\(",
+            r"fn scanout_blank_reason\(",
+            r"fn ppu_vram_active\(",
+            r"fn ppu_oam_active\(",
+            r"fn count_inc\(",
+            r"fn mask_has\(",
+            r"fn phase_is_halted\(",
+            r"fn halt_is_halted\(",
+        )
+        for relative in (
+            Path("src/board/icebreaker_top.spade"),
+            Path("src/sim/cpu_test_top.spade"),
+            Path("src/sim/soc_lockstep_top.spade"),
+            Path("src/sim/soc_rom_top.spade"),
+            Path("src/sim/ppu_power_top.spade"),
+        ):
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            for pattern in forbidden:
+                self.assertIsNone(
+                    re.search(pattern, text),
+                    f"{relative} still defines shared sim helper matching {pattern}",
+                )
+
     def test_gate_milestone_e_dry_run_targets_power_artifacts(self) -> None:
         completed = self.run_script("gate_milestone_e.sh", "--dry-run")
         self.assertEqual(completed.returncode, 0, completed.stderr)

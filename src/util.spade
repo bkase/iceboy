@@ -1,7 +1,17 @@
+use lib::bus::types::BusReq;
+
 pub fn bit(value: bool) -> uint<1> {
     if value { 1u1 } else { 0u1 }
 }
 
 pub fn io_write(write_en: bool, write_addr: uint<16>, target: uint<16>) -> bool {
     write_en && write_addr == target
+}
+
+pub fn cpu_bus_req(kind: uint<2>, addr: uint<16>, data: uint<8>) -> BusReq {
+    match kind {
+        1u2 => BusReq::Read$(addr: addr),
+        2u2 => BusReq::Write$(addr: addr, data: data),
+        _ => BusReq::Idle,
+    }
 }

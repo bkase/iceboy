@@ -1,17 +1,17 @@
 use lib::board::clockgen::timebase;
 use lib::bus::ppu_event_bridge::ppu_event_bridge;
 use lib::bus::membus::observe_req;
-use lib::bus::types::{BusOwner, BusRegion, BusReq, BusResp};
+use lib::bus::types::BusResp;
 use lib::cpu::core::cpu_core;
-use lib::cpu::types::{HaltState, IrqPending, MemoryBehaviorProfile, ModelProfile, Phase, ResetProfile, SimulationProfiles};
+use lib::cpu::types::{IrqPending, MemoryBehaviorProfile, ModelProfile, ResetProfile, SimulationProfiles};
 use lib::ppu::rtl::core::ppu_core;
 use lib::ppu::sem::events::{VideoCoord, idle_oam_dma_state};
 use lib::ppu::sem::memory::idle_ppu_mem_resp;
 use lib::ppu::sem::observe::PpuIrqEdge;
-use lib::ppu::sem::scanout::{BlankReason, PixelSource, ScanoutEvent};
-use lib::ppu::sem::types::PpuMode;
+use lib::sim::encode::{count_inc, encode_bus_owner, encode_bus_region, encode_blank_reason, encode_pixel_source, encode_scanout_kind, halt_is_halted, mask_has, phase_is_halted, ppu_oam_active, ppu_vram_active, scanout_blank_reason, scanout_shade, scanout_source, scanout_x, scanout_y};
 use lib::sim::ppu_support::{encode_ppu_mode, scanout_or_blank, semantic_or_idle, semantic_valid};
 use lib::sim::types::{SimStimulus, cpu_arch_time_enable, peripheral_arch_time_enable};
+use lib::util::cpu_bus_req;
 
 struct SocLockstepTopOut {
     ppu_vblank_req_window: bool,
@@ -66,28 +66,6 @@ struct SocLockstepTopOut {
     preview_bus_req_data: uint<8>,
 }
 
-fn count_inc(counter: uint<64>, active: bool) -> uint<64> {
-    if active { trunc(counter + 1u64) } else { counter }
-}
-
-fn mask_has(mask: uint<10>, bit: uint<10>) -> bool {
-    (mask & bit) == bit
-}
-
-fn phase_is_halted(phase: Phase) -> bool {
-    match phase {
-        Phase::Halted => true,
-        _ => false,
-    }
-}
-
-fn halt_is_halted(halt: HaltState) -> bool {
-    match halt {
-        HaltState::Halted => true,
-        _ => false,
-    }
-}
-
 fn encode_model_profile(profile: SimulationProfiles) -> uint<2> {
     match profile.model_profile {
         ModelProfile::DMG => 0,
@@ -109,122 +87,12 @@ fn encode_memory_behavior_profile(profile: SimulationProfiles) -> uint<2> {
     }
 }
 
-fn encode_bus_region(region: BusRegion) -> uint<4> {
-    match region {
-        BusRegion::Rom => 0u4,
-        BusRegion::Vram => 1u4,
-        BusRegion::CartRam => 2u4,
-        BusRegion::Wram => 3u4,
-        BusRegion::Echo => 4u4,
-        BusRegion::Oam => 5u4,
-        BusRegion::NotUsable => 6u4,
-        BusRegion::Io => 7u4,
-        BusRegion::Hram => 8u4,
-        BusRegion::Ie => 9u4,
-    }
-}
-
-fn encode_bus_owner(owner: BusOwner) -> uint<2> {
-    match owner {
-        BusOwner::Cpu => 0u2,
-        BusOwner::OamDma => 1u2,
-        BusOwner::Ppu => 2u2,
-        BusOwner::Idle => 3u2,
-    }
-}
-
-fn encode_scanout_kind(event: ScanoutEvent) -> uint<2> {
-    match event {
-        ScanoutEvent::Pixel$(emit: _) => 0u2,
-        ScanoutEvent::Blank$(y: _, reason: _) => 1u2,
-        ScanoutEvent::FrameStart => 2u2,
-        ScanoutEvent::LineStart$(y: _) => 3u2,
-    }
-}
-
-fn encode_pixel_source(source: PixelSource) -> uint<2> {
-    match source {
-        PixelSource::Background => 0u2,
-        PixelSource::Window => 1u2,
-        PixelSource::Object => 2u2,
-    }
-}
-
-fn encode_blank_reason(reason: BlankReason) -> uint<2> {
-    match reason {
-        BlankReason::LcdDisabled => 0u2,
-        BlankReason::WarmupBlankFrame => 1u2,
-        BlankReason::NonVisibleLine => 2u2,
-        BlankReason::NonVisibleDot => 3u2,
-    }
-}
-
-fn scanout_x(event: ScanoutEvent) -> uint<8> {
-    match event {
-        ScanoutEvent::Pixel$(emit: emit) => emit.x,
-        _ => 0u8,
-    }
-}
-
-fn scanout_y(event: ScanoutEvent) -> uint<8> {
-    match event {
-        ScanoutEvent::Pixel$(emit: emit) => emit.y,
-        ScanoutEvent::Blank$(y: y, reason: _) => y,
-        ScanoutEvent::LineStart$(y: y) => y,
-        ScanoutEvent::FrameStart => 0u8,
-    }
-}
-
-fn scanout_shade(event: ScanoutEvent) -> uint<2> {
-    match event {
-        ScanoutEvent::Pixel$(emit: emit) => emit.shade,
-        _ => 0u2,
-    }
-}
-
-fn scanout_source(event: ScanoutEvent) -> uint<2> {
-    match event {
-        ScanoutEvent::Pixel$(emit: emit) => encode_pixel_source(emit.source),
-        _ => 0u2,
-    }
-}
-
-fn scanout_blank_reason(event: ScanoutEvent) -> uint<2> {
-    match event {
-        ScanoutEvent::Blank$(y: _, reason: reason) => encode_blank_reason(reason),
-        _ => 0u2,
-    }
-}
-
 fn encode_ppu_irq_edge(edge: PpuIrqEdge) -> uint<2> {
     match edge {
         PpuIrqEdge::None => 0u2,
         PpuIrqEdge::VBlank => 1u2,
         PpuIrqEdge::Stat => 2u2,
         PpuIrqEdge::Both => 3u2,
-    }
-}
-
-fn ppu_vram_active(mode: PpuMode) -> bool {
-    match mode {
-        PpuMode::PixelTransfer => true,
-        _ => false,
-    }
-}
-
-fn ppu_oam_active(mode: PpuMode) -> bool {
-    match mode {
-        PpuMode::OamScan => true,
-        PpuMode::PixelTransfer => true,
-        _ => false,
-    }
-}
-
-fn cpu_bus_req(kind: uint<2>, addr: uint<16>, data: uint<8>) -> BusReq {
-    match kind {
-        1u2 => BusReq::Read$(addr: addr),
-        2u2 => BusReq::Write$(addr: addr, data: data),
-        _ => BusReq::Idle,
     }
 }
 

@@ -1,73 +1,11 @@
 use std::option::Option;
 use lib::bus::membus::observe_req;
-use lib::bus::types::{BusOwner, BusRegion, BusReq, BusResp};
+use lib::bus::types::BusResp;
 use lib::cpu::core::cpu_core;
-use lib::cpu::types::{HaltState, ImeState, IrqPending, Phase};
+use lib::cpu::types::IrqPending;
+use lib::sim::encode::{count_inc, encode_bus_owner, encode_bus_region, encode_halt, encode_ime, encode_phase, halt_is_halted, mask_has, phase_is_halted};
 use lib::sim::types::{SimStimulus, cpu_arch_time_enable, peripheral_arch_time_enable};
-
-fn encode_bus_region(region: BusRegion) -> uint<4> {
-    match region {
-        BusRegion::Rom => 0u4,
-        BusRegion::Vram => 1u4,
-        BusRegion::CartRam => 2u4,
-        BusRegion::Wram => 3u4,
-        BusRegion::Echo => 4u4,
-        BusRegion::Oam => 5u4,
-        BusRegion::NotUsable => 6u4,
-        BusRegion::Io => 7u4,
-        BusRegion::Hram => 8u4,
-        BusRegion::Ie => 9u4,
-    }
-}
-
-fn encode_bus_owner(owner: BusOwner) -> uint<2> {
-    match owner {
-        BusOwner::Cpu => 0u2,
-        BusOwner::OamDma => 1u2,
-        BusOwner::Ppu => 2u2,
-        BusOwner::Idle => 3u2,
-    }
-}
-
-fn cpu_bus_req(kind: uint<2>, addr: uint<16>, data: uint<8>) -> BusReq {
-    match kind {
-        1u2 => BusReq::Read$(addr: addr),
-        2u2 => BusReq::Write$(addr: addr, data: data),
-        _ => BusReq::Idle,
-    }
-}
-
-fn encode_ime(ime: ImeState) -> uint<2> {
-    match ime {
-        ImeState::Disabled => 0u2,
-        ImeState::PendingEnable => 1u2,
-        ImeState::Enabled => 2u2,
-    }
-}
-
-fn encode_halt(halt: HaltState) -> uint<2> {
-    match halt {
-        HaltState::Running => 0u2,
-        HaltState::Halted => 1u2,
-        HaltState::HaltBugPending => 2u2,
-    }
-}
-
-fn encode_phase(phase: Phase) -> uint<4> {
-    match phase {
-        Phase::Fetch => 0u4,
-        Phase::Halted => 1u4,
-        Phase::Execute$(op: _) => 2u4,
-        Phase::ReadImm8$(k: _) => 3u4,
-        Phase::ReadImm16Lo$(k: _) => 4u4,
-        Phase::ReadImm16Hi$(lo: _, k: _) => 5u4,
-        Phase::ReadMem$(addr: _, k: _) => 6u4,
-        Phase::WriteMem$(addr: _, data: _, k: _) => 7u4,
-        Phase::FetchPrefix$(prefix: _) => 8u4,
-        Phase::ServiceInterrupt$(irq: _, subphase: _) => 9u4,
-        _ => 15u4,
-    }
-}
+use lib::util::cpu_bus_req;
 
 fn irq_ack_mask(valid: bool, ack_bit: uint<3>) -> uint<5> {
     if valid {
@@ -81,28 +19,6 @@ fn irq_ack_mask(valid: bool, ack_bit: uint<3>) -> uint<5> {
         }
     } else {
         0u5
-    }
-}
-
-fn count_inc(counter: uint<64>, active: bool) -> uint<64> {
-    if active { trunc(counter + 1u64) } else { counter }
-}
-
-fn mask_has(mask: uint<10>, bit: uint<10>) -> bool {
-    (mask & bit) == bit
-}
-
-fn phase_is_halted(phase: Phase) -> bool {
-    match phase {
-        Phase::Halted => true,
-        _ => false,
-    }
-}
-
-fn halt_is_halted(halt: HaltState) -> bool {
-    match halt {
-        HaltState::Halted => true,
-        _ => false,
     }
 }
 

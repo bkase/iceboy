@@ -6,11 +6,8 @@ use lib::ppu::sem::events::{idle_oam_dma_state, zero_video_coord};
 use lib::ppu::sem::memory::{MemClient, MemRegion, PpuMemReq, PpuMemResp, PpuMemResult, idle_ppu_mem_req, idle_ppu_mem_resp};
 use lib::ppu::sem::scanout::ScanoutEvent;
 use lib::ppu::sem::types::{BgFifo, FetcherSource, FetcherState, FetcherStep, LcdRunState, LineObjList, OamScanState, ObjFifo, PpuMode, WindowState};
+use lib::sim::encode::count_inc;
 use lib::sim::ppu_support::timed_events_from_direct;
-
-fn count_inc(counter: uint<64>, active: bool) -> uint<64> {
-    if active { trunc(counter + 1u64) } else { counter }
-}
 
 fn decode_mmio_reg(target_i: uint<4>) -> MmioReg {
     match target_i {

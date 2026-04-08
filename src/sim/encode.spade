@@ -1,0 +1,160 @@
+use lib::bus::types::{BusOwner, BusRegion};
+use lib::cpu::types::{HaltState, ImeState, Phase};
+use lib::ppu::sem::scanout::{BlankReason, PixelSource, ScanoutEvent};
+use lib::ppu::sem::types::PpuMode;
+
+pub fn encode_bus_region(region: BusRegion) -> uint<4> {
+    match region {
+        BusRegion::Rom => 0u4,
+        BusRegion::Vram => 1u4,
+        BusRegion::CartRam => 2u4,
+        BusRegion::Wram => 3u4,
+        BusRegion::Echo => 4u4,
+        BusRegion::Oam => 5u4,
+        BusRegion::NotUsable => 6u4,
+        BusRegion::Io => 7u4,
+        BusRegion::Hram => 8u4,
+        BusRegion::Ie => 9u4,
+    }
+}
+
+pub fn encode_bus_owner(owner: BusOwner) -> uint<2> {
+    match owner {
+        BusOwner::Cpu => 0u2,
+        BusOwner::OamDma => 1u2,
+        BusOwner::Ppu => 2u2,
+        BusOwner::Idle => 3u2,
+    }
+}
+
+pub fn encode_ime(ime: ImeState) -> uint<2> {
+    match ime {
+        ImeState::Disabled => 0u2,
+        ImeState::PendingEnable => 1u2,
+        ImeState::Enabled => 2u2,
+    }
+}
+
+pub fn encode_halt(halt: HaltState) -> uint<2> {
+    match halt {
+        HaltState::Running => 0u2,
+        HaltState::Halted => 1u2,
+        HaltState::HaltBugPending => 2u2,
+    }
+}
+
+pub fn encode_phase(phase: Phase) -> uint<4> {
+    match phase {
+        Phase::Fetch => 0u4,
+        Phase::Halted => 1u4,
+        Phase::Execute$(op: _) => 2u4,
+        Phase::ReadImm8$(k: _) => 3u4,
+        Phase::ReadImm16Lo$(k: _) => 4u4,
+        Phase::ReadImm16Hi$(lo: _, k: _) => 5u4,
+        Phase::ReadMem$(addr: _, k: _) => 6u4,
+        Phase::WriteMem$(addr: _, data: _, k: _) => 7u4,
+        Phase::FetchPrefix$(prefix: _) => 8u4,
+        Phase::ServiceInterrupt$(irq: _, subphase: _) => 9u4,
+        _ => 15u4,
+    }
+}
+
+pub fn encode_scanout_kind(event: ScanoutEvent) -> uint<2> {
+    match event {
+        ScanoutEvent::Pixel$(emit: _) => 0u2,
+        ScanoutEvent::Blank$(y: _, reason: _) => 1u2,
+        ScanoutEvent::FrameStart => 2u2,
+        ScanoutEvent::LineStart$(y: _) => 3u2,
+    }
+}
+
+pub fn encode_pixel_source(source: PixelSource) -> uint<2> {
+    match source {
+        PixelSource::Background => 0u2,
+        PixelSource::Window => 1u2,
+        PixelSource::Object => 2u2,
+    }
+}
+
+pub fn encode_blank_reason(reason: BlankReason) -> uint<2> {
+    match reason {
+        BlankReason::LcdDisabled => 0u2,
+        BlankReason::WarmupBlankFrame => 1u2,
+        BlankReason::NonVisibleLine => 2u2,
+        BlankReason::NonVisibleDot => 3u2,
+    }
+}
+
+pub fn scanout_x(event: ScanoutEvent) -> uint<8> {
+    match event {
+        ScanoutEvent::Pixel$(emit: emit) => emit.x,
+        _ => 0u8,
+    }
+}
+
+pub fn scanout_y(event: ScanoutEvent) -> uint<8> {
+    match event {
+        ScanoutEvent::Pixel$(emit: emit) => emit.y,
+        ScanoutEvent::Blank$(y: y, reason: _) => y,
+        ScanoutEvent::LineStart$(y: y) => y,
+        ScanoutEvent::FrameStart => 0u8,
+    }
+}
+
+pub fn scanout_shade(event: ScanoutEvent) -> uint<2> {
+    match event {
+        ScanoutEvent::Pixel$(emit: emit) => emit.shade,
+        _ => 0u2,
+    }
+}
+
+pub fn scanout_source(event: ScanoutEvent) -> uint<2> {
+    match event {
+        ScanoutEvent::Pixel$(emit: emit) => encode_pixel_source(emit.source),
+        _ => 0u2,
+    }
+}
+
+pub fn scanout_blank_reason(event: ScanoutEvent) -> uint<2> {
+    match event {
+        ScanoutEvent::Blank$(y: _, reason: reason) => encode_blank_reason(reason),
+        _ => 0u2,
+    }
+}
+
+pub fn ppu_vram_active(mode: PpuMode) -> bool {
+    match mode {
+        PpuMode::PixelTransfer => true,
+        _ => false,
+    }
+}
+
+pub fn ppu_oam_active(mode: PpuMode) -> bool {
+    match mode {
+        PpuMode::OamScan => true,
+        PpuMode::PixelTransfer => true,
+        _ => false,
+    }
+}
+
+pub fn count_inc(counter: uint<64>, active: bool) -> uint<64> {
+    if active { trunc(counter + 1u64) } else { counter }
+}
+
+pub fn mask_has(mask: uint<10>, bit: uint<10>) -> bool {
+    (mask & bit) == bit
+}
+
+pub fn phase_is_halted(phase: Phase) -> bool {
+    match phase {
+        Phase::Halted => true,
+        _ => false,
+    }
+}
+
+pub fn halt_is_halted(halt: HaltState) -> bool {
+    match halt {
+        HaltState::Halted => true,
+        _ => false,
+    }
+}
