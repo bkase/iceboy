@@ -1,21 +1,17 @@
 use lib::mem::phys::ice40_spram::{rom_schedule, rw8k_schedule};
 use lib::mem::phys::spram::{rom_image_spram, wram_spram};
 
-fn bit(b: bool) -> uint<1> {
-    if b { 1u1 } else { 0u1 }
-}
-
 fn pack_drive(drive: lib::mem::phys::ice40_spram::SpramDrive) -> uint<60> {
     let address_bits: uint<60> = zext(drive.address) << 30;
     let mask_bits: uint<60> = zext(drive.maskwren) << 26;
-    let read_high_bits: uint<60> = zext(bit(drive.read_high)) << 25;
-    let read_aux_bits: uint<60> = zext(bit(drive.read_aux)) << 24;
-    let read_valid_bits: uint<60> = zext(bit(drive.read_valid)) << 23;
-    let wren_bits: uint<60> = zext(bit(drive.wren)) << 22;
-    let chipselect_bits: uint<60> = zext(bit(drive.chipselect)) << 21;
-    let standby_bits: uint<60> = zext(bit(drive.standby)) << 20;
-    let sleep_bits: uint<60> = zext(bit(drive.sleep)) << 19;
-    let poweroff_bits: uint<60> = zext(bit(drive.poweroff)) << 18;
+    let read_high_bits: uint<60> = zext(lib::util::bit(drive.read_high)) << 25;
+    let read_aux_bits: uint<60> = zext(lib::util::bit(drive.read_aux)) << 24;
+    let read_valid_bits: uint<60> = zext(lib::util::bit(drive.read_valid)) << 23;
+    let wren_bits: uint<60> = zext(lib::util::bit(drive.wren)) << 22;
+    let chipselect_bits: uint<60> = zext(lib::util::bit(drive.chipselect)) << 21;
+    let standby_bits: uint<60> = zext(lib::util::bit(drive.standby)) << 20;
+    let sleep_bits: uint<60> = zext(lib::util::bit(drive.sleep)) << 19;
+    let poweroff_bits: uint<60> = zext(lib::util::bit(drive.poweroff)) << 18;
     let datain_bits: uint<60> = zext(drive.datain);
 
     address_bits

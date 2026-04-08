@@ -57,7 +57,7 @@ fn encode_event(event: TimedPpuEvent) -> uint<24> {
         PpuEventKind::ForceLcdPower$(enabled: enabled) => {
             (zext(seq_low8(event.seq)) << 14)
                 | (zext(event_kind_code(event.kind)) << 12)
-                | zext(if enabled { 1u1 } else { 0u1 })
+                | zext(lib::util::bit(enabled))
         },
     }
 }

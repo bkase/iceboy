@@ -21,7 +21,7 @@ pub entity timer_test_top(
     | (zext(timer_out.tima) << 16)
     | (zext(timer_out.tma) << 8)
     | (zext(timer_out.tac) << 5)
-    | (zext(if timer_out.timer_irq { 1u1 } else { 0u1 }) << 4)
-    | (zext(if timer_out.div_reset_request { 1u1 } else { 0u1 }) << 3)
+    | (zext(lib::util::bit(timer_out.timer_irq)) << 4)
+    | (zext(lib::util::bit(timer_out.div_reset_request)) << 3)
     | zext(timer_out.overflow_delay)
 }

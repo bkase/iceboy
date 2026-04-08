@@ -7,10 +7,6 @@ pub struct InterruptsOut {
     irq_pending: IrqPending,
 }
 
-fn io_write(write_en: bool, write_addr: uint<16>, target: uint<16>) -> bool {
-    write_en && write_addr == target
-}
-
 fn read_visible(bits: uint<5>) -> uint<8> {
     0xe0u8 | zext(bits)
 }
@@ -22,11 +18,11 @@ fn irq_source_bits(
     serial_irq: bool,
     joypad_irq: bool,
 ) -> uint<5> {
-    ((if joypad_irq { 1u5 } else { 0u5 }) << 4)
-    | ((if serial_irq { 1u5 } else { 0u5 }) << 3)
-    | ((if timer_irq { 1u5 } else { 0u5 }) << 2)
-    | ((if lcd_stat_irq { 1u5 } else { 0u5 }) << 1)
-    | (if vblank_irq { 1u5 } else { 0u5 })
+    ((zext(lib::util::bit(joypad_irq))) << 4)
+    | ((zext(lib::util::bit(serial_irq))) << 3)
+    | ((zext(lib::util::bit(timer_irq))) << 2)
+    | ((zext(lib::util::bit(lcd_stat_irq))) << 1)
+    | zext(lib::util::bit(vblank_irq))
 }
 
 fn ack_bits(irq_ack: IrqAck) -> uint<5> {
@@ -60,8 +56,8 @@ pub entity interrupts(
     joypad_irq: bool,
     irq_ack: IrqAck,
 ) -> InterruptsOut {
-    let write_ie = io_write(write_en, write_addr, 0xffffu16);
-    let write_if = io_write(write_en, write_addr, 0xff0fu16);
+    let write_ie = lib::util::io_write(write_en, write_addr, 0xffffu16);
+    let write_if = lib::util::io_write(write_en, write_addr, 0xff0fu16);
     let source_bits = irq_source_bits(
         vblank_irq,
         lcd_stat_irq,

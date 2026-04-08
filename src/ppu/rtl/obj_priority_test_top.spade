@@ -144,8 +144,8 @@ pub entity obj_priority_test_top(
     let chosen = resolve_obj_priority(existing, incoming);
     let mixed = mix_bg_obj_pixel(bg_pixel, true, chosen, build_render(bgp_pop_i, obp0_pop_i, obp1_pop_i, bg_enable_i), 0u8, 0u8);
 
-    zext(if step.overlap { 1u1 } else { 0u1 })
-        | (zext(if step.selected { 1u1 } else { 0u1 }) << 1)
+    zext(lib::util::bit(step.overlap))
+        | (zext(lib::util::bit(step.selected)) << 1)
         | (zext(step.next_scan.found) << 2)
         | (zext(step.next_list.count) << 6)
         | (zext(appended.oam_index) << 10)
@@ -154,11 +154,11 @@ pub entity obj_priority_test_top(
         | (zext(appended.selection_rank) << 32)
         | (zext(chosen.color) << 36)
         | (zext(match chosen.palette { ObjPaletteSel::Obp0 => 0u1, ObjPaletteSel::Obp1 => 1u1 }) << 38)
-        | (zext(if chosen.bg_over_obj { 1u1 } else { 0u1 }) << 39)
+        | (zext(lib::util::bit(chosen.bg_over_obj)) << 39)
         | (zext(chosen.draw_rank.x) << 40)
         | (zext(chosen.draw_rank.selection_rank) << 48)
         | (zext(mixed.shade) << 52)
         | (zext(pixel_source_bits(mixed.source)) << 54)
-        | (zext(if obj_overlaps_scanline(ly_i, scan_obj_y_i, obj_size_8x16_i) { 1u1 } else { 0u1 }) << 56)
-        | (zext(if obj_draw_rank_precedes(incoming.draw_rank, existing.draw_rank) { 1u1 } else { 0u1 }) << 57)
+        | (zext(lib::util::bit(obj_overlaps_scanline(ly_i, scan_obj_y_i, obj_size_8x16_i))) << 56)
+        | (zext(lib::util::bit(obj_draw_rank_precedes(incoming.draw_rank, existing.draw_rank))) << 57)
 }

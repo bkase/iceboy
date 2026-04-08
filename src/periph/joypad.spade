@@ -27,22 +27,18 @@ pub struct JoypadOut {
     joypad_irq: bool,
 }
 
-fn io_write(write_en: bool, write_addr: uint<16>) -> bool {
-    write_en && write_addr == 0xff00u16
-}
-
 fn encode_action_pressed(buttons: JoypButtons) -> uint<4> {
-    ((if buttons.start { 1u4 } else { 0u4 }) << 3)
-        | ((if buttons.select { 1u4 } else { 0u4 }) << 2)
-        | ((if buttons.b { 1u4 } else { 0u4 }) << 1)
-        | (if buttons.a { 1u4 } else { 0u4 })
+    ((zext(lib::util::bit(buttons.start))) << 3)
+        | ((zext(lib::util::bit(buttons.select))) << 2)
+        | ((zext(lib::util::bit(buttons.b))) << 1)
+        | zext(lib::util::bit(buttons.a))
 }
 
 fn encode_dpad_pressed(buttons: JoypButtons) -> uint<4> {
-    ((if buttons.down { 1u4 } else { 0u4 }) << 3)
-        | ((if buttons.up { 1u4 } else { 0u4 }) << 2)
-        | ((if buttons.left { 1u4 } else { 0u4 }) << 1)
-        | (if buttons.right { 1u4 } else { 0u4 })
+    ((zext(lib::util::bit(buttons.down))) << 3)
+        | ((zext(lib::util::bit(buttons.up))) << 2)
+        | ((zext(lib::util::bit(buttons.left))) << 1)
+        | zext(lib::util::bit(buttons.right))
 }
 
 fn selected_pressed_nibble(select_reg: uint<2>, buttons: JoypButtons) -> uint<4> {
@@ -75,7 +71,7 @@ pub entity joypad(
     write_data: uint<8>,
     buttons: JoypButtons,
 ) -> JoypadOut {
-    let write_p1 = io_write(write_en, write_addr);
+    let write_p1 = lib::util::io_write(write_en, write_addr, 0xff00u16);
     decl select_reg;
     decl prev_pressed_reg;
     decl joypad_irq_reg;

@@ -270,5 +270,5 @@ pub entity ppu_power_top(
         | (zext(encode_window_state(after.window_state)) << 40)
         | (zext(window_line(after.window_state)) << 42)
         | (zext(core.mem_reqs.count) << 50)
-        | (zext(if pixel_emit_active { 1u1 } else { 0u1 }) << 53)
+        | (zext(lib::util::bit(pixel_emit_active)) << 53)
 }

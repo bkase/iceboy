@@ -28,7 +28,7 @@ fn encode_owner(owner: BusOwner) -> uint<2> {
 fn encode_output(obs: BusObs) -> uint<7> {
     (zext(encode_region(obs.region)) << 3)
         | (zext(encode_owner(obs.owner)) << 1)
-        | zext(if obs.blocked { 1u1 } else { 0u1 })
+        | zext(lib::util::bit(obs.blocked))
 }
 
 pub entity observe_req_test_top(

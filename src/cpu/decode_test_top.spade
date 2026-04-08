@@ -45,10 +45,6 @@ struct DecodeProjection {
     rst_vector: uint<8>,
 }
 
-fn bool_code(value: bool) -> uint<1> {
-    if value { 1u1 } else { 0u1 }
-}
-
 fn projection(
     invalid: uint<1>,
     class_id: uint<4>,
@@ -457,7 +453,7 @@ fn project(op: DecodedOp) -> DecodeProjection {
                         0u3,
                     )
                 },
-                ControlTarget::Return$(enable_interrupts) => projection(base.invalid, base.class_id, base.addressing, base.condition, 4u3, bool_code(enable_interrupts), base.dst8_kind, base.dst8_reg, base.src8_kind, base.src8_reg, base.dst16_kind, base.dst16_reg, base.src16_kind, base.src16_reg, base.alu_kind, base.word_alu_kind, base.bit_kind, base.rot_shift_kind, base.bit_index, base.zero_on_result, base.stack_kind, base.stack_pair, base.misc_kind, base.interrupt_enable, base.prefix, base.rst_vector),
+                ControlTarget::Return$(enable_interrupts) => projection(base.invalid, base.class_id, base.addressing, base.condition, 4u3, lib::util::bit(enable_interrupts), base.dst8_kind, base.dst8_reg, base.src8_kind, base.src8_reg, base.dst16_kind, base.dst16_reg, base.src16_kind, base.src16_reg, base.alu_kind, base.word_alu_kind, base.bit_kind, base.rot_shift_kind, base.bit_index, base.zero_on_result, base.stack_kind, base.stack_pair, base.misc_kind, base.interrupt_enable, base.prefix, base.rst_vector),
                 ControlTarget::Restart$(vector) => projection(base.invalid, base.class_id, base.addressing, base.condition, 5u3, base.control_return_enable_interrupts, base.dst8_kind, base.dst8_reg, base.src8_kind, base.src8_reg, base.dst16_kind, base.dst16_reg, base.src16_kind, base.src16_reg, base.alu_kind, base.word_alu_kind, base.bit_kind, base.rot_shift_kind, base.bit_index, base.zero_on_result, base.stack_kind, base.stack_pair, base.misc_kind, base.interrupt_enable, base.prefix, vector),
             }
         },
@@ -465,7 +461,7 @@ fn project(op: DecodedOp) -> DecodeProjection {
             let (bit_kind, rot_shift_kind) = bit_kind_codes(kind);
             let (dst8_kind, dst8_reg) = operand8_codes(target);
             with_operands(
-                projection(0u1, 5u4, addressing_code(addressing), 0u3, 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, 0u4, 0u3, bit_kind, rot_shift_kind, bit_index_code(bit_index), bool_code(zero_on_result), 0u2, 0u3, 0u4, 0u1, prefix_code(prefix), 0u8),
+                projection(0u1, 5u4, addressing_code(addressing), 0u3, 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, 0u4, 0u3, bit_kind, rot_shift_kind, bit_index_code(bit_index), lib::util::bit(zero_on_result), 0u2, 0u3, 0u4, 0u1, prefix_code(prefix), 0u8),
                 dst8_kind,
                 dst8_reg,
                 0u4,
@@ -484,7 +480,7 @@ fn project(op: DecodedOp) -> DecodeProjection {
             projection(0u1, 7u4, addressing_code(addressing), 0u3, 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, 0u4, 0u3, 0u3, 0u4, 0u4, 0u1, 0u2, 0u3, misc_kind, 0u1, prefix, 0u8)
         },
         DecodedOp::InterruptControl$(enable, addressing) => {
-            projection(0u1, 8u4, addressing_code(addressing), 0u3, 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, 0u4, 0u3, 0u3, 0u4, 0u4, 0u1, 0u2, 0u3, 0u4, bool_code(enable), 0u2, 0u8)
+            projection(0u1, 8u4, addressing_code(addressing), 0u3, 0u3, 0u1, 0u4, 0u3, 0u4, 0u3, 0u3, 0u3, 0u3, 0u3, 0u4, 0u3, 0u3, 0u4, 0u4, 0u1, 0u2, 0u3, 0u4, lib::util::bit(enable), 0u2, 0u8)
         },
     }
 }

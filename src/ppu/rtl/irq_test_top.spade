@@ -98,14 +98,14 @@ pub entity irq_test_top(
     let (next_irq_state, edge_req) = advance_stat_irq(prev_status.stat_irq, new_line, stat_write_seen_i, features);
     let (_, irq_req_out) = irq_req(prev_status, next_status, regs, ly_i, stat_write_seen_i, features);
 
-    zext(if lyc_match(regs, ly_i) { 1u1 } else { 0u1 })
-        | (zext(if new_line { 1u1 } else { 0u1 }) << 1)
-        | (zext(if next_irq_state.line_high { 1u1 } else { 0u1 }) << 2)
-        | (zext(if entered_vblank(prev_status, next_status) { 1u1 } else { 0u1 }) << 3)
-        | (zext(if quirk_pulse { 1u1 } else { 0u1 }) << 4)
-        | (zext(if edge_req { 1u1 } else { 0u1 }) << 5)
-        | (zext(if irq_req_out.vblank_req { 1u1 } else { 0u1 }) << 6)
-        | (zext(if irq_req_out.stat_req { 1u1 } else { 0u1 }) << 7)
-        | (zext(if regs.stat_sel.mode1_sel { 1u1 } else { 0u1 }) << 8)
-        | (zext(if regs.stat_sel.mode2_sel { 1u1 } else { 0u1 }) << 9)
+    zext(lib::util::bit(lyc_match(regs, ly_i)))
+        | (zext(lib::util::bit(new_line)) << 1)
+        | (zext(lib::util::bit(next_irq_state.line_high)) << 2)
+        | (zext(lib::util::bit(entered_vblank(prev_status, next_status))) << 3)
+        | (zext(lib::util::bit(quirk_pulse)) << 4)
+        | (zext(lib::util::bit(edge_req)) << 5)
+        | (zext(lib::util::bit(irq_req_out.vblank_req)) << 6)
+        | (zext(lib::util::bit(irq_req_out.stat_req)) << 7)
+        | (zext(lib::util::bit(regs.stat_sel.mode1_sel)) << 8)
+        | (zext(lib::util::bit(regs.stat_sel.mode2_sel)) << 9)
 }

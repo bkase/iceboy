@@ -21,7 +21,7 @@ pub entity serial_test_top(
 
     (zext(serial_out.sb) << 14)
     | (zext(serial_out.sc) << 6)
-    | (zext(if serial_out.serial_irq { 1u1 } else { 0u1 }) << 5)
-    | (zext(if serial_out.transfer_active { 1u1 } else { 0u1 }) << 4)
+    | (zext(lib::util::bit(serial_out.serial_irq)) << 5)
+    | (zext(lib::util::bit(serial_out.transfer_active)) << 4)
     | zext(serial_out.cycles_left)
 }

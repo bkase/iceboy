@@ -30,10 +30,6 @@ fn tac_from_write(value: uint<8>) -> uint<3> {
     trunc(value)
 }
 
-fn io_write(write_en: bool, write_addr: uint<16>, target: uint<16>) -> bool {
-    write_en && write_addr == target
-}
-
 pub entity timer(
     clk: clock,
     rst: bool,
@@ -42,10 +38,10 @@ pub entity timer(
     write_addr: uint<16>,
     write_data: uint<8>,
 ) -> TimerOut {
-    let write_div = io_write(write_en, write_addr, 0xFF04u16);
-    let write_tima = io_write(write_en, write_addr, 0xFF05u16);
-    let write_tma = io_write(write_en, write_addr, 0xFF06u16);
-    let write_tac = io_write(write_en, write_addr, 0xFF07u16);
+    let write_div = lib::util::io_write(write_en, write_addr, 0xFF04u16);
+    let write_tima = lib::util::io_write(write_en, write_addr, 0xFF05u16);
+    let write_tma = lib::util::io_write(write_en, write_addr, 0xFF06u16);
+    let write_tac = lib::util::io_write(write_en, write_addr, 0xFF07u16);
 
     let effective_sys_counter = if write_div { 0u32 } else { sys_counter };
 

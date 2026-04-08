@@ -187,14 +187,14 @@ pub entity fifo_test_top(
 
     zext(pack_fifo_shades(output.next_fifo))
         | (zext(output.next_fifo.count) << 32)
-        | (zext(if output.pixel_valid { 1u1 } else { 0u1 }) << 37)
+        | (zext(lib::util::bit(output.pixel_valid)) << 37)
         | (zext(pixel.shade) << 38)
         | (zext(pixel.palette) << 40)
-        | (zext(if output.discard_applied { 1u1 } else { 0u1 }) << 48)
+        | (zext(lib::util::bit(output.discard_applied)) << 48)
         | (zext(output.next_discard_scx) << 49)
         | (zext(pack_window_state(window_after)) << 52)
         | (zext(window_win_x(window_after)) << 54)
         | (zext(window_win_line(window_after)) << 59)
         | (zext(output.next_window_line) << 67)
-        | (zext(if output.restart_fetcher { 1u1 } else { 0u1 }) << 75)
+        | (zext(lib::util::bit(output.restart_fetcher)) << 75)
 }

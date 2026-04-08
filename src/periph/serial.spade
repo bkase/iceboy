@@ -6,10 +6,6 @@ pub struct SerialOut {
     cycles_left: uint<4>,
 }
 
-fn io_write(write_en: bool, write_addr: uint<16>, target: uint<16>) -> bool {
-    write_en && write_addr == target
-}
-
 fn internal_clock_start(value: uint<8>) -> bool {
     (value & 0x81u8) == 0x81u8
 }
@@ -27,8 +23,8 @@ pub entity serial(
     write_data: uint<8>,
     serial_inject: uint<8>,
 ) -> SerialOut {
-    let write_sb = io_write(write_en, write_addr, 0xFF01u16);
-    let write_sc = io_write(write_en, write_addr, 0xFF02u16);
+    let write_sb = lib::util::io_write(write_en, write_addr, 0xFF01u16);
+    let write_sc = lib::util::io_write(write_en, write_addr, 0xFF02u16);
     let start_internal = write_sc && internal_clock_start(write_data);
 
     decl sb_reg;

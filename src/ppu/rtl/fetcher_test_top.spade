@@ -193,7 +193,7 @@ pub entity fetcher_test_top(
     );
 
     zext(output.req.addr)
-        | (zext(if output.req_valid { 1u1 } else { 0u1 }) << 16)
+        | (zext(lib::util::bit(output.req_valid)) << 16)
         | (zext(output.req.tag.id) << 17)
         | (zext(output.next_state.epoch) << 21)
         | (zext(pack_source(output.next_state.source)) << 25)
@@ -204,11 +204,11 @@ pub entity fetcher_test_top(
         | (zext(output.next_state.map_x) << 54)
         | (zext(output.next_state.map_y) << 59)
         | (zext(output.next_state.row) << 64)
-        | (zext(if output.next_state.pending_push { 1u1 } else { 0u1 }) << 67)
-        | (zext(if output.next_state.pending_valid { 1u1 } else { 0u1 }) << 68)
+        | (zext(lib::util::bit(output.next_state.pending_push)) << 67)
+        | (zext(lib::util::bit(output.next_state.pending_valid)) << 68)
         | (zext(output.next_state.pending_read.tag.id) << 69)
         | (zext(output.next_state.pending_read.epoch) << 73)
-        | (zext(if output.push_valid { 1u1 } else { 0u1 }) << 77)
-        | (zext(if output.stale_resp { 1u1 } else { 0u1 }) << 78)
+        | (zext(lib::util::bit(output.push_valid)) << 77)
+        | (zext(lib::util::bit(output.stale_resp)) << 78)
         | (zext(pack_row(output.push_row)) << 79)
 }

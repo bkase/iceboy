@@ -1,0 +1,7 @@
+pub fn bit(value: bool) -> uint<1> {
+    if value { 1u1 } else { 0u1 }
+}
+
+pub fn io_write(write_en: bool, write_addr: uint<16>, target: uint<16>) -> bool {
+    write_en && write_addr == target
+}

@@ -52,6 +52,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/unit/test_interrupt_service.py"
     "test/unit/test_joypad.py"
     "test/unit/test_joypad_interrupts.py"
+    "test/unit/test_serial.py"
     "test/unit/test_timer.py"
     "tools/run_cpu_instrs_blargg_verilator.sh"
     "test/rom/test_loads_basic.py"

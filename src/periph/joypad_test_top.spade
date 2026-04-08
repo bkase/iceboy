@@ -30,5 +30,5 @@ pub entity joypad_test_top(
         decode_buttons(buttons_i),
     );
 
-    (zext(joypad_out.p1) << 1) | zext(if joypad_out.joypad_irq { 1u1 } else { 0u1 })
+    (zext(joypad_out.p1) << 1) | zext(lib::util::bit(joypad_out.joypad_irq))
 }

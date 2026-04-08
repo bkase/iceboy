@@ -31,7 +31,7 @@ fn encode_output(resp: BusResp, obs: BusObs) -> uint<15> {
     (zext(resp.data) << 7)
         | (zext(encode_region(obs.region)) << 3)
         | (zext(encode_owner(obs.owner)) << 1)
-        | zext(if obs.blocked { 1u1 } else { 0u1 })
+        | zext(lib::util::bit(obs.blocked))
 }
 
 fn decode_memory_behavior_profile(profile: uint<2>) -> MemoryBehaviorProfile {

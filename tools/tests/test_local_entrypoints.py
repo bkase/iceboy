@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -317,6 +318,34 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"$SWIM" test "$test_file"', text)
         self.assertIn('run_checked "$test_file" --skip-build', text)
         self.assertNotIn('label="$(basename "${test_file%.py}")"', text)
+
+    def test_shared_util_module_centralizes_bool_bit_and_io_write_helpers(self) -> None:
+        util_text = (ROOT / "src" / "util.spade").read_text(encoding="utf-8")
+        self.assertIn("pub fn bit(value: bool)", util_text)
+        self.assertIn("pub fn io_write(write_en: bool, write_addr: uint<16>, target: uint<16>)", util_text)
+
+        for relative in [
+            "src/periph/timer.spade",
+            "src/periph/interrupts.spade",
+            "src/periph/serial.spade",
+            "src/periph/joypad.spade",
+            "src/mem/phys/spram_test_top.spade",
+            "src/cpu/decode_test_top.spade",
+        ]:
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            self.assertNotIn("fn io_write(", text)
+            self.assertNotIn("fn bool_code(", text)
+            self.assertNotIn("fn bit(", text)
+
+        bool_to_bit_pattern = re.compile(r"if .*\\{ 1u1 \\} else \\{ 0u1 \\}")
+        for path in (ROOT / "src").rglob("*.spade"):
+            if path.name == "util.spade":
+                continue
+            text = path.read_text(encoding="utf-8")
+            self.assertIsNone(
+                bool_to_bit_pattern.search(text),
+                f"found inline 1-bit bool packing in {path.relative_to(ROOT)}",
+            )
 
     def test_cpu_lockstep_targeted_subset_is_not_marked_expect_fail(self) -> None:
         text = (ROOT / "test" / "lockstep" / "test_cpu_lockstep.py").read_text(encoding="utf-8")
