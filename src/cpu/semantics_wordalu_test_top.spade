@@ -9,7 +9,6 @@ use lib::cpu::types::{
     CpuState,
     HaltState,
     Imm16Cont,
-    Imm16HiCont,
     Imm8Cont,
     ImeState,
     IrqPending,
@@ -105,27 +104,6 @@ fn imm16_cont_code(cont: Imm16Cont) -> (uint<4>, uint<8>) {
     }
 }
 
-fn imm16_hi_cont_from_inputs(code: uint<4>, data: uint<8>, aux: uint<16>) -> Imm16HiCont {
-    let lo = trunc(aux);
-
-    match code {
-        0u4 => Imm16HiCont::LoadRegPair$(pair: pair_from_code(trunc(data)), lo: lo),
-        1u4 => Imm16HiCont::ReadAddrToA$(lo: lo),
-        2u4 => Imm16HiCont::WriteAToAddr$(lo: lo),
-        _ => Imm16HiCont::StoreSpToAddr$(lo: lo),
-    }
-}
-
-fn imm16_hi_cont_code(cont: Imm16HiCont) -> (uint<4>, uint<8>, uint<16>) {
-    match cont {
-        Imm16HiCont::LoadRegPair$(pair, lo) => (0u4, zext(pair_code(pair)), zext(lo)),
-        Imm16HiCont::ReadAddrToA$(lo) => (1u4, 0u8, zext(lo)),
-        Imm16HiCont::WriteAToAddr$(lo) => (2u4, 0u8, zext(lo)),
-        Imm16HiCont::StoreSpToAddr$(lo) => (3u4, 0u8, zext(lo)),
-        _ => (15u4, 0u8, 0u16),
-    }
-}
-
 fn read_cont_from_inputs(code: uint<4>, data: uint<8>, cont_data: uint<8>) -> ReadCont {
     match code {
         0u4 => ReadCont::LoadReg8$(dst: r8_from_code(trunc(data))),
@@ -176,7 +154,7 @@ fn phase_from_inputs(
         2u4 => Phase::Execute$(op: decoded),
         3u4 => Phase::ReadImm8$(k: imm8_cont_from_inputs(cont_code, cont_data)),
         4u4 => Phase::ReadImm16Lo$(k: imm16_cont_from_inputs(cont_code, cont_data)),
-        5u4 => Phase::ReadImm16Hi$(lo: trunc(aux), k: imm16_hi_cont_from_inputs(cont_code, cont_data, aux)),
+        5u4 => Phase::ReadImm16Hi$(lo: trunc(aux), k: imm16_cont_from_inputs(cont_code, cont_data)),
         6u4 => Phase::ReadMem$(addr: addr, k: read_cont_from_inputs(cont_code, cont_data, data)),
         7u4 => Phase::WriteMem$(addr: addr, data: data, k: write_cont_from_inputs(cont_code, cont_data, aux)),
         _ => Phase::Fetch,
@@ -197,9 +175,8 @@ fn phase_projection(phase: Phase) -> (uint<4>, uint<4>, uint<16>, uint<8>, uint<
             (4u4, cont_code, 0u16, 0u8, cont_data, 0u16)
         },
         Phase::ReadImm16Hi$(lo, k) => {
-            let _ = lo;
-            let (cont_code, cont_data, aux) = imm16_hi_cont_code(k);
-            (5u4, cont_code, 0u16, 0u8, cont_data, aux)
+            let (cont_code, cont_data) = imm16_cont_code(k);
+            (5u4, cont_code, 0u16, 0u8, cont_data, zext(lo))
         },
         Phase::ReadMem$(addr, k) => {
             let (cont_code, cont_data, data) = read_cont_code(k);

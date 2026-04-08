@@ -13,7 +13,6 @@ use lib::cpu::types::{
     CpuState,
     HaltState,
     Imm16Cont,
-    Imm16HiCont,
     Imm8Cont,
     ImeState,
     IrqAck,
@@ -1527,15 +1526,6 @@ fn handle_read_imm8(state: CpuState, input: MicroInput, k: Imm8Cont) -> MicroOut
 fn handle_read_imm16_lo(state: CpuState, input: MicroInput, k: Imm16Cont) -> MicroOutput {
     let lo = input.bus_resp.data;
     let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
-    let next_phase = match k {
-        Imm16Cont::LoadRegPair$(pair) => Phase::ReadImm16Hi$(lo: lo, k: Imm16HiCont::LoadRegPair$(pair: pair, lo: lo)),
-        Imm16Cont::JumpAbs => Phase::ReadImm16Hi$(lo: lo, k: Imm16HiCont::JumpAbs$(lo: lo)),
-        Imm16Cont::CallTarget => Phase::ReadImm16Hi$(lo: lo, k: Imm16HiCont::CallTarget$(lo: lo)),
-        Imm16Cont::ReadAddrToA => Phase::ReadImm16Hi$(lo: lo, k: Imm16HiCont::ReadAddrToA$(lo: lo)),
-        Imm16Cont::WriteAToAddr => Phase::ReadImm16Hi$(lo: lo, k: Imm16HiCont::WriteAToAddr$(lo: lo)),
-        Imm16Cont::StoreSpToAddr => Phase::ReadImm16Hi$(lo: lo, k: Imm16HiCont::StoreSpToAddr$(lo: lo)),
-        _ => Phase::Fetch,
-    };
     let delta = CpuDelta$(
         regs_write: idle_reg_write_set(),
         pc_write: some_u16(trunc(state.arch.regs.pc + 1u16)),
@@ -1543,7 +1533,7 @@ fn handle_read_imm16_lo(state: CpuState, input: MicroInput, k: Imm16Cont) -> Mic
         ime_write: Option::None,
         halt_write: Option::None,
         micro_write: MicroWriteSet$(
-            phase: some_phase(next_phase),
+            phase: some_phase(Phase::ReadImm16Hi$(lo: lo, k: k)),
             opcode_latch: Option::None,
             imm_lo: some_u8(lo),
             imm_hi: Option::None,
@@ -1554,12 +1544,12 @@ fn handle_read_imm16_lo(state: CpuState, input: MicroInput, k: Imm16Cont) -> Mic
     standard_micro_output(state, input, bus_req, delta, Option::None)
 }
 
-fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm16HiCont) -> MicroOutput {
+fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm16Cont) -> MicroOutput {
     let hi = input.bus_resp.data;
     let bus_req = BusReq::Read$(addr: state.arch.regs.pc);
     let addr = (zext(hi) << 8) | zext(lo);
     let delta = match k {
-        Imm16HiCont::LoadRegPair$(pair, lo) => {
+        Imm16Cont::LoadRegPair$(pair) => {
             match pair {
                 RegPair::SP => CpuDelta$(
                     regs_write: idle_reg_write_set(),
@@ -1593,7 +1583,7 @@ fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm1
                 ),
             }
         },
-        Imm16HiCont::JumpAbs$(lo) => {
+        Imm16Cont::JumpAbs => {
             let next_phase = match state.micro.decoded {
                 DecodedOp::ControlFlow$(condition, target, addressing) => {
                     let _ = (target, addressing);
@@ -1621,7 +1611,7 @@ fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm1
                 ),
             )
         },
-        Imm16HiCont::CallTarget$(lo) => {
+        Imm16Cont::CallTarget => {
             let next_phase = match state.micro.decoded {
                 DecodedOp::ControlFlow$(condition, target, addressing) => {
                     let _ = (target, addressing);
@@ -1649,7 +1639,7 @@ fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm1
                 ),
             )
         },
-        Imm16HiCont::ReadAddrToA$(lo) => {
+        Imm16Cont::ReadAddrToA => {
             CpuDelta$(
                 regs_write: idle_reg_write_set(),
                 pc_write: some_u16(trunc(state.arch.regs.pc + 1u16)),
@@ -1666,7 +1656,7 @@ fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm1
                 ),
             )
         },
-        Imm16HiCont::WriteAToAddr$(lo) => {
+        Imm16Cont::WriteAToAddr => {
             CpuDelta$(
                 regs_write: idle_reg_write_set(),
                 pc_write: some_u16(trunc(state.arch.regs.pc + 1u16)),
@@ -1683,7 +1673,7 @@ fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm1
                 ),
             )
         },
-        Imm16HiCont::StoreSpToAddr$(lo) => {
+        Imm16Cont::StoreSpToAddr => {
             CpuDelta$(
                 regs_write: idle_reg_write_set(),
                 pc_write: some_u16(trunc(state.arch.regs.pc + 1u16)),
@@ -1706,21 +1696,6 @@ fn handle_read_imm16_hi(state: CpuState, input: MicroInput, lo: uint<8>, k: Imm1
                 ),
             )
         },
-        _ => CpuDelta$(
-            regs_write: idle_reg_write_set(),
-            pc_write: some_u16(trunc(state.arch.regs.pc + 1u16)),
-            sp_write: Option::None,
-            ime_write: Option::None,
-            halt_write: Option::None,
-            micro_write: MicroWriteSet$(
-                phase: some_phase(Phase::Fetch),
-                opcode_latch: Option::None,
-                imm_lo: some_u8(lo),
-                imm_hi: some_u8(hi),
-                decoded: Option::None,
-                temp: some_u16(addr),
-            ),
-        ),
     };
     standard_micro_output(state, input, bus_req, delta, Option::None)
 }

@@ -309,10 +309,6 @@ fn word_alu_kind_code(kind: WordAluKind) -> uint<3> {
 
 fn rot_shift_kind_code(kind: RotShiftKind) -> uint<4> {
     match kind {
-        RotShiftKind::Rlca => 1u4,
-        RotShiftKind::Rrca => 2u4,
-        RotShiftKind::Rla => 3u4,
-        RotShiftKind::Rra => 4u4,
         RotShiftKind::Rlc => 5u4,
         RotShiftKind::Rrc => 6u4,
         RotShiftKind::Rl => 7u4,

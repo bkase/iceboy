@@ -316,7 +316,7 @@ def projection_for_unprefixed_opcode(opcode: int) -> dict[str, int]:
             return _projection(
                 class_id=CLASS_BIT_OP,
                 bit_kind=BIT_ROT_SHIFT,
-                rot_shift_kind=ROT_RLCA,
+                rot_shift_kind=ROT_RLC,
                 dst8_kind=OPERAND8_REGISTER,
                 dst8_reg=R8_CODE["A"],
                 zero_on_result=0,
@@ -325,7 +325,7 @@ def projection_for_unprefixed_opcode(opcode: int) -> dict[str, int]:
             return _projection(
                 class_id=CLASS_BIT_OP,
                 bit_kind=BIT_ROT_SHIFT,
-                rot_shift_kind=ROT_RRCA,
+                rot_shift_kind=ROT_RRC,
                 dst8_kind=OPERAND8_REGISTER,
                 dst8_reg=R8_CODE["A"],
                 zero_on_result=0,
@@ -334,7 +334,7 @@ def projection_for_unprefixed_opcode(opcode: int) -> dict[str, int]:
             return _projection(
                 class_id=CLASS_BIT_OP,
                 bit_kind=BIT_ROT_SHIFT,
-                rot_shift_kind=ROT_RLA,
+                rot_shift_kind=ROT_RL,
                 dst8_kind=OPERAND8_REGISTER,
                 dst8_reg=R8_CODE["A"],
                 zero_on_result=0,
@@ -343,7 +343,7 @@ def projection_for_unprefixed_opcode(opcode: int) -> dict[str, int]:
             return _projection(
                 class_id=CLASS_BIT_OP,
                 bit_kind=BIT_ROT_SHIFT,
-                rot_shift_kind=ROT_RRA,
+                rot_shift_kind=ROT_RR,
                 dst8_kind=OPERAND8_REGISTER,
                 dst8_reg=R8_CODE["A"],
                 zero_on_result=0,
@@ -749,10 +749,10 @@ def _word_alu_kind_expr(code: int) -> str:
 
 def _rot_shift_kind_expr(code: int) -> str:
     return {
-        ROT_RLCA: "RotShiftKind::Rlca",
-        ROT_RRCA: "RotShiftKind::Rrca",
-        ROT_RLA: "RotShiftKind::Rla",
-        ROT_RRA: "RotShiftKind::Rra",
+        ROT_RLCA: "RotShiftKind::Rlc",
+        ROT_RRCA: "RotShiftKind::Rrc",
+        ROT_RLA: "RotShiftKind::Rl",
+        ROT_RRA: "RotShiftKind::Rr",
         ROT_RLC: "RotShiftKind::Rlc",
         ROT_RRC: "RotShiftKind::Rrc",
         ROT_RL: "RotShiftKind::Rl",

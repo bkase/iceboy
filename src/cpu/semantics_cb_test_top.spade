@@ -10,7 +10,6 @@ use lib::cpu::types::{
     CpuState,
     HaltState,
     Imm16Cont,
-    Imm16HiCont,
     Imm8Cont,
     ImeState,
     IrqPending,

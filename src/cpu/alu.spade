@@ -14,10 +14,6 @@ pub enum AluKind {
 }
 
 pub enum RotShiftKind {
-    Rlca,
-    Rrca,
-    Rla,
-    Rra,
     Rlc,
     Rrc,
     Rl,
@@ -76,21 +72,6 @@ fn alu_result16(val16: uint<16>, flags: Flags) -> AluResult {
     AluResult$(val8: trunc(val16), val16: val16, flags: flags)
 }
 
-fn add8_result(a: uint<8>, b: uint<8>) -> AluResult {
-    let raw = zext(a) + zext(b);
-    let result = trunc(raw);
-
-    alu_result8(
-        result,
-        Flags$(
-            z: result == 0u8,
-            n: false,
-            h: ((a & 0x0fu8) + (b & 0x0fu8)) > 0x0fu9,
-            c: raw > 0xffu9,
-        ),
-    )
-}
-
 fn adc8_result(a: uint<8>, b: uint<8>, carry_in: bool) -> AluResult {
     let carry = carry_u8(carry_in);
     let raw = zext(a) + zext(b) + zext(carry);
@@ -103,20 +84,6 @@ fn adc8_result(a: uint<8>, b: uint<8>, carry_in: bool) -> AluResult {
             n: false,
             h: ((a & 0x0fu8) + (b & 0x0fu8) + zext(carry)) > 0x0fu10,
             c: raw > 0xffu10,
-        ),
-    )
-}
-
-fn sub8_result(a: uint<8>, b: uint<8>) -> AluResult {
-    let result = trunc(a - b);
-
-    alu_result8(
-        result,
-        Flags$(
-            z: result == 0u8,
-            n: true,
-            h: (a & 0x0fu8) < (b & 0x0fu8),
-            c: a < b,
         ),
     )
 }
@@ -137,7 +104,7 @@ fn sbc8_result(a: uint<8>, b: uint<8>, carry_in: bool) -> AluResult {
 }
 
 fn cp8_result(a: uint<8>, b: uint<8>) -> AluResult {
-    let compared = sub8_result(a, b);
+    let compared = sbc8_result(a, b, false);
 
     AluResult$(val8: a, val16: zext(a), flags: compared.flags)
 }
@@ -370,10 +337,6 @@ fn swap8_result(x: uint<8>) -> AluResult {
 
 fn rot_shift_result(kind: RotShiftKind, x: uint<8>, f_prev: Flags, zero_on_result: bool) -> AluResult {
     match kind {
-        RotShiftKind::Rlca => rlc8_result(x, zero_on_result),
-        RotShiftKind::Rrca => rrc8_result(x, zero_on_result),
-        RotShiftKind::Rla => rl8_result(x, f_prev.c, zero_on_result),
-        RotShiftKind::Rra => rr8_result(x, f_prev.c, zero_on_result),
         RotShiftKind::Rlc => rlc8_result(x, zero_on_result),
         RotShiftKind::Rrc => rrc8_result(x, zero_on_result),
         RotShiftKind::Rl => rl8_result(x, f_prev.c, zero_on_result),
@@ -434,8 +397,8 @@ pub fn idle_alu_result() -> AluResult {
 
 pub fn alu(req: AluReq) -> AluResult {
     match req {
-        AluReq::Add8$(a, b, carry_in) => if carry_in { adc8_result(a, b, true) } else { add8_result(a, b) },
-        AluReq::Sub8$(a, b, carry_in) => if carry_in { sbc8_result(a, b, true) } else { sub8_result(a, b) },
+        AluReq::Add8$(a, b, carry_in) => adc8_result(a, b, carry_in),
+        AluReq::Sub8$(a, b, carry_in) => sbc8_result(a, b, carry_in),
         AluReq::And8$(a, b) => and8_result(a, b),
         AluReq::Or8$(a, b) => or8_result(a, b),
         AluReq::Xor8$(a, b) => xor8_result(a, b),

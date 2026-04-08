@@ -1,7 +1,7 @@
 use std::option::Option;
 use lib::cpu::decode_types::{AddressingMode, BitOpKind, ControlTarget, DecodedOp, MiscKind, Operand16, Operand8, PrefixKind, StackOpKind, WordAluKind};
 use lib::cpu::regs::{Registers, get_r16, get_r8};
-use lib::cpu::types::{Imm16Cont, Imm16HiCont, Imm8Cont, Phase, ReadCont, WriteCont};
+use lib::cpu::types::{Imm16Cont, Imm8Cont, Phase, ReadCont, WriteCont};
 
 pub fn operand8_addr(regs: Registers, operand: Operand8) -> uint<16> {
     match operand {

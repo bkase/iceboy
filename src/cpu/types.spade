@@ -79,15 +79,6 @@ pub enum Imm16Cont {
     StoreSpToAddr,
 }
 
-pub enum Imm16HiCont {
-    LoadRegPair { pair: RegPair, lo: uint<8> },
-    JumpAbs { lo: uint<8> },
-    CallTarget { lo: uint<8> },
-    ReadAddrToA { lo: uint<8> },
-    WriteAToAddr { lo: uint<8> },
-    StoreSpToAddr { lo: uint<8> },
-}
-
 pub enum IrqSel {
     VBlank,
     LcdStat,
@@ -109,7 +100,7 @@ pub enum Phase {
     FetchPrefix { prefix: PrefixKind },
     ReadImm8 { k: Imm8Cont },
     ReadImm16Lo { k: Imm16Cont },
-    ReadImm16Hi { lo: uint<8>, k: Imm16HiCont },
+    ReadImm16Hi { lo: uint<8>, k: Imm16Cont },
     ReadMem { addr: uint<16>, k: ReadCont },
     WriteMem { addr: uint<16>, data: uint<8>, k: WriteCont },
     Execute { op: DecodedOp },
