@@ -124,7 +124,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("--tier power", completed.stdout)
 
     def test_verify_hw_build_dry_run_uses_debug_free_contract(self) -> None:
-        completed = self.run_script("verify_hw_build.sh", "--dry-run", "--skip-build")
+        completed = self.run_script("verify_hw_build.sh", "--dry-run", "--skip-build", "--enforce-budget")
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
         self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
@@ -132,6 +132,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("src/board/icebreaker_top.spade", completed.stdout)
         self.assertIn("build/hw_verify/hardware.json", completed.stdout)
         self.assertIn("build/hw_verify/yosys-stat.txt", completed.stdout)
+        self.assertIn("LUT4/DFF/SPRAM/EBR", completed.stdout)
         self.assertIn("CommitTrace", completed.stdout)
         self.assertIn("BusObs", completed.stdout)
 
@@ -265,6 +266,8 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"tools/run_ppu_wave_a_mooneye_verilator.sh"', text)
         self.assertIn('"test/rom/test_timer_div_basic.py"', text)
         self.assertIn('"test/rom/test_timer_irq_halt.py"', text)
+        self.assertIn('ICEBOY_PRECOMMIT_ENFORCE_BUDGET', text)
+        self.assertIn('tools/verify_hw_build.sh --skip-build --enforce-budget', text)
         self.assertIn('"$SWIM" test "$test_file"', text)
         self.assertIn('run_checked "$test_file" --skip-build', text)
         self.assertNotIn('label="$(basename "${test_file%.py}")"', text)

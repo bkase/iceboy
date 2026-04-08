@@ -13,6 +13,7 @@ ACTIVE_PID=""
 RUN_FORMAL="${ICEBOY_PRECOMMIT_INCLUDE_FORMAL:-0}"
 RUN_EXTENDED="${ICEBOY_PRECOMMIT_EXTENDED:-0}"
 RUN_SYNTH="${ICEBOY_PRECOMMIT_INCLUDE_SYNTH:-0}"
+ENFORCE_SYNTH_BUDGET="${ICEBOY_PRECOMMIT_ENFORCE_BUDGET:-1}"
 LOCK_DIR="$(pwd)/build/precommit.lock"
 LOCK_PID_FILE="${LOCK_DIR}/pid"
 
@@ -316,7 +317,13 @@ run_checked "$SWIM" build
 
 if [[ "$RUN_SYNTH" == "1" ]]; then
     echo -n "Synthesizing... "
-    run_checked tools/verify_hw_build.sh --skip-build
+    if [[ "$ENFORCE_SYNTH_BUDGET" == "0" ]]; then
+        echo -e "${YELLOW}budget enforcement bypassed via ICEBOY_PRECOMMIT_ENFORCE_BUDGET=0${NC}"
+        echo -n "  Synthesis report... "
+        run_checked tools/verify_hw_build.sh --skip-build
+    else
+        run_checked tools/verify_hw_build.sh --skip-build --enforce-budget
+    fi
 else
     echo -e "Hardware synthesis: ${YELLOW}skipped in pre-commit (set ICEBOY_PRECOMMIT_INCLUDE_SYNTH=1 to enable)${NC}"
 fi

@@ -32,7 +32,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --help|-h)
             cat <<'EOF'
-usage: tools/verify_hw_build.sh [--dry-run] [--skip-build] [--out-dir <dir>]
+usage: tools/verify_hw_build.sh [--dry-run] [--skip-build] [--enforce-budget] [--out-dir <dir>]
 EOF
             exit 0
             ;;
@@ -73,6 +73,11 @@ if [[ "${DRY_RUN}" == "1" ]]; then
     fi
     echo "DRY RUN: source check ${BOARD_TOP} has no sim:: references"
     echo "DRY RUN: forbid debug patterns ${DEBUG_PATTERNS[*]}"
+    if [[ "${ENFORCE_BUDGET}" == "1" ]]; then
+        echo "DRY RUN: enforce LUT4/DFF/SPRAM/EBR hardware budget"
+    else
+        echo "DRY RUN: report LUT4/DFF/SPRAM/EBR hardware budget without enforcing"
+    fi
     echo "DRY RUN: outputs ${NETLIST_JSON} ${STAT_FILE}"
     printf 'DRY RUN: %q -q -p %q\n' "${YOSYS_BIN}" "${YOSYS_SCRIPT}"
     exit 0
@@ -97,20 +102,32 @@ done
 
 LUT4_COUNT="$(awk '/SB_LUT4/ { print $1; exit }' "${STAT_FILE}")"
 DFF_COUNT="$(awk '/SB_DFF/ { sum += $1 } END { print sum + 0 }' "${STAT_FILE}")"
+SPRAM_COUNT="$(awk '/SB_SPRAM256KA/ { sum += $1 } END { print sum + 0 }' "${STAT_FILE}")"
+EBR_COUNT="$(awk '$2 ~ /^SB_RAM40_4K/ { sum += $1 } END { print sum + 0 }' "${STAT_FILE}")"
 [[ -n "${LUT4_COUNT}" ]] || iceboy_die "failed to parse SB_LUT4 count from ${STAT_FILE}"
 [[ -n "${DFF_COUNT}" ]] || iceboy_die "failed to parse SB_DFF count from ${STAT_FILE}"
+[[ -n "${SPRAM_COUNT}" ]] || iceboy_die "failed to parse SB_SPRAM256KA count from ${STAT_FILE}"
+[[ -n "${EBR_COUNT}" ]] || iceboy_die "failed to parse SB_RAM40_4K count from ${STAT_FILE}"
 
 FIT_LUT=1
 FIT_DFF=1
+FIT_SPRAM=1
+FIT_EBR=1
 if (( LUT4_COUNT > 5280 )); then
     FIT_LUT=0
 fi
 if (( DFF_COUNT > 1024 )); then
     FIT_DFF=0
 fi
+if (( SPRAM_COUNT <= 0 )); then
+    FIT_SPRAM=0
+fi
+if (( EBR_COUNT <= 0 )); then
+    FIT_EBR=0
+fi
 
 echo "Verified debug-free hardware build."
-echo "Resources: SB_LUT4=${LUT4_COUNT} SB_DFF=${DFF_COUNT} fit_lut=${FIT_LUT} fit_dff=${FIT_DFF}"
+echo "Resources: SB_LUT4=${LUT4_COUNT} SB_DFF=${DFF_COUNT} SB_SPRAM256KA=${SPRAM_COUNT} SB_RAM40_4K=${EBR_COUNT} fit_lut=${FIT_LUT} fit_dff=${FIT_DFF} fit_spram=${FIT_SPRAM} fit_ebr=${FIT_EBR}"
 
 if [[ "${ENFORCE_BUDGET}" == "1" ]]; then
     if (( FIT_LUT == 0 )); then
@@ -118,5 +135,11 @@ if [[ "${ENFORCE_BUDGET}" == "1" ]]; then
     fi
     if (( FIT_DFF == 0 )); then
         iceboy_die "hardware netlist exceeds UP5K DFF budget: ${DFF_COUNT} > 1024"
+    fi
+    if (( FIT_SPRAM == 0 )); then
+        iceboy_die "hardware netlist is missing SPRAM utilization: SB_SPRAM256KA=${SPRAM_COUNT}"
+    fi
+    if (( FIT_EBR == 0 )); then
+        iceboy_die "hardware netlist is missing EBR utilization: SB_RAM40_4K=${EBR_COUNT}"
     fi
 fi
