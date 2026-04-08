@@ -29,6 +29,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/unit/test_decode.py"
     "test/unit/test_decode_cb.py"
     "test/unit/test_hram_ebr.py"
+    "test/unit/test_membus.py"
     "test/unit/test_memory_map.py"
     "test/unit/test_oam_ebr.py"
     "test/unit/test_rom_spram.py"

@@ -22,6 +22,10 @@ PROFILE_DMG_CONSERVATIVE = 0
 PROFILE_DMG_REVISION_SPECIFIC = 1
 
 
+def resolved_uint(value) -> int:
+    return int(value.binstr.replace("x", "0").replace("z", "0"), 2)
+
+
 def decode_output(value: int) -> dict[str, int | bool]:
     return {
         "data": (value >> 7) & 0xFF,
@@ -34,6 +38,7 @@ def decode_output(value: int) -> dict[str, int | bool]:
 async def prepare_dut(dut) -> None:
     dut.rst_i.value = 1
     dut.m_ce_i_i.value = 0
+    dut.t_index_i_i.value = 0
     dut.req_kind_i_i.value = 0
     dut.addr_i_i.value = 0
     dut.data_i_i.value = 0
@@ -58,17 +63,19 @@ async def cycle(
     ppu_vram_active: bool = False,
     ppu_oam_active: bool = False,
 ) -> dict[str, int | bool]:
-    dut.m_ce_i_i.value = 1
-    dut.req_kind_i_i.value = req_kind & 0x3
-    dut.addr_i_i.value = addr & 0xFFFF
-    dut.data_i_i.value = data & 0xFF
-    dut.memory_behavior_profile_i_i.value = memory_behavior_profile & 0x3
-    dut.oam_dma_active_i_i.value = int(oam_dma_active)
-    dut.ppu_vram_active_i_i.value = int(ppu_vram_active)
-    dut.ppu_oam_active_i_i.value = int(ppu_oam_active)
-    await RisingEdge(dut.clk_i)
-    await Timer(1, units="ns")
-    return decode_output(int(dut.output__.value))
+    for t_index in range(4):
+        dut.m_ce_i_i.value = int(t_index == 3)
+        dut.t_index_i_i.value = t_index
+        dut.req_kind_i_i.value = req_kind & 0x3
+        dut.addr_i_i.value = addr & 0xFFFF
+        dut.data_i_i.value = data & 0xFF
+        dut.memory_behavior_profile_i_i.value = memory_behavior_profile & 0x3
+        dut.oam_dma_active_i_i.value = int(oam_dma_active)
+        dut.ppu_vram_active_i_i.value = int(ppu_vram_active)
+        dut.ppu_oam_active_i_i.value = int(ppu_oam_active)
+        await RisingEdge(dut.clk_i)
+        await Timer(1, units="ns")
+    return decode_output(resolved_uint(dut.output__.value))
 
 
 async def write_then_read(

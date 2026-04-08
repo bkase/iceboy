@@ -13,6 +13,14 @@ fn cpu_bus_req(kind: uint<2>, addr: uint<16>, data: uint<8>) -> BusReq {
     }
 }
 
+fn preview_cpu_bus_req(cpu: lib::cpu::core::CpuCoreOut, m_ce: bool) -> BusReq {
+    if m_ce {
+        cpu_bus_req(cpu.bus_req_kind, cpu.bus_req_addr, cpu.bus_req_data)
+    } else {
+        cpu_bus_req(cpu.preview_bus_req_kind, cpu.preview_bus_req_addr, cpu.preview_bus_req_data)
+    }
+}
+
 fn heartbeat_led(sys_counter: uint<32>) -> bool {
     ((sys_counter >> 8) & 1u32) == 0u32
 }
@@ -40,7 +48,8 @@ entity hardware_core(clk: clock, rst: bool, LEDR_N: inv bool, LEDG_N: inv bool) 
         clk,
         rst,
         tb.m_ce,
-        cpu_bus_req(cpu.bus_req_kind, cpu.bus_req_addr, cpu.bus_req_data),
+        tb.t_index,
+        preview_cpu_bus_req(cpu, tb.m_ce),
         idle_joyp_buttons(),
         MemoryBehaviorProfile::DmgConservative,
         false,

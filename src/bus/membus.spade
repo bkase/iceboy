@@ -1,7 +1,8 @@
-use std::mem::{clocked_memory_init, read_memory};
 use lib::bus::types::{BusObs, BusOwner, BusRegion, BusReq, BusResp, idle_bus_obs, idle_bus_resp};
 use lib::cpu::types::MemoryBehaviorProfile;
-use lib::mem::logical::map::{hram_addr, oam_addr, physical_memory_kind, rom_addr, wram_addr};
+use lib::mem::logical::map::{hram_addr, oam_addr, rom_addr, wram_addr};
+use lib::mem::phys::ebr::{hram_ebr, oam_ebr};
+use lib::mem::phys::spram::{rom_image_spram, wram_spram};
 use lib::periph::joypad::{JoypButtons, joypad};
 use lib::periph::oam_dma::oam_dma;
 
@@ -228,6 +229,7 @@ pub entity membus(
     clk: clock,
     rst: bool,
     m_ce: bool,
+    t_index: uint<2>,
     req: BusReq,
     joyp_buttons: JoypButtons,
     memory_behavior_profile: MemoryBehaviorProfile,
@@ -235,99 +237,98 @@ pub entity membus(
     ppu_vram_active: bool,
     ppu_oam_active: bool,
 ) -> (BusResp, BusObs) {
-    let req = canonical_req(active_req(rst, m_ce, req));
-    let (dma_start_valid, dma_start_source_high) = dma_start(req);
+    let scheduled_req = if rst { BusReq::Idle } else { canonical_req(req) };
+    let visible_req = canonical_req(active_req(rst, m_ce, req));
+    let (dma_start_valid, dma_start_source_high) = dma_start(visible_req);
     let dma = inst oam_dma(clk, rst, m_ce, dma_start_valid, dma_start_source_high);
     let effective_oam_dma_active = oam_dma_active || dma.active;
-    let addr = req_addr(req);
-    let region = req_region(req);
-    let obs = observe_req(rst, m_ce, req, effective_oam_dma_active, ppu_vram_active, ppu_oam_active);
+    let addr = req_addr(scheduled_req);
+    let region = req_region(scheduled_req);
+    let visible_addr = req_addr(visible_req);
+    let visible_region = req_region(visible_req);
+    let scheduled_owner = region_owner(region, effective_oam_dma_active, ppu_vram_active, ppu_oam_active);
+    let scheduled_blocked = blocked_req(scheduled_req, scheduled_owner);
+    let obs = observe_req(rst, m_ce, visible_req, effective_oam_dma_active, ppu_vram_active, ppu_oam_active);
     let joypad_out = inst joypad(
         clk,
         rst,
-        match req {
+        match visible_req {
             BusReq::Write$(addr: write_addr, data: _) => !obs.blocked && write_addr == 0xff00u16,
             _ => false,
         },
-        addr,
-        match req {
+        visible_addr,
+        match visible_req {
             BusReq::Write$(addr: _, data: data) => data,
             _ => 0u8,
         },
         joyp_buttons,
     );
     let dma_source_region = decode_region(dma.source_addr);
-    let _ = physical_memory_kind(region);
-    let _ = physical_memory_kind(dma_source_region);
-    let rom_mem = inst clocked_memory_init::<32768, 1, 15, uint<8>>(clk, [(false, 0u15, 0u8)], [0u8; 32768]);
-    let dma_rom_mem = inst clocked_memory_init::<32768, 1, 15, uint<8>>(clk, [(false, 0u15, 0u8)], [0u8; 32768]);
+    let (rom_data, dma_rom_data) = inst rom_image_spram(
+        clk,
+        t_index,
+        rom_addr(region, addr),
+        rom_addr(dma_source_region, dma.source_addr),
+    );
 
-    let write_req = match req {
+    let write_req = match scheduled_req {
         BusReq::Write$(addr: _, data: _) => {
-            if cpu_write_allowed(region, obs.blocked, memory_behavior_profile) {
-                req
+            if cpu_write_allowed(region, scheduled_blocked, memory_behavior_profile) {
+                scheduled_req
             } else {
                 BusReq::Idle
             }
         },
-        _ => req,
+        _ => scheduled_req,
     };
     let (wram_we, wram_waddr, wram_wdata) = wram_write(write_req);
-    let wram_mem = inst clocked_memory_init::<8192, 1, 13, uint<8>>(
+    let (wram_data, dma_wram_data) = inst wram_spram(
         clk,
-        [(wram_we, wram_waddr, wram_wdata)],
-        [0u8; 8192],
-    );
-    let dma_wram_mem = inst clocked_memory_init::<8192, 1, 13, uint<8>>(
-        clk,
-        [(wram_we, wram_waddr, wram_wdata)],
-        [0u8; 8192],
+        t_index,
+        wram_addr(region, addr),
+        wram_addr(dma_source_region, dma.source_addr),
+        wram_we,
+        wram_waddr,
+        wram_wdata,
     );
     let (hram_we, hram_waddr, hram_wdata) = hram_write(write_req);
-    let hram_mem = inst clocked_memory_init::<127, 1, 7, uint<8>>(
+    let (hram_data, dma_hram_data) = inst hram_ebr(
         clk,
-        [(hram_we, hram_waddr, hram_wdata)],
-        [0u8; 127],
-    );
-    let dma_hram_mem = inst clocked_memory_init::<127, 1, 7, uint<8>>(
-        clk,
-        [(hram_we, hram_waddr, hram_wdata)],
-        [0u8; 127],
+        hram_addr(region, addr),
+        hram_addr(dma_source_region, dma.source_addr),
+        hram_we,
+        hram_waddr,
+        hram_wdata,
     );
     let (cpu_oam_we, cpu_oam_waddr, cpu_oam_wdata) = oam_write(write_req);
-    let dma_rom_data = inst read_memory(dma_rom_mem, rom_addr(dma_source_region, dma.source_addr));
-    let dma_wram_data = inst read_memory(dma_wram_mem, wram_addr(dma_source_region, dma.source_addr));
-    let dma_hram_data = inst read_memory(dma_hram_mem, hram_addr(dma_source_region, dma.source_addr));
     let dma_oam_wdata = dma_read_data(
         dma_source_region,
         dma_rom_data,
         dma_wram_data,
         dma_hram_data,
     );
-    let oam_mem = inst clocked_memory_init::<256, 2, 8, uint<8>>(
+    let oam_data = inst oam_ebr(
         clk,
-        [
-            (cpu_oam_we, cpu_oam_waddr, cpu_oam_wdata),
-            (dma.write_en, trunc(dma.dest_addr - 0xfe00u16), dma_oam_wdata),
-        ],
-        [0u8; 256],
+        oam_addr(region, addr),
+        cpu_oam_we,
+        cpu_oam_waddr,
+        cpu_oam_wdata,
+        dma.write_en,
+        trunc(dma.dest_addr - 0xfe00u16),
+        dma_oam_wdata,
     );
 
-    let rom_data = inst read_memory(rom_mem, rom_addr(region, addr));
-    let wram_data = inst read_memory(wram_mem, wram_addr(region, addr));
-    let hram_data = inst read_memory(hram_mem, hram_addr(region, addr));
-
-    let resp = match req {
+    let resp = match visible_req {
         BusReq::Read$(addr: _) => BusResp$(data:
             if obs.blocked {
                 blocked_read_data(memory_behavior_profile)
             } else {
-                match region {
+                match visible_region {
                     BusRegion::Rom => rom_data,
                     BusRegion::Wram => wram_data,
                     BusRegion::Echo => wram_data,
-                    BusRegion::Oam => inst read_memory(oam_mem, oam_addr(region, addr)),
-                    BusRegion::Io => if addr == 0xff00u16 { joypad_out.p1 } else { 0xffu8 },
+                    BusRegion::Oam => oam_data,
+                    BusRegion::Io => if visible_addr == 0xff00u16 { joypad_out.p1 } else { 0xffu8 },
                     BusRegion::Hram => hram_data,
                     BusRegion::NotUsable => not_usable_read_data(memory_behavior_profile),
                     _ => 0xffu8,

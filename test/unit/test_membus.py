@@ -28,6 +28,10 @@ PROFILE_DMG_CONSERVATIVE = 0
 PROFILE_DMG_REVISION_SPECIFIC = 1
 
 
+def resolved_uint(value) -> int:
+    return int(value.binstr.replace("x", "0").replace("z", "0"), 2)
+
+
 def decode_output(value: int) -> dict[str, int | bool]:
     return {
         "data": (value >> 7) & 0xFF,
@@ -40,6 +44,7 @@ def decode_output(value: int) -> dict[str, int | bool]:
 async def prepare_dut(dut) -> None:
     dut.rst_i.value = 1
     dut.m_ce_i_i.value = 0
+    dut.t_index_i_i.value = 0
     dut.req_kind_i_i.value = REQ_IDLE
     dut.addr_i_i.value = 0
     dut.data_i_i.value = 0
@@ -67,18 +72,23 @@ async def sample(
     ppu_vram_active: bool = False,
     ppu_oam_active: bool = False,
 ) -> dict[str, int | bool]:
-    dut.m_ce_i_i.value = int(m_ce)
-    dut.req_kind_i_i.value = req_kind & 0x3
-    dut.addr_i_i.value = addr & 0xFFFF
-    dut.data_i_i.value = data & 0xFF
-    dut.buttons_i_i.value = buttons & 0xFF
-    dut.memory_behavior_profile_i_i.value = memory_behavior_profile & 0x3
-    dut.oam_dma_active_i_i.value = int(oam_dma_active)
-    dut.ppu_vram_active_i_i.value = int(ppu_vram_active)
-    dut.ppu_oam_active_i_i.value = int(ppu_oam_active)
-    await RisingEdge(dut.clk_i)
-    await Timer(1, units="ns")
-    return decode_output(int(dut.output__.value))
+    phase_req_kind = (req_kind & 0x3) if m_ce else REQ_IDLE
+    phase_addr = addr & 0xFFFF if m_ce else 0
+    phase_data = data & 0xFF if m_ce else 0
+    for t_index in range(4):
+        dut.m_ce_i_i.value = int(m_ce and t_index == 3)
+        dut.t_index_i_i.value = t_index
+        dut.req_kind_i_i.value = phase_req_kind
+        dut.addr_i_i.value = phase_addr
+        dut.data_i_i.value = phase_data
+        dut.buttons_i_i.value = buttons & 0xFF
+        dut.memory_behavior_profile_i_i.value = memory_behavior_profile & 0x3
+        dut.oam_dma_active_i_i.value = int(oam_dma_active)
+        dut.ppu_vram_active_i_i.value = int(ppu_vram_active)
+        dut.ppu_oam_active_i_i.value = int(ppu_oam_active)
+        await RisingEdge(dut.clk_i)
+        await Timer(1, units="ns")
+    return decode_output(resolved_uint(dut.output__.value))
 
 
 async def write_then_read(
@@ -93,23 +103,29 @@ async def write_then_read(
     ppu_vram_active: bool = False,
     ppu_oam_active: bool = False,
 ) -> tuple[dict[str, int | bool], dict[str, int | bool]]:
-    dut.m_ce_i_i.value = int(m_ce)
-    dut.req_kind_i_i.value = REQ_WRITE
-    dut.addr_i_i.value = addr & 0xFFFF
-    dut.data_i_i.value = value & 0xFF
-    dut.buttons_i_i.value = buttons & 0xFF
-    dut.memory_behavior_profile_i_i.value = memory_behavior_profile & 0x3
-    dut.oam_dma_active_i_i.value = int(oam_dma_active)
-    dut.ppu_vram_active_i_i.value = int(ppu_vram_active)
-    dut.ppu_oam_active_i_i.value = int(ppu_oam_active)
-    await RisingEdge(dut.clk_i)
-    await Timer(1, units="ns")
-    write_snapshot = decode_output(int(dut.output__.value))
-
-    dut.req_kind_i_i.value = REQ_READ
-    await RisingEdge(dut.clk_i)
-    await Timer(1, units="ns")
-    read_snapshot = decode_output(int(dut.output__.value))
+    write_snapshot = await sample(
+        dut,
+        req_kind=REQ_WRITE,
+        addr=addr,
+        data=value,
+        buttons=buttons,
+        m_ce=m_ce,
+        memory_behavior_profile=memory_behavior_profile,
+        oam_dma_active=oam_dma_active,
+        ppu_vram_active=ppu_vram_active,
+        ppu_oam_active=ppu_oam_active,
+    )
+    read_snapshot = await sample(
+        dut,
+        req_kind=REQ_READ,
+        addr=addr,
+        buttons=buttons,
+        m_ce=m_ce,
+        memory_behavior_profile=memory_behavior_profile,
+        oam_dma_active=oam_dma_active,
+        ppu_vram_active=ppu_vram_active,
+        ppu_oam_active=ppu_oam_active,
+    )
     return write_snapshot, read_snapshot
 
 
