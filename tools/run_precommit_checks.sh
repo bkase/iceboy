@@ -30,6 +30,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/unit/test_decode_cb.py"
     "test/unit/test_memory_map.py"
     "test/unit/test_regs.py"
+    "test/unit/test_semantics_alu.py"
     "test/unit/test_semantics_loads.py"
     "test/unit/test_semantics_wordalu.py"
     "test/ppu/unit/test_access_policy.py"

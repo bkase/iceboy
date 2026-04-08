@@ -48,6 +48,39 @@ fn some_decoded(value: DecodedOp) -> Option<DecodedOp> {
     Option::Some(value)
 }
 
+fn micro_with_phase(phase: Phase) -> MicroWriteSet {
+    MicroWriteSet(some_phase(phase), Option::None, Option::None, Option::None, Option::None, Option::None)
+}
+
+fn fetch_micro_write() -> MicroWriteSet {
+    micro_with_phase(Phase::Fetch)
+}
+
+fn micro_with_phase_and_temp(phase: Phase, temp: uint<16>) -> MicroWriteSet {
+    MicroWriteSet(some_phase(phase), Option::None, Option::None, Option::None, Option::None, some_u16(temp))
+}
+
+fn micro_with_phase_imm_hi_temp(phase: Phase, imm_hi: uint<8>, temp: uint<16>) -> MicroWriteSet {
+    MicroWriteSet(some_phase(phase), Option::None, Option::None, some_u8(imm_hi), Option::None, some_u16(temp))
+}
+
+fn delta_with_micro(
+    regs: RegWriteSet,
+    pc: Option<uint<16>>,
+    sp: Option<uint<16>>,
+    micro: MicroWriteSet,
+) -> CpuDelta {
+    CpuDelta(regs, pc, sp, Option::None, Option::None, micro)
+}
+
+fn phase_only_delta(phase: Phase) -> CpuDelta {
+    delta_with_micro(idle_reg_write_set(), Option::None, Option::None, micro_with_phase(phase))
+}
+
+fn fetch_only_delta() -> CpuDelta {
+    phase_only_delta(Phase::Fetch)
+}
+
 fn select_u8(write: Option<uint<8>>, current: uint<8>) -> uint<8> {
     match write {
         Option::Some(value) => value,
@@ -154,14 +187,7 @@ fn service_entry_output(state: CpuState, input: MicroInput, irq: IrqSel) -> Micr
         Option::None,
         Option::Some(ImeState::Disabled),
         Option::Some(HaltState::Running),
-        MicroWriteSet(
-            some_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::Delay1)),
-            Option::None,
-            Option::None,
-            Option::None,
-            Option::None,
-            Option::None,
-        ),
+        micro_with_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::Delay1)),
     );
     let bus_req = idle_bus_req();
     let irq_ack = irq_ack_for_sel(irq);
@@ -320,14 +346,7 @@ fn execute_alu_delta(state: CpuState, kind: AluKind, dst: Operand8, src: Operand
         Phase::Fetch
     };
 
-    CpuDelta(
-        reg_writes,
-        Option::None,
-        Option::None,
-        Option::None,
-        Option::None,
-        MicroWriteSet(some_phase(next_phase), Option::None, Option::None, Option::None, Option::None, some_u16(result.val16)),
-    )
+    delta_with_micro(reg_writes, Option::None, Option::None, micro_with_phase_and_temp(next_phase, result.val16))
 }
 
 fn halt_enter_delta(state: CpuState, irq_pending: IrqPending) -> CpuDelta {
@@ -340,7 +359,7 @@ fn halt_enter_delta(state: CpuState, irq_pending: IrqPending) -> CpuDelta {
                     Option::None,
                     Option::None,
                     Option::Some(HaltState::HaltBugPending),
-                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
+                    fetch_micro_write(),
                 )
             } else {
                 CpuDelta(
@@ -349,7 +368,7 @@ fn halt_enter_delta(state: CpuState, irq_pending: IrqPending) -> CpuDelta {
                     Option::None,
                     Option::None,
                     Option::Some(HaltState::Halted),
-                    MicroWriteSet(some_phase(Phase::Halted), Option::None, Option::None, Option::None, Option::None, Option::None),
+                    micro_with_phase(Phase::Halted),
                 )
             }
         },
@@ -360,7 +379,7 @@ fn halt_enter_delta(state: CpuState, irq_pending: IrqPending) -> CpuDelta {
                 Option::None,
                 Option::None,
                 Option::Some(HaltState::Halted),
-                MicroWriteSet(some_phase(Phase::Halted), Option::None, Option::None, Option::None, Option::None, Option::None),
+                micro_with_phase(Phase::Halted),
             )
         },
     }
@@ -384,14 +403,7 @@ fn execute_misc_delta(state: CpuState, irq_pending: IrqPending, kind: MiscKind) 
     };
     match kind {
         MiscKind::Halt => halt_enter_delta(state, irq_pending),
-        _ => CpuDelta(
-            reg_writes,
-            Option::None,
-            Option::None,
-            Option::None,
-            Option::None,
-            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, some_u16(result.val16)),
-        ),
+        _ => delta_with_micro(reg_writes, Option::None, Option::None, micro_with_phase_and_temp(Phase::Fetch, result.val16)),
     }
 }
 
@@ -466,14 +478,7 @@ fn execute_bitop_delta(
         Phase::Fetch
     };
 
-    CpuDelta(
-        reg_writes,
-        Option::None,
-        Option::None,
-        Option::None,
-        Option::None,
-        MicroWriteSet(some_phase(next_phase), Option::None, Option::None, Option::None, Option::None, some_u16(result.val16)),
-    )
+    delta_with_micro(reg_writes, Option::None, Option::None, micro_with_phase_and_temp(next_phase, result.val16))
 }
 
 fn execute_word_alu_delta(
@@ -522,21 +527,17 @@ fn execute_word_alu_delta(
                 Operand16::RegisterPair$(pair) => {
                     let next_value = trunc(get_r16(state.arch.regs, pair) + 1u16);
                     match pair {
-                        RegPair::SP => CpuDelta(
+                        RegPair::SP => delta_with_micro(
                             idle_reg_write_set(),
                             Option::None,
                             some_u16(next_value),
-                            Option::None,
-                            Option::None,
-                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, some_u16(next_value)),
+                            micro_with_phase_imm_hi_temp(Phase::Fetch, 0u8, next_value),
                         ),
-                        _ => CpuDelta(
+                        _ => delta_with_micro(
                             reg_writes_for_pair(pair, next_value),
                             Option::None,
                             Option::None,
-                            Option::None,
-                            Option::None,
-                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, some_u16(next_value)),
+                            micro_with_phase_imm_hi_temp(Phase::Fetch, 0u8, next_value),
                         ),
                     }
                 },
@@ -549,21 +550,17 @@ fn execute_word_alu_delta(
                 Operand16::RegisterPair$(pair) => {
                     let next_value = trunc(get_r16(state.arch.regs, pair) - 1u16);
                     match pair {
-                        RegPair::SP => CpuDelta(
+                        RegPair::SP => delta_with_micro(
                             idle_reg_write_set(),
                             Option::None,
                             some_u16(next_value),
-                            Option::None,
-                            Option::None,
-                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, some_u16(next_value)),
+                            micro_with_phase_imm_hi_temp(Phase::Fetch, 0u8, next_value),
                         ),
-                        _ => CpuDelta(
+                        _ => delta_with_micro(
                             reg_writes_for_pair(pair, next_value),
                             Option::None,
                             Option::None,
-                            Option::None,
-                            Option::None,
-                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, some_u16(next_value)),
+                            micro_with_phase_imm_hi_temp(Phase::Fetch, 0u8, next_value),
                         ),
                     }
                 },
@@ -576,22 +573,18 @@ fn execute_word_alu_delta(
                 0u8 => {
                     let alu_result = alu(AluReq::AddSpE8$(sp: state.arch.regs.sp, off: state.micro.imm_lo));
 
-                    CpuDelta(
+                    delta_with_micro(
                         reg_writes_for_flags(alu_result.flags),
                         Option::None,
                         Option::None,
-                        Option::None,
-                        Option::None,
-                        MicroWriteSet(some_phase(Phase::Execute$(op: state.micro.decoded)), Option::None, Option::None, some_u8(1u8), Option::None, some_u16(alu_result.val16)),
+                        micro_with_phase_imm_hi_temp(Phase::Execute$(op: state.micro.decoded), 1u8, alu_result.val16),
                     )
                 },
-                _ => CpuDelta(
+                _ => delta_with_micro(
                     idle_reg_write_set(),
                     Option::None,
                     some_u16(state.micro.temp),
-                    Option::None,
-                    Option::None,
-                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, some_u16(state.micro.temp)),
+                    micro_with_phase_imm_hi_temp(Phase::Fetch, 0u8, state.micro.temp),
                 ),
             }
         },
@@ -601,13 +594,11 @@ fn execute_word_alu_delta(
             let pair_writes = reg_writes_for_pair(RegPair::HL, alu_result.val16);
             let flag_writes = reg_writes_for_flags(alu_result.flags);
 
-            CpuDelta(
+            delta_with_micro(
                 merge_reg_writes(pair_writes, flag_writes),
                 Option::None,
                 Option::None,
-                Option::None,
-                Option::None,
-                MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, some_u8(0u8), Option::None, some_u16(alu_result.val16)),
+                micro_with_phase_imm_hi_temp(Phase::Fetch, 0u8, alu_result.val16),
             )
         },
     }
@@ -1276,7 +1267,7 @@ fn handle_halted(state: CpuState, input: MicroInput) -> MicroOutput {
                     Option::None,
                     Option::None,
                     Option::Some(HaltState::Running),
-                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
+                    fetch_micro_write(),
                 );
                 let bus_req = idle_bus_req();
                 let commit = make_commit(state, input, bus_req, delta, Option::None);
@@ -1862,52 +1853,27 @@ fn handle_service_interrupt(state: CpuState, input: MicroInput, irq: IrqSel, sub
         _ => idle_bus_req(),
     };
     let delta = match subphase {
-        IrqPhase::Delay1 => CpuDelta(
-            idle_reg_write_set(),
-            Option::None,
-            Option::None,
-            Option::None,
-            Option::None,
-            MicroWriteSet(some_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::Delay2)), Option::None, Option::None, Option::None, Option::None, Option::None),
-        ),
-        IrqPhase::Delay2 => CpuDelta(
-            idle_reg_write_set(),
-            Option::None,
-            Option::None,
-            Option::None,
-            Option::None,
-            MicroWriteSet(some_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::PushPcHi)), Option::None, Option::None, Option::None, Option::None, Option::None),
-        ),
+        IrqPhase::Delay1 => phase_only_delta(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::Delay2)),
+        IrqPhase::Delay2 => phase_only_delta(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::PushPcHi)),
         IrqPhase::PushPcHi => {
             let target = trunc(state.arch.regs.sp - 1u16);
-            CpuDelta(
+            delta_with_micro(
                 idle_reg_write_set(),
                 Option::None,
                 some_u16(target),
-                Option::None,
-                Option::None,
-                MicroWriteSet(some_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::PushPcLo)), Option::None, Option::None, Option::None, Option::None, Option::None),
+                micro_with_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::PushPcLo)),
             )
         },
         IrqPhase::PushPcLo => {
             let target = trunc(state.arch.regs.sp - 1u16);
-            CpuDelta(
+            delta_with_micro(
                 idle_reg_write_set(),
                 Option::None,
                 some_u16(target),
-                Option::None,
-                Option::None,
-                MicroWriteSet(some_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::Jump)), Option::None, Option::None, Option::None, Option::None, Option::None),
+                micro_with_phase(Phase::ServiceInterrupt$(irq: irq, subphase: IrqPhase::Jump)),
             )
         },
-        IrqPhase::Jump => CpuDelta(
-            idle_reg_write_set(),
-            some_u16(irq_vector(irq)),
-            Option::None,
-            Option::None,
-            Option::None,
-            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-        ),
+        IrqPhase::Jump => delta_with_micro(idle_reg_write_set(), some_u16(irq_vector(irq)), Option::None, fetch_micro_write()),
     };
     let commit = make_commit(state, input, bus_req, delta, Option::None);
 
@@ -1934,102 +1900,37 @@ fn handle_execute(state: CpuState, input: MicroInput, op: DecodedOp) -> MicroOut
                                                                     match src16_value {
                                                                         Operand16::RegisterPair$(pair) => {
                                                                             match pair {
-                                                                                RegPair::HL => CpuDelta(
+                                                                                RegPair::HL => delta_with_micro(
                                                                                     idle_reg_write_set(),
                                                                                     Option::None,
                                                                                     some_u16(get_r16(state.arch.regs, RegPair::HL)),
-                                                                                    Option::None,
-                                                                                    Option::None,
-                                                                                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
+                                                                                    fetch_micro_write(),
                                                                                 ),
-                                                                                _ => CpuDelta(
-                                                                                    idle_reg_write_set(),
-                                                                                    Option::None,
-                                                                                    Option::None,
-                                                                                    Option::None,
-                                                                                    Option::None,
-                                                                                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-                                                                                ),
+                                                                                _ => fetch_only_delta(),
                                                                             }
                                                                         },
-                                                                        _ => CpuDelta(
-                                                                            idle_reg_write_set(),
-                                                                            Option::None,
-                                                                            Option::None,
-                                                                            Option::None,
-                                                                            Option::None,
-                                                                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-                                                                        ),
+                                                                        _ => fetch_only_delta(),
                                                                     }
                                                                 },
-                                                                _ => CpuDelta(
-                                                                    idle_reg_write_set(),
-                                                                    Option::None,
-                                                                    Option::None,
-                                                                    Option::None,
-                                                                    Option::None,
-                                                                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-                                                                ),
+                                                                _ => fetch_only_delta(),
                                                             }
                                                         },
-                                                        _ => CpuDelta(
-                                                            idle_reg_write_set(),
-                                                            Option::None,
-                                                            Option::None,
-                                                            Option::None,
-                                                            Option::None,
-                                                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-                                                        ),
+                                                        _ => fetch_only_delta(),
                                                     }
                                                 },
-                                                Option::None => CpuDelta(
-                                                    idle_reg_write_set(),
-                                                    Option::None,
-                                                    Option::None,
-                                                    Option::None,
-                                                    Option::None,
-                                                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-                                                ),
+                                                Option::None => fetch_only_delta(),
                                             }
                                         },
-                                        Option::None => CpuDelta(
-                                            idle_reg_write_set(),
-                                            Option::None,
-                                            Option::None,
-                                            Option::None,
-                                            Option::None,
-                                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-                                        ),
+                                        Option::None => fetch_only_delta(),
                                     }
                                 },
-                                _ => CpuDelta(
-                                    idle_reg_write_set(),
-                                    Option::None,
-                                    Option::None,
-                                    Option::None,
-                                    Option::None,
-                                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-                                ),
+                                _ => fetch_only_delta(),
                             }
                         },
-                        _ => CpuDelta(
-                            idle_reg_write_set(),
-                            Option::None,
-                            Option::None,
-                            Option::None,
-                            Option::None,
-                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-                        ),
+                        _ => fetch_only_delta(),
                     }
                 },
-                _ => CpuDelta(
-                    idle_reg_write_set(),
-                    Option::None,
-                    Option::None,
-                    Option::None,
-                    Option::None,
-                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-                ),
+                _ => fetch_only_delta(),
             }
         },
         DecodedOp::WordAlu$(kind, dst, src, addressing) => {
@@ -2048,34 +1949,13 @@ fn handle_execute(state: CpuState, input: MicroInput, op: DecodedOp) -> MicroOut
                 Option::None => {
                     match bit_index {
                         Option::None => execute_bitop_delta(state, kind, target, bit_index, zero_on_result),
-                        _ => CpuDelta(
-                            idle_reg_write_set(),
-                            Option::None,
-                            Option::None,
-                            Option::None,
-                            Option::None,
-                            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-                        ),
+                        _ => fetch_only_delta(),
                     }
                 },
-                _ => CpuDelta(
-                    idle_reg_write_set(),
-                    Option::None,
-                    Option::None,
-                    Option::None,
-                    Option::None,
-                    MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-                ),
+                _ => fetch_only_delta(),
             }
         },
-        _ => CpuDelta(
-            idle_reg_write_set(),
-            Option::None,
-            Option::None,
-            Option::None,
-            Option::None,
-            MicroWriteSet(some_phase(Phase::Fetch), Option::None, Option::None, Option::None, Option::None, Option::None),
-        ),
+        _ => fetch_only_delta(),
     };
     let bus_req = idle_bus_req();
     let commit = make_commit(state, input, bus_req, delta, Option::None);
