@@ -13,6 +13,8 @@ ACTIVE_PID=""
 RUN_FORMAL="${ICEBOY_PRECOMMIT_INCLUDE_FORMAL:-0}"
 RUN_EXTENDED="${ICEBOY_PRECOMMIT_EXTENDED:-0}"
 RUN_SYNTH="${ICEBOY_PRECOMMIT_INCLUDE_SYNTH:-0}"
+LOCK_DIR="$(pwd)/build/precommit.lock"
+LOCK_PID_FILE="${LOCK_DIR}/pid"
 
 SKIP_PYTHON_MODULES=(
     "tools.tests.test_spade_cocotb_pipeline"
@@ -26,33 +28,16 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/unit/test_alu.py"
     "test/unit/test_decode.py"
     "test/unit/test_decode_cb.py"
-    "test/unit/test_event_bridge.py"
-    "test/unit/test_frame_sink.py"
     "test/unit/test_memory_map.py"
     "test/ppu/unit/test_access_policy.py"
     "test/ppu/unit/test_bg_fetcher.py"
     "test/ppu/unit/test_bg_fifo.py"
     "test/ppu/unit/test_mixer.py"
     "test/ppu/unit/test_window.py"
-    "test/unit/test_video_backend_adapter.py"
-    "test/ppu/unit/test_ppu_modes.py"
-    "test/ppu/unit/test_stat_irq.py"
-    "test/ppu/unit/test_ppu_invariants.py"
     "test/ppu/unit/test_tile.py"
-    "test/unit/test_serial.py"
     "test/unit/test_interrupt_service.py"
     "test/unit/test_timer.py"
-    "test/lockstep/test_ei_halt_corners.py"
-    "test/harness/test_arch_time_invariants.py"
-    "test/harness/test_soc_lockstep_top.py"
-    "test/harness/test_soc_rom_top.py"
     "test/rom/test_loads_basic.py"
-    "test/rom/test_mbc1_ram.py"
-    "test/rom/test_mbc1_switch.py"
-    "test/rom/test_mbc3_ram.py"
-    "test/rom/test_mbc3_switch.py"
-    "test/rom/test_ppu_wave_a.py"
-    "test/rom/test_timer_irq_halt.py"
 )
 
 PRECOMMIT_SWIM_TESTS_EXTENDED=(
@@ -62,9 +47,14 @@ PRECOMMIT_SWIM_TESTS_EXTENDED=(
     "test/unit/test_halt_bug.py"
     "test/unit/test_membus.py"
     "test/unit/test_oam_dma.py"
+    "test/unit/test_event_bridge.py"
+    "test/unit/test_frame_sink.py"
     "test/unit/test_interrupts_basic.py"
+    "test/unit/test_serial.py"
     "test/unit/test_timebase.py"
+    "test/unit/test_video_backend_adapter.py"
     "test/lockstep/test_cpu_lockstep.py"
+    "test/lockstep/test_ei_halt_corners.py"
     "test/lockstep/test_interrupt_injection.py"
     "test/power/test_duty_cycle_metrics.py"
     "test/power/test_halt_quiescence.py"
@@ -72,9 +62,21 @@ PRECOMMIT_SWIM_TESTS_EXTENDED=(
     "test/rom/test_ei_delay.py"
     "test/rom/test_alu16_sp.py"
     "test/rom/test_joy_diverge_persist.py"
+    "test/rom/test_mbc1_switch.py"
+    "test/rom/test_mbc1_ram.py"
+    "test/rom/test_mbc3_ram.py"
+    "test/rom/test_mbc3_switch.py"
+    "test/ppu/unit/test_ppu_modes.py"
+    "test/ppu/unit/test_stat_irq.py"
+    "test/ppu/unit/test_ppu_invariants.py"
+    "test/harness/test_arch_time_invariants.py"
+    "test/harness/test_soc_lockstep_top.py"
+    "test/harness/test_soc_rom_top.py"
+    "test/rom/test_ppu_wave_a.py"
     "tools/run_ppu_wave_a_mooneye_verilator.sh"
     "test/rom/test_ppu_wave_b.py"
     "test/rom/test_timer_div_basic.py"
+    "test/rom/test_timer_irq_halt.py"
 )
 
 if [[ ! -x "$SWIM" ]]; then
@@ -136,14 +138,61 @@ cleanup_active_process() {
     ACTIVE_PID=""
 }
 
-trap cleanup_active_process EXIT INT TERM
+release_precommit_lock() {
+    if [[ -f "$LOCK_PID_FILE" ]] && [[ "$(cat "$LOCK_PID_FILE" 2>/dev/null || true)" == "$$" ]]; then
+        rm -rf "$LOCK_DIR"
+    fi
+}
+
+acquire_precommit_lock() {
+    local holder_pid=""
+
+    mkdir -p "$(dirname "$LOCK_DIR")"
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+        printf '%s\n' "$$" >"$LOCK_PID_FILE"
+        return 0
+    fi
+
+    if [[ -f "$LOCK_PID_FILE" ]]; then
+        holder_pid="$(cat "$LOCK_PID_FILE" 2>/dev/null || true)"
+    fi
+
+    if [[ -n "$holder_pid" ]] && kill -0 "$holder_pid" 2>/dev/null; then
+        echo -e "${RED}Another pre-commit hook is already running (pid ${holder_pid}). Refusing to start a duplicate run.${NC}" >&2
+        echo -e "${YELLOW}Wait for the existing hook to finish or stop it before retrying the commit.${NC}" >&2
+        exit 1
+    fi
+
+    rm -rf "$LOCK_DIR"
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+        printf '%s\n' "$$" >"$LOCK_PID_FILE"
+        return 0
+    fi
+
+    echo -e "${RED}Failed to acquire pre-commit lock at ${LOCK_DIR}.${NC}" >&2
+    exit 1
+}
+
+trap 'cleanup_active_process; release_precommit_lock' EXIT INT TERM
+
+acquire_precommit_lock
 
 run_checked() {
     local output_file output rc
+    local -a clean_env_cmd
+    local git_env_var
 
     output_file="$(mktemp)"
+    clean_env_cmd=(env)
+    if command -v git >/dev/null 2>&1; then
+        while IFS= read -r git_env_var; do
+            [[ -n "$git_env_var" ]] || continue
+            clean_env_cmd+=("-u" "$git_env_var")
+        done < <(git rev-parse --local-env-vars 2>/dev/null || true)
+    fi
+
     set +e
-    "$@" >"$output_file" 2>&1 &
+    "${clean_env_cmd[@]}" "$@" >"$output_file" 2>&1 &
     ACTIVE_PID=$!
     wait "$ACTIVE_PID"
     rc=$?

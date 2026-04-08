@@ -241,6 +241,9 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('ICEBOY_PRECOMMIT_INCLUDE_FORMAL', text)
         self.assertIn('ICEBOY_PRECOMMIT_EXTENDED', text)
         self.assertIn('Running fast Python spec tests...', text)
+        self.assertIn('build/precommit.lock', text)
+        self.assertIn('Another pre-commit hook is already running', text)
+        self.assertIn('git rev-parse --local-env-vars', text)
 
     def test_formal_tier_registers_ppu_control_jobs(self) -> None:
         text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
