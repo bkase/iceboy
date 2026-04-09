@@ -47,7 +47,13 @@ use lib::ppu::sem::types::{
     zero_obj_flags,
     zero_selected_obj_ticket,
 };
-use lib::ppu::rtl::fetcher::{advance_bg_fetcher, initial_bg_fetcher_state, next_fetcher_epoch, start_bg_fetcher};
+use lib::ppu::rtl::fetcher::{
+    advance_bg_fetcher,
+    capture_bg_fetcher_resume_state,
+    initial_bg_fetcher_state,
+    next_fetcher_epoch,
+    start_bg_fetcher,
+};
 use lib::ppu::rtl::fifo::{advance_bg_pipe, bg_fifo_has_room_for_row, clear_bg_fifo, note_window_tile_push};
 use lib::ppu::rtl::irq::irq_req;
 use lib::ppu::rtl::obj_fetch::{
@@ -483,7 +489,7 @@ fn obj_fetch_with_req(render: PpuRenderState, step: FetcherStep, req: PpuMemReq)
     )
 }
 
-fn start_live_obj_fetch(render: PpuRenderState) -> PpuRenderState {
+fn start_live_obj_fetch(render: PpuRenderState, mem_resp: PpuMemResp) -> PpuRenderState {
     let fetcher = render.fetcher;
     PpuRenderState$(
         dot_in_line: render.dot_in_line,
@@ -495,7 +501,7 @@ fn start_live_obj_fetch(render: PpuRenderState) -> PpuRenderState {
         line_obj_fetch_index: render.line_obj_fetch_index,
         obj_fetch_ticket: line_obj_ticket_at(render.line_objs, render.line_obj_fetch_index),
         obj_fetch_flags: zero_obj_flags(),
-        bg_fetcher_resume: render.fetcher,
+        bg_fetcher_resume: capture_bg_fetcher_resume_state(render.fetcher, mem_resp_valid(mem_resp), mem_resp),
         fetcher: lib::ppu::sem::types::FetcherState$(
             epoch: next_fetcher_epoch(fetcher.epoch),
             source: FetcherSource::Object,
@@ -775,7 +781,7 @@ fn apply_live_transfer(
         let render_inputs = sample_render_inputs(candidate_state.visible, candidate_state.sampled, candidate_state.status.phase);
         let obj_render =
             if next_is_transfer && should_start_live_obj_fetch(state.render, candidate_state.visible.regs, base_x_out) {
-                start_live_obj_fetch(state.render)
+                start_live_obj_fetch(state.render, mem_resp)
             } else {
                 state.render
             };

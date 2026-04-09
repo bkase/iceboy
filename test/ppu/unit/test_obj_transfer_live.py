@@ -260,6 +260,36 @@ async def test_overlapping_objects_start_second_fetch_before_obj_fifo_drains(dut
 
 
 @cocotb.test()
+async def test_overlapping_second_object_tail_pixels_reach_scanout(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=2,
+        ticket0_x=9,
+        ticket1_x=11,
+        start_x_out=1,
+        start_dot_in_line=80,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+    )
+
+    snapshots = await run_steps(dut, 64)
+    object_pixels = [
+        s for s in snapshots
+        if s["scanout_valid"]
+        and s["scanout_kind"] == SCANOUT_PIXEL
+        and s["scanout_source"] == PIXEL_SOURCE_OBJECT
+    ]
+
+    assert len(object_pixels) >= 10, snapshots
+    first_ten = object_pixels[:10]
+    xs = [int(s["scanout_x"]) for s in first_ten]
+    shades = [int(s["scanout_shade"]) for s in first_ten]
+
+    assert xs == list(range(1, 11)), first_ten
+    assert shades == [3, 3, 3, 3, 3, 3, 3, 3, 1, 1], (xs, shades, first_ten)
+
+
+@cocotb.test()
 async def test_object_fetch_cancels_cleanly_when_transfer_ends(dut):
     await reset_dut(dut, line_obj_count=1, ticket0_x=159, start_x_out=151, start_dot_in_line=252)
 

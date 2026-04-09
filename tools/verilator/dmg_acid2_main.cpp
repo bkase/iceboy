@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -8,6 +9,7 @@
 #include <vector>
 
 #include "Vsoc_rom_top_verilator_wrapper.h"
+#include "Vsoc_rom_top_verilator_wrapper___024root.h"
 #include "verilated.h"
 
 namespace {
@@ -108,6 +110,39 @@ struct Config {
     uint64_t stable_frames = 2;
     uint64_t completed_frames = 0;
 };
+
+bool dump_mem_debug_enabled() {
+    const char* value = std::getenv("ICEBOY_DUMP_PPU_MEM_DEBUG");
+    return value != nullptr && std::string(value) != "0" && std::string(value) != "";
+}
+
+void dump_mem_debug(Vsoc_rom_top_verilator_wrapper& top) {
+    auto* root = top.rootp;
+    const auto& vram = root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__vram_mem;
+    const auto& oam = root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__oam_mem;
+    std::cout << "ppu-mem-debug"
+              << " vram[0x0010]=0x" << std::hex << static_cast<int>(vram[0x0010])
+              << " vram[0x0011]=0x" << static_cast<int>(vram[0x0011])
+              << " vram[0x0020]=0x" << static_cast<int>(vram[0x0020])
+              << " vram[0x0021]=0x" << static_cast<int>(vram[0x0021])
+              << " vram[0x0030]=0x" << static_cast<int>(vram[0x0030])
+              << " vram[0x0031]=0x" << static_cast<int>(vram[0x0031])
+              << " vram[0x0040]=0x" << static_cast<int>(vram[0x0040])
+              << " vram[0x0041]=0x" << static_cast<int>(vram[0x0041])
+              << " vram[0x004e]=0x" << static_cast<int>(vram[0x004e])
+              << " vram[0x004f]=0x" << static_cast<int>(vram[0x004f])
+              << " vram[0x1800]=0x" << static_cast<int>(vram[0x1800])
+              << " oam[0]=0x" << static_cast<int>(oam[0x00])
+              << " oam[1]=0x" << static_cast<int>(oam[0x01])
+              << " oam[2]=0x" << static_cast<int>(oam[0x02])
+              << " oam[3]=0x" << static_cast<int>(oam[0x03])
+              << " oam[4]=0x" << static_cast<int>(oam[0x04])
+              << " oam[5]=0x" << static_cast<int>(oam[0x05])
+              << " oam[6]=0x" << static_cast<int>(oam[0x06])
+              << " oam[7]=0x" << static_cast<int>(oam[0x07])
+              << std::dec
+              << "\n";
+}
 
 struct StepResult {
     Observation post;
@@ -761,18 +796,17 @@ StepResult step_to_commit(Vsoc_rom_top_verilator_wrapper& top, BusModel& memory)
 
     if (skip_to_prefinal > 0) {
         set_idle_inputs(top, bus_read_data, memory.if_reg(), memory.ie_reg());
-        clock_cycle(top);
-        mid_observation = observe(top);
-        have_mid = true;
-        result.scanout_observations.push_back(mid_observation);
-        if (skip_to_prefinal > 1) {
-            for (int index = 0; index < skip_to_prefinal - 1; ++index) {
-                clock_cycle(top);
+        for (int index = 0; index < skip_to_prefinal; ++index) {
+            clock_cycle(top);
+            const Observation subcycle_observation = observe(top);
+            result.scanout_observations.push_back(subcycle_observation);
+            if (index == 0) {
+                mid_observation = subcycle_observation;
+                have_mid = true;
             }
-            prefinal_observation = observe(top);
-            result.scanout_observations.push_back(prefinal_observation);
-        } else {
-            prefinal_observation = mid_observation;
+            if (index == skip_to_prefinal - 1) {
+                prefinal_observation = subcycle_observation;
+            }
         }
         bus_read_data = pending_inputs(prefinal_observation, have_mid ? &mid_observation : nullptr);
     }
@@ -807,7 +841,11 @@ void write_trace_line(std::ofstream& trace, uint64_t cycle, const Observation& o
           << "\"ppu_ly\":" << static_cast<int>(observation.ppu_ly) << ","
           << "\"ppu_stat\":" << static_cast<int>(observation.ppu_stat) << ","
           << "\"scanout_kind\":" << static_cast<int>(observation.ppu_scanout_kind) << ","
-          << "\"scanout_valid\":" << (observation.ppu_scanout_valid ? "true" : "false")
+          << "\"scanout_valid\":" << (observation.ppu_scanout_valid ? "true" : "false") << ","
+          << "\"scanout_x\":" << static_cast<int>(observation.ppu_scanout_x) << ","
+          << "\"scanout_y\":" << static_cast<int>(observation.ppu_scanout_y) << ","
+          << "\"scanout_source\":" << static_cast<int>(observation.ppu_scanout_source) << ","
+          << "\"scanout_shade\":" << static_cast<int>(observation.ppu_scanout_shade)
           << "}\n";
 }
 
@@ -905,6 +943,9 @@ int main(int argc, char** argv) {
                                   << " wx=0x" << static_cast<int>(regs[10])
                                   << std::dec
                                   << "\n";
+                        if (dump_mem_debug_enabled()) {
+                            dump_mem_debug(top);
+                        }
                         return 0;
                     }
                     if (have_last_completed_frame && current_frame == last_completed_frame) {
@@ -923,6 +964,9 @@ int main(int argc, char** argv) {
                                   << " stable_frames=" << stable_completed_frames
                                   << " last_pc=0x" << std::hex << step.post.pc << std::dec
                                   << "\n";
+                        if (dump_mem_debug_enabled()) {
+                            dump_mem_debug(top);
+                        }
                         return 0;
                     }
                 }
@@ -949,5 +993,8 @@ int main(int argc, char** argv) {
     std::cerr << "dmg-acid2 did not reach target frame capture within " << cfg.max_mcycles
               << " M-cycles"
               << " last_pc=0x" << std::hex << last_post.pc << std::dec << "\n";
+    if (dump_mem_debug_enabled()) {
+        dump_mem_debug(top);
+    }
     return 1;
 }

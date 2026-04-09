@@ -247,6 +247,21 @@ fn state_after_resp(state: FetcherState, step: FetcherStep, data: uint<8>) -> Fe
     }
 }
 
+pub fn capture_bg_fetcher_resume_state(state: FetcherState, resp_valid: bool, resp: PpuMemResp) -> FetcherState {
+    if stale_resp(state, resp_valid, resp) {
+        state
+    } else if state.pending_valid && matching_resp(state, resp_valid, resp) {
+        let (ok, data) = ok_resp_data(resp);
+        if ok {
+            state_after_resp(state, state.step, data)
+        } else {
+            clear_pending(state)
+        }
+    } else {
+        state
+    }
+}
+
 fn advance_no_resp(state: FetcherState, render: PpuRenderInputs, fifo_has_room: bool) -> BgFetcherOutput {
     match state.step {
         FetcherStep::GetTile => issue_read(state, tilemap_addr(render, state.source, state.map_x, state.map_y), FetcherStep::GetTile),

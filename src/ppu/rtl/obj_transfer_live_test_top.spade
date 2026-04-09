@@ -54,8 +54,8 @@ fn seeded_regs() -> PpuRegs {
         wy: 0u8,
         wx: 0u8,
         bgp: 0xfcu8,
-        obp0: 0xffu8,
-        obp1: 0xffu8,
+        obp0: 0xe4u8,
+        obp1: 0xe4u8,
     )
 }
 
@@ -160,15 +160,19 @@ fn response_data(req: PpuMemReq) -> uint<8> {
 fn response_data_configured(req: PpuMemReq, tile_lo_i: uint<8>, tile_hi_i: uint<8>) -> uint<8> {
     match req.tag.region {
         MemRegion::Oam =>
-            match req.tag.id {
-                0u4 => 0x24u8,
-                1u4 => 0x00u8,
+            match req.addr {
+                0xfe02u16 => 0x01u8,
+                0xfe03u16 => 0x00u8,
+                0xfe06u16 => 0x02u8,
+                0xfe07u16 => 0x00u8,
                 _ => 0u8,
             },
         MemRegion::Vram =>
-            match req.tag.id {
-                2u4 => tile_lo_i,
-                3u4 => tile_hi_i,
+            match req.addr {
+                0x8010u16 => tile_lo_i,
+                0x8011u16 => tile_hi_i,
+                0x8020u16 => 0x03u8,
+                0x8021u16 => 0x00u8,
                 _ => 0u8,
             },
     }
