@@ -700,26 +700,15 @@ fn condition_gated_phase(state: CpuState, op: DecodedOp) -> Phase {
 
 fn fetch_imm_hi_seed(decoded: DecodedOp, phase_write: Option<Phase>) -> Option<uint<8>> {
     match phase_write {
-        Option::Some(value) => {
-            match value {
-                Phase::Execute$(op) => {
-                    let _ = op;
-                    match decoded {
-                        DecodedOp::ControlFlow$(condition, target, addressing) => {
-                            let _ = addressing;
-                            match target {
-                                ControlTarget::Return$(enable_interrupts) => {
-                                    let _ = enable_interrupts;
-                                    match condition {
-                                        Option::Some(value) => {
-                                            let _ = value;
-                                            some_u8(1u8)
-                                        },
-                                        Option::None => Option::None,
-                                    }
-                                },
-                                _ => Option::None,
-                            }
+        Option::Some(Phase::Execute$(op)) => {
+            let _ = op;
+            match decoded {
+                DecodedOp::ControlFlow$(condition, target, addressing) => {
+                    let _ = addressing;
+                    match (condition, target) {
+                        (Option::Some(condition_code), ControlTarget::Return$(enable_interrupts)) => {
+                            let _ = (condition_code, enable_interrupts);
+                            some_u8(1u8)
                         },
                         _ => Option::None,
                     }
@@ -727,7 +716,7 @@ fn fetch_imm_hi_seed(decoded: DecodedOp, phase_write: Option<Phase>) -> Option<u
                 _ => Option::None,
             }
         },
-        Option::None => Option::None,
+        _ => Option::None,
     }
 }
 
@@ -961,31 +950,13 @@ fn direct_load_reg_writes(op: DecodedOp, regs: Registers) -> RegWriteSet {
         DecodedOp::Load$(dst8, src8, dst16, src16, addressing) => {
             let _ = (dst16, src16);
             match addressing {
-                AddressingMode::Register8 => {
-                    match dst8 {
-                        Option::Some(dst8_value) => {
-                            match src8 {
-                                Option::Some(src8_value) => {
-                                    match dst8_value {
-                                        Operand8::Register$(r8) => {
-                                            let dst = r8;
-                                            match src8_value {
-                                                Operand8::Register$(r8) => {
-                                                    let src = r8;
-                                                    reg_writes_for_r8(dst, get_r8(regs, src))
-                                                },
-                                                _ => idle_reg_write_set(),
-                                            }
-                                        },
-                                        _ => idle_reg_write_set(),
-                                    }
-                                },
-                                Option::None => idle_reg_write_set(),
-                            }
+                AddressingMode::Register8 =>
+                    match (dst8, src8) {
+                        (Option::Some(Operand8::Register$(r8: dst)), Option::Some(Operand8::Register$(r8: src))) => {
+                            reg_writes_for_r8(dst, get_r8(regs, src))
                         },
-                        Option::None => idle_reg_write_set(),
-                    }
-                },
+                        _ => idle_reg_write_set(),
+                    },
                 _ => idle_reg_write_set(),
             }
         },
@@ -1013,50 +984,36 @@ fn is_ld_sp_hl(op: DecodedOp) -> bool {
     match op {
         DecodedOp::Load$(dst8, src8, dst16, src16, addressing) => {
             match addressing {
-                AddressingMode::Register16 => {
-                    match dst8 {
-                        Option::None => {
-                            match src8 {
-                                Option::None => {
-                                    match dst16 {
-                                        Option::Some(dst16_value) => {
-                                            match src16 {
-                                                Option::Some(src16_value) => {
-                                                    match dst16_value {
-                                                        Operand16::RegisterPair$(pair) => {
-                                                            match pair {
-                                                                RegPair::SP => {
-                                                                    match src16_value {
-                                                                        Operand16::RegisterPair$(pair) => {
-                                                                            match pair {
-                                                                                RegPair::HL => true,
-                                                                                _ => false,
-                                                                            }
-                                                                        },
-                                                                        _ => false,
-                                                                    }
-                                                                },
-                                                                _ => false,
-                                                            }
-                                                        },
-                                                        _ => false,
-                                                    }
-                                                },
-                                                Option::None => false,
-                                            }
-                                        },
-                                        Option::None => false,
-                                    }
-                                },
+                AddressingMode::Register16 =>
+                    match (dst8, src8) {
+                        (Option::None, Option::None) =>
+                            match (dst16, src16) {
+                                (Option::Some(dst16_value), Option::Some(src16_value)) =>
+                                    match (dst16_value, src16_value) {
+                                        (Operand16::RegisterPair$(pair: dst_pair), Operand16::RegisterPair$(pair: src_pair)) =>
+                                            match (dst_pair, src_pair) {
+                                                (RegPair::SP, RegPair::HL) => true,
+                                                _ => false,
+                                            },
+                                        _ => false,
+                                    },
                                 _ => false,
-                            }
-                        },
+                            },
                         _ => false,
-                    }
-                },
+                    },
                 _ => false,
             }
         },
+        _ => false,
+    }
+}
+
+fn has_hli_hld_endpoint(dst8: Option<Operand8>, src8: Option<Operand8>) -> bool {
+    match (dst8, src8) {
+        (Option::Some(Operand8::AddrHli), _) => true,
+        (Option::Some(Operand8::AddrHld), _) => true,
+        (_, Option::Some(Operand8::AddrHli)) => true,
+        (_, Option::Some(Operand8::AddrHld)) => true,
         _ => false,
     }
 }
@@ -1639,21 +1596,13 @@ fn load_hl_adjust(op: DecodedOp, regs: Registers) -> RegWriteSet {
     match op {
         DecodedOp::Load$(dst8, src8, dst16, src16, addressing) => {
             let _ = (dst16, src16);
-            if operand_is_hli_hld(dst8) || operand_is_hli_hld(src8) {
+            if has_hli_hld_endpoint(dst8, src8) {
                 reg_writes_for_pair(RegPair::HL, hl_post_adjust(regs, addressing))
             } else {
                 idle_reg_write_set()
             }
         },
         _ => idle_reg_write_set(),
-    }
-}
-
-fn operand_is_hli_hld(op: Option<Operand8>) -> bool {
-    match op {
-        Option::Some(Operand8::AddrHli) => true,
-        Option::Some(Operand8::AddrHld) => true,
-        _ => false,
     }
 }
 
@@ -2011,54 +1960,16 @@ fn handle_service_interrupt(state: CpuState, input: MicroInput, irq: IrqSel, sub
 fn handle_execute(state: CpuState, input: MicroInput, op: DecodedOp) -> MicroOutput {
     let delta = match op {
         DecodedOp::Load$(dst8, src8, dst16, src16, addressing) => {
-            match addressing {
-                AddressingMode::Register16 => {
-                    match dst8 {
-                        Option::None => {
-                            match src8 {
-                                Option::None => {
-                                    match dst16 {
-                                        Option::Some(dst16_value) => {
-                                            match src16 {
-                                                Option::Some(src16_value) => {
-                                                    match dst16_value {
-                                                        Operand16::RegisterPair$(pair) => {
-                                                            match pair {
-                                                                RegPair::SP => {
-                                                                    match src16_value {
-                                                                        Operand16::RegisterPair$(pair) => {
-                                                                            match pair {
-                                                                                RegPair::HL => delta_with_micro(
-                                                                                    idle_reg_write_set(),
-                                                                                    Option::None,
-                                                                                    some_u16(get_r16(state.arch.regs, RegPair::HL)),
-                                                                                    fetch_micro_write(),
-                                                                                ),
-                                                                                _ => fetch_only_delta(),
-                                                                            }
-                                                                        },
-                                                                        _ => fetch_only_delta(),
-                                                                    }
-                                                                },
-                                                                _ => fetch_only_delta(),
-                                                            }
-                                                        },
-                                                        _ => fetch_only_delta(),
-                                                    }
-                                                },
-                                                Option::None => fetch_only_delta(),
-                                            }
-                                        },
-                                        Option::None => fetch_only_delta(),
-                                    }
-                                },
-                                _ => fetch_only_delta(),
-                            }
-                        },
-                        _ => fetch_only_delta(),
-                    }
-                },
-                _ => fetch_only_delta(),
+            let _ = (dst8, src8, dst16, src16, addressing);
+            if is_ld_sp_hl(op) {
+                delta_with_micro(
+                    idle_reg_write_set(),
+                    Option::None,
+                    some_u16(get_r16(state.arch.regs, RegPair::HL)),
+                    fetch_micro_write(),
+                )
+            } else {
+                fetch_only_delta()
             }
         },
         DecodedOp::WordAlu$(kind, dst, src, addressing) => {

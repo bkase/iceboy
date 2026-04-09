@@ -47,291 +47,159 @@ fn hl_incdec_load_store_phase(regs: Registers, dst8: Option<Operand8>, src8: Opt
     }
 }
 
+fn immediate8_load_phase(regs: Registers, dst8: Option<Operand8>, src8: Option<Operand8>) -> Phase {
+    let _ = regs;
+    match (dst8, src8) {
+        (Option::Some(Operand8::Register$(r8)), Option::Some(Operand8::Imm8)) => {
+            Phase::ReadImm8$(k: Imm8Cont::LoadReg8$(dst: r8))
+        },
+        (Option::Some(Operand8::Register$(r8)), Option::Some(Operand8::IoImm8)) => {
+            let _ = r8;
+            Phase::ReadImm8$(k: Imm8Cont::IoOffsetReadA)
+        },
+        (Option::Some(Operand8::AddrHl), Option::Some(Operand8::Imm8)) => {
+            Phase::ReadImm8$(k: Imm8Cont::StoreToHl)
+        },
+        (Option::Some(Operand8::IoImm8), Option::Some(Operand8::Register$(r8))) => {
+            let _ = r8;
+            Phase::ReadImm8$(k: Imm8Cont::IoOffsetWriteA)
+        },
+        _ => Phase::Fetch,
+    }
+}
+
+fn immediate16_load_phase(op: DecodedOp, dst16: Option<Operand16>, src16: Option<Operand16>) -> Phase {
+    match (dst16, src16) {
+        (Option::Some(dst16_value), Option::Some(src16_value)) => {
+            match (dst16_value, src16_value) {
+                (Operand16::RegisterPair$(pair: pair), Operand16::Imm16) => {
+                    Phase::ReadImm16Lo$(k: Imm16Cont::LoadRegPair$(pair: pair))
+                },
+                (Operand16::RegisterPair$(pair: dst_pair), Operand16::RegisterPair$(pair: src_pair)) => {
+                    let _ = (dst_pair, src_pair);
+                    Phase::Execute$(op: op)
+                },
+                _ => Phase::Fetch,
+            }
+        },
+        _ => Phase::Fetch,
+    }
+}
+
+fn register16_load_phase(op: DecodedOp, dst16: Option<Operand16>, src16: Option<Operand16>) -> Phase {
+    match (dst16, src16) {
+        (Option::Some(dst16_value), Option::Some(src16_value)) => {
+            match (dst16_value, src16_value) {
+                (Operand16::RegisterPair$(pair: dst_pair), Operand16::RegisterPair$(pair: src_pair)) => {
+                    let _ = (dst_pair, src_pair);
+                    Phase::Execute$(op: op)
+                },
+                _ => Phase::Fetch,
+            }
+        },
+        _ => Phase::Fetch,
+    }
+}
+
+fn memory_via_hl_phase(regs: Registers, dst8: Option<Operand8>, src8: Option<Operand8>) -> Phase {
+    match (dst8, src8) {
+        (Option::Some(Operand8::Register$(r8)), Option::Some(Operand8::AddrHl)) => {
+            Phase::ReadMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), k: ReadCont::LoadReg8$(dst: r8))
+        },
+        (Option::Some(Operand8::AddrHl), Option::Some(Operand8::Register$(r8))) => {
+            Phase::WriteMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), data: get_r8(regs, r8), k: WriteCont::StoreDone)
+        },
+        (Option::Some(Operand8::AddrHl), Option::Some(Operand8::Imm8)) => {
+            Phase::ReadImm8$(k: Imm8Cont::StoreToHl)
+        },
+        _ => Phase::Fetch,
+    }
+}
+
+fn memory_via_reg_pair_phase(regs: Registers, pair: lib::cpu::regs::RegPair, dst8: Option<Operand8>, src8: Option<Operand8>) -> Phase {
+    match (dst8, src8) {
+        (Option::Some(Operand8::Register$(r8)), Option::Some(src8_value)) => {
+            let _ = (r8, src8_value);
+            Phase::ReadMem$(addr: get_r16(regs, pair), k: ReadCont::LoadAFromAddr)
+        },
+        (Option::Some(dst8_value), Option::Some(Operand8::Register$(r8))) => {
+            let _ = dst8_value;
+            Phase::WriteMem$(addr: get_r16(regs, pair), data: get_r8(regs, r8), k: WriteCont::StoreDone)
+        },
+        _ => Phase::Fetch,
+    }
+}
+
+fn memory_imm16_phase(dst8: Option<Operand8>, src8: Option<Operand8>, dst16: Option<Operand16>, src16: Option<Operand16>) -> Phase {
+    match (dst8, src8) {
+        (Option::Some(Operand8::Register$(r8)), Option::Some(Operand8::AddrImm16)) => {
+            let _ = r8;
+            Phase::ReadImm16Lo$(k: Imm16Cont::ReadAddrToA)
+        },
+        (Option::Some(Operand8::AddrImm16), Option::Some(Operand8::Register$(r8))) => {
+            let _ = r8;
+            Phase::ReadImm16Lo$(k: Imm16Cont::WriteAToAddr)
+        },
+        (_, Option::None) =>
+            match (dst16, src16) {
+                (Option::Some(Operand16::AddrImm16), Option::Some(Operand16::RegisterPair$(pair))) => {
+                    let _ = pair;
+                    Phase::ReadImm16Lo$(k: Imm16Cont::StoreSpToAddr)
+                },
+                _ => Phase::Fetch,
+            },
+        _ => Phase::Fetch,
+    }
+}
+
+fn io_imm8_phase(dst8: Option<Operand8>, src8: Option<Operand8>) -> Phase {
+    match (dst8, src8) {
+        (Option::Some(Operand8::Register$(r8)), Option::Some(src8_value)) => {
+            let _ = (r8, src8_value);
+            Phase::ReadImm8$(k: Imm8Cont::IoOffsetReadA)
+        },
+        (Option::Some(dst8_value), Option::Some(Operand8::Register$(r8))) => {
+            let _ = (dst8_value, r8);
+            Phase::ReadImm8$(k: Imm8Cont::IoOffsetWriteA)
+        },
+        _ => Phase::Fetch,
+    }
+}
+
+fn io_c_phase(regs: Registers, dst8: Option<Operand8>, src8: Option<Operand8>) -> Phase {
+    let addr = 0xff00u16 | zext(get_r8(regs, lib::cpu::regs::R8::C));
+    match (dst8, src8) {
+        (Option::Some(Operand8::Register$(r8)), Option::Some(src8_value)) => {
+            let _ = (r8, src8_value);
+            Phase::ReadMem$(addr: addr, k: ReadCont::LoadAFromAddr)
+        },
+        (Option::Some(dst8_value), Option::Some(Operand8::Register$(r8))) => {
+            let _ = (dst8_value, r8);
+            Phase::WriteMem$(addr: addr, data: get_r8(regs, lib::cpu::regs::R8::A), k: WriteCont::StoreDone)
+        },
+        _ => Phase::Fetch,
+    }
+}
+
 pub fn loadish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase {
     match op {
         DecodedOp::Load$(dst8, src8, dst16, src16, addressing) => {
             match addressing {
                 AddressingMode::Register8 => Phase::Fetch,
-                AddressingMode::Immediate8 => {
-                    match dst8 {
-                        Option::Some(dst8_value) => {
-                            match src8 {
-                                Option::Some(src8_value) => {
-                                    match dst8_value {
-                                        Operand8::Register$(r8) => {
-                                            match src8_value {
-                                                Operand8::Imm8 => Phase::ReadImm8$(k: Imm8Cont::LoadReg8$(dst: r8)),
-                                                Operand8::IoImm8 => Phase::ReadImm8$(k: Imm8Cont::IoOffsetReadA),
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                        Operand8::AddrHl => {
-                                            match src8_value {
-                                                Operand8::Imm8 => Phase::ReadImm8$(k: Imm8Cont::StoreToHl),
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                        Operand8::IoImm8 => {
-                                            match src8_value {
-                                                Operand8::Register$(r8) => {
-                                                    let _ = r8;
-                                                    Phase::ReadImm8$(k: Imm8Cont::IoOffsetWriteA)
-                                                },
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                        _ => Phase::Fetch,
-                                    }
-                                },
-                                Option::None => Phase::Fetch,
-                            }
-                        },
-                        Option::None => Phase::Fetch,
-                    }
-                },
-                AddressingMode::Immediate16 => {
-                    match dst16 {
-                        Option::Some(dst16_value) => {
-                            match dst16_value {
-                                Operand16::RegisterPair$(pair) => {
-                                    match src16 {
-                                        Option::Some(src16_value) => {
-                                            match src16_value {
-                                                Operand16::Imm16 => Phase::ReadImm16Lo$(k: Imm16Cont::LoadRegPair$(pair: pair)),
-                                                Operand16::RegisterPair$(pair) => {
-                                                    let _ = pair;
-                                                    Phase::Execute$(op: op)
-                                                },
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                        Option::None => Phase::Fetch,
-                                    }
-                                },
-                                _ => Phase::Fetch,
-                            }
-                        },
-                        Option::None => Phase::Fetch,
-                    }
-                },
-                AddressingMode::Register16 => {
-                    match dst16 {
-                        Option::Some(dst16_value) => {
-                            match src16 {
-                                Option::Some(src16_value) => {
-                                    match dst16_value {
-                                        Operand16::RegisterPair$(pair) => {
-                                            let _ = pair;
-                                            match src16_value {
-                                                Operand16::RegisterPair$(pair) => {
-                                                    let _ = pair;
-                                                    Phase::Execute$(op: op)
-                                                },
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                        _ => Phase::Fetch,
-                                    }
-                                },
-                                Option::None => Phase::Fetch,
-                            }
-                        },
-                        Option::None => Phase::Fetch,
-                    }
-                },
-                AddressingMode::MemoryViaHl => {
-                    match dst8 {
-                        Option::Some(dst8_value) => {
-                            match src8 {
-                                Option::Some(src8_value) => {
-                                    match dst8_value {
-                                        Operand8::Register$(r8) => {
-                                            match src8_value {
-                                                Operand8::AddrHl => Phase::ReadMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), k: ReadCont::LoadReg8$(dst: r8)),
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                        Operand8::AddrHl => {
-                                            match src8_value {
-                                                Operand8::Register$(r8) => {
-                                                    Phase::WriteMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), data: get_r8(regs, r8), k: WriteCont::StoreDone)
-                                                },
-                                                Operand8::Imm8 => Phase::ReadImm8$(k: Imm8Cont::StoreToHl),
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                        _ => Phase::Fetch,
-                                    }
-                                },
-                                Option::None => Phase::Fetch,
-                            }
-                        },
-                        Option::None => Phase::Fetch,
-                    }
-                },
-                AddressingMode::MemoryViaRegPair$(pair) => {
-                    match dst8 {
-                        Option::Some(dst8_value) => {
-                            match src8 {
-                                Option::Some(src8_value) => {
-                                    match dst8_value {
-                                        Operand8::Register$(r8) => {
-                                            let _ = r8;
-                                            Phase::ReadMem$(addr: get_r16(regs, pair), k: ReadCont::LoadAFromAddr)
-                                        },
-                                        _ => {
-                                            match src8_value {
-                                                Operand8::Register$(r8) => {
-                                                    Phase::WriteMem$(addr: get_r16(regs, pair), data: get_r8(regs, r8), k: WriteCont::StoreDone)
-                                                },
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                    }
-                                },
-                                Option::None => Phase::Fetch,
-                            }
-                        },
-                        Option::None => Phase::Fetch,
-                    }
-                },
+                AddressingMode::Immediate8 => immediate8_load_phase(regs, dst8, src8),
+                AddressingMode::Immediate16 => immediate16_load_phase(op, dst16, src16),
+                AddressingMode::Register16 => register16_load_phase(op, dst16, src16),
+                AddressingMode::MemoryViaHl => memory_via_hl_phase(regs, dst8, src8),
+                AddressingMode::MemoryViaRegPair$(pair) => memory_via_reg_pair_phase(regs, pair, dst8, src8),
                 AddressingMode::MemoryViaHlIncrement => {
                     hl_incdec_load_store_phase(regs, dst8, src8)
                 },
                 AddressingMode::MemoryViaHlDecrement => {
                     hl_incdec_load_store_phase(regs, dst8, src8)
                 },
-                AddressingMode::MemoryImm16 => {
-                    match dst8 {
-                        Option::Some(dst8_value) => {
-                            match src8 {
-                                Option::Some(src8_value) => {
-                                    match dst8_value {
-                                        Operand8::Register$(r8) => {
-                                            let _ = r8;
-                                            match src8_value {
-                                                Operand8::AddrImm16 => Phase::ReadImm16Lo$(k: Imm16Cont::ReadAddrToA),
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                        Operand8::AddrImm16 => {
-                                            match src8_value {
-                                                Operand8::Register$(r8) => {
-                                                    let _ = r8;
-                                                    Phase::ReadImm16Lo$(k: Imm16Cont::WriteAToAddr)
-                                                },
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                        _ => Phase::Fetch,
-                                    }
-                                },
-                                Option::None => {
-                                    match dst16 {
-                                        Option::Some(dst16_value) => {
-                                            match dst16_value {
-                                                Operand16::AddrImm16 => {
-                                                    match src16 {
-                                                        Option::Some(src16_value) => {
-                                                            match src16_value {
-                                                                Operand16::RegisterPair$(pair) => {
-                                                                    let _ = pair;
-                                                                    Phase::ReadImm16Lo$(k: Imm16Cont::StoreSpToAddr)
-                                                                },
-                                                                _ => Phase::Fetch,
-                                                            }
-                                                        },
-                                                        Option::None => Phase::Fetch,
-                                                    }
-                                                },
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                        Option::None => Phase::Fetch,
-                                    }
-                                },
-                            }
-                        },
-                        Option::None => {
-                            match dst16 {
-                                Option::Some(dst16_value) => {
-                                    match dst16_value {
-                                        Operand16::AddrImm16 => {
-                                            match src16 {
-                                                Option::Some(src16_value) => {
-                                                    match src16_value {
-                                                        Operand16::RegisterPair$(pair) => {
-                                                            let _ = pair;
-                                                            Phase::ReadImm16Lo$(k: Imm16Cont::StoreSpToAddr)
-                                                        },
-                                                        _ => Phase::Fetch,
-                                                    }
-                                                },
-                                                Option::None => Phase::Fetch,
-                                            }
-                                        },
-                                        _ => Phase::Fetch,
-                                    }
-                                },
-                                Option::None => Phase::Fetch,
-                            }
-                        },
-                    }
-                },
-                AddressingMode::IoImm8 => {
-                    match dst8 {
-                        Option::Some(dst8_value) => {
-                            match src8 {
-                                Option::Some(src8_value) => {
-                                    match dst8_value {
-                                        Operand8::Register$(r8) => {
-                                            let _ = (r8, src8_value);
-                                            Phase::ReadImm8$(k: Imm8Cont::IoOffsetReadA)
-                                        },
-                                        _ => {
-                                            match src8_value {
-                                                Operand8::Register$(r8) => {
-                                                    let _ = (dst8_value, r8);
-                                                    Phase::ReadImm8$(k: Imm8Cont::IoOffsetWriteA)
-                                                },
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                    }
-                                },
-                                Option::None => Phase::Fetch,
-                            }
-                        },
-                        Option::None => Phase::Fetch,
-                    }
-                },
-                AddressingMode::IoC => {
-                    match dst8 {
-                        Option::Some(dst8_value) => {
-                            match src8 {
-                                Option::Some(src8_value) => {
-                                    match dst8_value {
-                                        Operand8::Register$(r8) => {
-                                            let _ = (r8, src8_value);
-                                            Phase::ReadMem$(addr: 0xff00u16 | zext(get_r8(regs, lib::cpu::regs::R8::C)), k: ReadCont::LoadAFromAddr)
-                                        },
-                                        _ => {
-                                            match src8_value {
-                                                Operand8::Register$(r8) => {
-                                                    let _ = (dst8_value, r8);
-                                                    Phase::WriteMem$(addr: 0xff00u16 | zext(get_r8(regs, lib::cpu::regs::R8::C)), data: get_r8(regs, lib::cpu::regs::R8::A), k: WriteCont::StoreDone)
-                                                },
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                    }
-                                },
-                                Option::None => Phase::Fetch,
-                            }
-                        },
-                        Option::None => Phase::Fetch,
-                    }
-                },
+                AddressingMode::MemoryImm16 => memory_imm16_phase(dst8, src8, dst16, src16),
+                AddressingMode::IoImm8 => io_imm8_phase(dst8, src8),
+                AddressingMode::IoC => io_c_phase(regs, dst8, src8),
                 _ => Phase::Fetch,
             }
         },
@@ -378,30 +246,17 @@ pub fn aluish_fetch_phase(op: DecodedOp, regs: Registers) -> Phase {
             match kind {
                 BitOpKind::RotateShift$(kind) => {
                     let _ = kind;
-                    match prefix {
-                        Option::None => {
-                            match target {
-                                Operand8::Register$(r8) => {
-                                    match r8 {
-                                        lib::cpu::regs::R8::A => {
-                                            match bit_index {
-                                                Option::None => {
-                                                    if zero_on_result {
-                                                        Phase::Fetch
-                                                    } else {
-                                                        Phase::Execute$(op: op)
-                                                    }
-                                                },
-                                                _ => Phase::Fetch,
-                                            }
-                                        },
-                                        _ => Phase::Fetch,
-                                    }
+                    if zero_on_result {
+                        Phase::Fetch
+                    } else {
+                        match (prefix, target, bit_index) {
+                            (Option::None, Operand8::Register$(r8), Option::None) =>
+                                match r8 {
+                                    lib::cpu::regs::R8::A => Phase::Execute$(op: op),
+                                    _ => Phase::Fetch,
                                 },
-                                _ => Phase::Fetch,
-                            }
-                        },
-                        _ => Phase::Fetch,
+                            _ => Phase::Fetch,
+                        }
                     }
                 },
                 _ => Phase::Fetch,
@@ -510,18 +365,11 @@ pub fn cb_prefixed_fetch_phase(op: DecodedOp, regs: Registers) -> Phase {
     match op {
         DecodedOp::BitOp$(kind, prefix, target, bit_index, zero_on_result, addressing) => {
             let _ = addressing;
-            match prefix {
-                Option::Some(value) => {
-                    match value {
-                        PrefixKind::Cb => {
-                            match target {
-                                Operand8::AddrHl => Phase::ReadMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), k: ReadCont::BitOpFromMem$(kind: kind, bit_index: bit_index, zero_on_result: zero_on_result)),
-                                _ => Phase::Fetch,
-                            }
-                        },
-                    }
+            match (prefix, target) {
+                (Option::Some(PrefixKind::Cb), Operand8::AddrHl) => {
+                    Phase::ReadMem$(addr: get_r16(regs, lib::cpu::regs::RegPair::HL), k: ReadCont::BitOpFromMem$(kind: kind, bit_index: bit_index, zero_on_result: zero_on_result))
                 },
-                Option::None => Phase::Fetch,
+                _ => Phase::Fetch,
             }
         },
         _ => Phase::Fetch,
