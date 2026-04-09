@@ -33,6 +33,33 @@ fn frame_low8(frame: uint<32>) -> uint<8> {
     trunc(frame)
 }
 
+fn encode_event_header(seq: uint<64>, kind_code: uint<2>) -> uint<24> {
+    (zext(seq_low8(seq)) << 14) | (zext(kind_code) << 12)
+}
+
+fn encode_event_body(kind: PpuEventKind) -> (uint<2>, uint<24>) {
+    match kind {
+        PpuEventKind::MmioWrite$(write: write) => {
+            (
+                event_kind_code(PpuEventKind::MmioWrite$(write: write)),
+                (zext(mmio_target_code(write.target)) << 8) | zext(write.value),
+            )
+        },
+        PpuEventKind::DmaStart$(source_high: source_high) => {
+            (
+                event_kind_code(PpuEventKind::DmaStart$(source_high: source_high)),
+                zext(source_high),
+            )
+        },
+        PpuEventKind::ForceLcdPower$(enabled: enabled) => {
+            (
+                event_kind_code(PpuEventKind::ForceLcdPower$(enabled: enabled)),
+                zext(lib::util::bit(enabled)),
+            )
+        },
+    }
+}
+
 fn encode_slot(event: TimedPpuEvent, present: bool) -> uint<24> {
     if present {
         encode_event(event)
@@ -42,18 +69,8 @@ fn encode_slot(event: TimedPpuEvent, present: bool) -> uint<24> {
 }
 
 fn encode_event(event: TimedPpuEvent) -> uint<24> {
-    let header = (zext(seq_low8(event.seq)) << 14) | (zext(event_kind_code(event.kind)) << 12);
-    match event.kind {
-        PpuEventKind::MmioWrite$(write: write) => {
-            header | (zext(mmio_target_code(write.target)) << 8) | zext(write.value)
-        },
-        PpuEventKind::DmaStart$(source_high: source_high) => {
-            header | zext(source_high)
-        },
-        PpuEventKind::ForceLcdPower$(enabled: enabled) => {
-            header | zext(lib::util::bit(enabled))
-        },
-    }
+    let (kind_code, payload) = encode_event_body(event.kind);
+    encode_event_header(event.seq, kind_code) | payload
 }
 
 pub entity ppu_event_bridge_test_top(
