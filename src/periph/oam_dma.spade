@@ -30,7 +30,7 @@ pub entity oam_dma(
         if start_transfer {
             true
         } else {
-            if advance_transfer && finishing_transfer {
+            if finishing_transfer {
                 false
             } else {
                 active_reg
@@ -61,15 +61,14 @@ pub entity oam_dma(
     reg(clk) source_high_reg: uint<8> reset(rst: 0u8) = next_source_high_reg;
     reg(clk) index_reg: uint<8> reset(rst: 0u8) = next_index_reg;
     let source_addr_hi: uint<16> = zext(source_high_reg);
-    let source_addr_lo: uint<16> = zext(index_reg);
-    let dest_addr_lo: uint<16> = zext(index_reg);
+    let index_wide: uint<16> = zext(index_reg);
 
     OamDmaOut$(
         active: active_reg,
         source_high: source_high_reg,
         index: index_reg,
-        source_addr: (source_addr_hi << 8) | source_addr_lo,
-        dest_addr: trunc(0xfe00u16 + dest_addr_lo),
+        source_addr: (source_addr_hi << 8) | index_wide,
+        dest_addr: trunc(0xfe00u16 + index_wide),
         write_en: active_reg,
     )
 }

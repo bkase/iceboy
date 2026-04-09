@@ -77,24 +77,16 @@ pub entity timer(
     let (next_tima_reg, next_overflow_delay_reg, next_timer_irq_reg) =
         if write_tima {
             (write_data, 0u3, false)
+        } else if overflow_delay_reg == 1u3 {
+            (next_tma_reg, 0u3, true)
+        } else if overflow_delay_reg > 1u3 {
+            (tima_reg, trunc(overflow_delay_reg - 1u3), false)
+        } else if timer_tick && tima_reg == 0xFFu8 {
+            (0u8, 4u3, false)
+        } else if timer_tick {
+            (trunc(tima_reg + 1u8), 0u3, false)
         } else {
-            if overflow_delay_reg == 1u3 {
-                (next_tma_reg, 0u3, true)
-            } else {
-                if overflow_delay_reg > 1u3 {
-                    (tima_reg, trunc(overflow_delay_reg - 1u3), false)
-                } else {
-                    if timer_tick {
-                        if tima_reg == 0xFFu8 {
-                            (0u8, 4u3, false)
-                        } else {
-                            (trunc(tima_reg + 1u8), 0u3, false)
-                        }
-                    } else {
-                        (tima_reg, 0u3, false)
-                    }
-                }
-            }
+            (tima_reg, 0u3, false)
         };
 
     reg(clk) tima_reg: uint<8> reset(rst: 0u8) = next_tima_reg;

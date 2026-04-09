@@ -27,6 +27,8 @@ fn irq_source_bits(
 
 fn ack_bits(irq_ack: IrqAck) -> uint<5> {
     match irq_ack.ack_bit {
+        // Spade does not currently make a variable-width shift here clearer than
+        // the explicit decode; keep the one-hot expansion local and obvious.
         Option::Some(bit) => match bit {
             0u3 => 0x01u5,
             1u3 => 0x02u5,

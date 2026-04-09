@@ -52,7 +52,7 @@ pub entity serial(
             write_data
         } else {
             if complete_transfer {
-                sc_reg & 0x7Fu8
+                sc_reg & 0x7fu8
             } else {
                 sc_reg
             }
@@ -61,23 +61,19 @@ pub entity serial(
     let next_transfer_active_reg =
         if start_internal {
             true
+        } else if complete_transfer {
+            false
         } else {
-            if complete_transfer {
-                false
-            } else {
-                transfer_active_reg
-            }
+            transfer_active_reg
         };
 
     let next_cycles_left_reg =
         if start_internal {
             8u4
+        } else if progress_transfer {
+            trunc(cycles_left_reg - 1u4)
         } else {
-            if progress_transfer {
-                trunc(cycles_left_reg - 1u4)
-            } else {
-                cycles_left_reg
-            }
+            cycles_left_reg
         };
 
     let next_serial_irq_reg = complete_transfer;

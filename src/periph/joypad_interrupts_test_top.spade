@@ -1,11 +1,6 @@
-use std::option::Option;
-use lib::cpu::types::IrqAck;
+use lib::cpu::types::no_irq_ack;
 use lib::periph::interrupts::interrupts;
 use lib::periph::joypad::{decode_buttons, joypad};
-
-fn irq_ack_none() -> IrqAck {
-    IrqAck$(ack_bit: Option::None)
-}
 
 pub entity joypad_interrupts_test_top(
     clk_i: clock,
@@ -34,7 +29,7 @@ pub entity joypad_interrupts_test_top(
         false,
         false,
         joypad_out.joypad_irq,
-        irq_ack_none(),
+        no_irq_ack(),
     );
 
     (zext(joypad_out.p1) << 13)

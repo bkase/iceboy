@@ -95,7 +95,6 @@ pub entity joypad(
         } else {
             select_reg
         };
-    let prev_pressed = selected_pressed_nibble(select_reg, buttons);
     let next_pressed = selected_pressed_nibble(next_select_reg, buttons);
     let fresh_pressed = next_pressed & ~prev_pressed_reg;
     let next_joypad_irq_reg = fresh_pressed != 0u4;
@@ -103,8 +102,6 @@ pub entity joypad(
     reg(clk) select_reg: uint<2> reset(rst: 0u2) = next_select_reg;
     reg(clk) prev_pressed_reg: uint<4> reset(rst: 0u4) = next_pressed;
     reg(clk) joypad_irq_reg: bool reset(rst: false) = next_joypad_irq_reg;
-
-    let _ = prev_pressed;
 
     JoypadOut$(p1: visible_p1(select_reg, buttons), joypad_irq: joypad_irq_reg)
 }
