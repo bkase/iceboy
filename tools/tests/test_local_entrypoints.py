@@ -256,6 +256,15 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((ROOT / "bench" / "manifests" / "ppu_backend_diff_scenarios.yaml").exists())
         self.assertTrue((ROOT / "test" / "ppu" / "backend_diff" / "test_backend_diff_smoke.py").exists())
 
+    def test_obj_observe_assets_exist(self) -> None:
+        run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
+        hook_text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
+        self.assertIn('"test_obj_observe.py"', run_tests_text)
+        self.assertIn('"test/ppu/unit/test_obj_observe.py"', run_tests_text)
+        self.assertIn('"test/ppu/unit/test_obj_observe.py"', hook_text)
+        self.assertTrue((ROOT / "src" / "ppu" / "rtl" / "obj_observe_test_top.spade").exists())
+        self.assertTrue((ROOT / "test" / "ppu" / "unit" / "test_obj_observe.py").exists())
+
     def test_sim_encode_module_centralizes_shared_sim_helpers(self) -> None:
         util_text = (ROOT / "src" / "util.spade").read_text(encoding="utf-8")
         encode_text = (ROOT / "src" / "sim" / "encode.spade").read_text(encoding="utf-8")
@@ -376,6 +385,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/ppu/unit/test_bg_fifo.py"', text)
         self.assertIn('"test/ppu/unit/test_ppu_core_smoke.py"', text)
         self.assertIn('"test/ppu/unit/test_mixer.py"', text)
+        self.assertIn('"test/ppu/unit/test_obj_observe.py"', text)
         self.assertIn('"test/ppu/unit/test_obj_priority.py"', text)
         self.assertIn('"test/ppu/unit/test_obj_fetch.py"', text)
         self.assertIn('"test/ppu/unit/test_oam_scan.py"', text)

@@ -47,6 +47,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/ppu/unit/test_bg_fifo.py"
     "test/ppu/unit/test_ppu_core_smoke.py"
     "test/ppu/unit/test_mixer.py"
+    "test/ppu/unit/test_obj_observe.py"
     "test/ppu/unit/test_obj_priority.py"
     "test/ppu/unit/test_obj_fetch.py"
     "test/ppu/unit/test_oam_scan.py"

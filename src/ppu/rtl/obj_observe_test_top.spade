@@ -1,0 +1,114 @@
+use std::option::Option;
+
+use lib::ppu::rtl::core::ppu_core;
+use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
+use lib::ppu::sem::events::{idle_oam_dma_state, zero_video_coord};
+use lib::ppu::sem::memory::{MemClient, MemRegion, idle_ppu_mem_resp};
+use lib::ppu::sem::types::{FetcherSource, FetcherStep};
+use lib::sim::ppu_support::{encode_lcd_run, encode_ppu_mode, encode_ppu_phase, timed_events_from_direct};
+
+fn decode_mmio_reg(target_i: uint<4>) -> MmioReg {
+    match target_i {
+        1u4 => MmioReg::Stat,
+        2u4 => MmioReg::Scy,
+        3u4 => MmioReg::Scx,
+        4u4 => MmioReg::Lyc,
+        5u4 => MmioReg::Wy,
+        6u4 => MmioReg::Wx,
+        7u4 => MmioReg::Bgp,
+        8u4 => MmioReg::Obp0,
+        9u4 => MmioReg::Obp1,
+        _ => MmioReg::Lcdc,
+    }
+}
+
+fn encode_fetcher_source(source: FetcherSource) -> uint<2> {
+    match source {
+        FetcherSource::Background => 0u2,
+        FetcherSource::Window => 1u2,
+        FetcherSource::Object => 2u2,
+    }
+}
+
+fn encode_fetcher_step(step: FetcherStep) -> uint<3> {
+    match step {
+        FetcherStep::GetTile => 0u3,
+        FetcherStep::GetLo => 1u3,
+        FetcherStep::GetHi => 2u3,
+        FetcherStep::Sleep => 3u3,
+        FetcherStep::Push => 4u3,
+    }
+}
+
+fn encode_mem_region(region: MemRegion) -> uint<1> {
+    match region {
+        MemRegion::Vram => 0u1,
+        MemRegion::Oam => 1u1,
+    }
+}
+
+fn encode_mem_client(client: MemClient) -> uint<3> {
+    match client {
+        MemClient::Cpu => 0u3,
+        MemClient::BgFetcher => 1u3,
+        MemClient::ObjFetcher => 2u3,
+        MemClient::OamScanner => 3u3,
+        MemClient::Dma => 4u3,
+    }
+}
+
+pub entity obj_observe_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    dot_ce_i: bool,
+    write_valid_i: bool,
+    write_target_i: uint<4>,
+    write_value_i: uint<8>,
+) -> uint<104> {
+    let write =
+        if write_valid_i {
+            Option::Some(MmioWrite$(target: decode_mmio_reg(write_target_i), value: write_value_i))
+        } else {
+            Option::None
+        };
+    let (bus_events, bus_event_count) = timed_events_from_direct(zero_video_coord(), 0u64, write, Option::None);
+    let core = inst ppu_core(
+        clk_i,
+        rst_i,
+        dot_ce_i,
+        zero_video_coord(),
+        bus_events,
+        bus_event_count,
+        idle_ppu_mem_resp(),
+        idle_oam_dma_state(),
+    );
+    let trace = core.trace;
+    let slot0 = trace.line_objs.slots[0];
+
+    zext(encode_ppu_phase(trace.phase_after))
+        | (zext(trace.ly_after) << 3)
+        | (zext(trace.dot_in_line_after) << 11)
+        | (zext(encode_ppu_mode(trace.mode_after)) << 20)
+        | (zext(encode_lcd_run(trace.run_after)) << 23)
+        | (zext(core.mem_reqs.count) << 25)
+        | (zext(trace.line_objs.count) << 28)
+        | (zext(trace.oam_scan.index) << 32)
+        | (zext(trace.oam_scan.found) << 38)
+        | (zext(trace.fetcher.epoch) << 42)
+        | (zext(encode_fetcher_source(trace.fetcher.source)) << 46)
+        | (zext(encode_fetcher_step(trace.fetcher.step)) << 48)
+        | (zext(lib::util::bit(trace.fetcher.pending_push)) << 51)
+        | (zext(lib::util::bit(trace.fetcher.pending_valid)) << 52)
+        | (zext(encode_mem_region(trace.fetcher.pending_read.tag.region)) << 53)
+        | (zext(encode_mem_client(trace.fetcher.pending_read.tag.client)) << 54)
+        | (zext(trace.fetcher.pending_read.tag.id) << 57)
+        | (zext(trace.fetcher.pending_read.epoch) << 61)
+        | (zext(trace.obj_fifo.count) << 65)
+        | (zext(trace.bg_fifo.count) << 70)
+        | (zext(trace.fetcher.map_x) << 75)
+        | (zext(trace.fetcher.map_y) << 80)
+        | (zext(trace.window_line) << 85)
+        | (zext(lib::util::bit(trace.first_frame_blank_after)) << 93)
+        | (zext(slot0.oam_index) << 94)
+        | (zext(slot0.selection_rank) << 100)
+}
