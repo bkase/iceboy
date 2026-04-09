@@ -10,6 +10,7 @@ from bench.pyboy.oracle import (
     CommitPoint,
     PyBoyOracle,
     _normalize_rgba_to_dmg_shades,
+    capture_checkpoint_frame_dmg_shades,
     capture_rendered_frame_dmg_shades,
 )
 from roms.build_micro_rom import build_alu_loop
@@ -21,6 +22,7 @@ HOOK_ADDRS = (0x0150, 0x0152, 0x0154, 0x0155, 0x0156)
 ROOT = Path(__file__).resolve().parents[2]
 DMG_ACID2_ROM = ROOT / "bench" / "external" / "dmg-acid2" / "dmg-acid2.gb"
 DMG_ACID2_EXPECTED = ROOT / "bench" / "expected" / "suite_owned" / "dmg-acid2" / "reference-dmg.png"
+OBJ_BASIC_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_BASIC.gb"
 
 
 class PyBoyOracleTest(unittest.TestCase):
@@ -173,6 +175,15 @@ class PyBoyOracleTest(unittest.TestCase):
         actual = capture_rendered_frame_dmg_shades(DMG_ACID2_ROM, frame_batches=(59, 25))
         expected = bytes(value for row in _decode_png_grayscale(DMG_ACID2_EXPECTED) for value in row)
         self.assertEqual(actual, expected)
+
+    def test_checkpoint_frame_capture_returns_canonical_dmg_shades(self) -> None:
+        actual = capture_checkpoint_frame_dmg_shades(
+            OBJ_BASIC_ROM,
+            sym_path=OBJ_BASIC_ROM.with_suffix(".sym"),
+        )
+        self.assertEqual(len(actual), 144 * 160)
+        self.assertTrue(set(actual))
+        self.assertTrue(set(actual).issubset({0x00, 0x55, 0xAA, 0xFF}))
 
 
 if __name__ == "__main__":

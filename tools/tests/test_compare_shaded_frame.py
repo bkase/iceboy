@@ -65,6 +65,28 @@ class CompareShadedFrameTest(unittest.TestCase):
             self.assertEqual(mismatches, 1)
             self.assertEqual(first, (1, 0, 0x00, 0xAA))
 
+    def test_compare_shaded_frame_accepts_expected_raw(self) -> None:
+        rows = (
+            (0xFF, 0xAA),
+            (0x55, 0x00),
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            raw = tmp / "frame.raw"
+            expected_raw = tmp / "expected.raw"
+            raw.write_bytes(bytes(value for row in rows for value in row))
+            expected_raw.write_bytes(bytes(value for row in rows for value in row))
+
+            mismatches, first = compare_shaded_frame(
+                raw_path=raw,
+                expected_raw_path=expected_raw,
+                width=2,
+                height=2,
+            )
+
+            self.assertEqual(mismatches, 0)
+            self.assertIsNone(first)
+
 
 if __name__ == "__main__":
     unittest.main()

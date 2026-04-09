@@ -56,13 +56,18 @@ def _encode_png_grayscale(rows: tuple[tuple[int, ...], ...]) -> bytes:
 def compare_shaded_frame(
     *,
     raw_path: Path,
-    expected_path: Path,
+    expected_path: Path | None = None,
+    expected_raw_path: Path | None = None,
     output_png: Path | None = None,
     width: int = SCREEN_WIDTH,
     height: int = SCREEN_HEIGHT,
 ) -> tuple[int, tuple[int, int, int, int] | None]:
     actual = _rows_from_raw(raw_path, width=width, height=height)
-    expected = _decode_png_grayscale(expected_path)
+    if (expected_path is None) == (expected_raw_path is None):
+        raise ValueError("exactly one of expected_path or expected_raw_path must be provided")
+    expected = (
+        _decode_png_grayscale(expected_path) if expected_path is not None else _rows_from_raw(expected_raw_path, width=width, height=height)
+    )
     mismatches, first = _shade_frame_mismatch(actual, expected)
     if output_png is not None:
         output_png.write_bytes(_encode_png_grayscale(actual))
@@ -72,7 +77,8 @@ def compare_shaded_frame(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--raw", required=True, type=Path)
-    parser.add_argument("--expected", required=True, type=Path)
+    parser.add_argument("--expected", type=Path, default=None)
+    parser.add_argument("--expected-raw", type=Path, default=None)
     parser.add_argument("--output-png", type=Path, default=None)
     parser.add_argument("--width", type=int, default=SCREEN_WIDTH)
     parser.add_argument("--height", type=int, default=SCREEN_HEIGHT)
@@ -81,6 +87,7 @@ def main() -> int:
     mismatches, first = compare_shaded_frame(
         raw_path=args.raw,
         expected_path=args.expected,
+        expected_raw_path=args.expected_raw,
         output_png=args.output_png,
         width=args.width,
         height=args.height,

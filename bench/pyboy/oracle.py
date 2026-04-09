@@ -329,6 +329,25 @@ def capture_rendered_frame_dmg_shades(
     )
 
 
+def capture_checkpoint_frame_dmg_shades(
+    rom_path: str | Path,
+    *,
+    sym_path: str | Path,
+    checkpoint_label: str = "__checkpoint_scene_ready",
+    settle_rendered_frames: int = 2,
+) -> bytes:
+    with PyBoyOracle(
+        rom_path,
+        sym_path=sym_path,
+        commit_points=(CommitPoint(bank=None, addr=checkpoint_label),),
+    ) as oracle:
+        oracle.reset(ModelProfile.DMG, ResetProfile.SkipBoot)
+        oracle.step_commit()
+        if settle_rendered_frames > 0:
+            oracle._require_pyboy().tick(int(settle_rendered_frames), True, False)
+        return oracle.shade_buffer()
+
+
 def _is_executable_rom(bank: int, addr: int) -> bool:
     if bank == 0:
         return 0x0000 <= addr < 0x8000

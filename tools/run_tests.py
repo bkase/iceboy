@@ -250,6 +250,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("rom", "test_ppu_wave_a.py", "swim", "test/rom/test_ppu_wave_a.py"),
     SuiteDefinition("rom", "test_ppu_wave_a_mooneye.py", "shell", "tools/run_ppu_wave_a_mooneye_verilator.sh"),
     SuiteDefinition("rom", "test_ppu_wave_b.py", "swim", "test/rom/test_ppu_wave_b.py"),
+    SuiteDefinition("rom", "test_ppu_wave_c.py", "shell", "tools/run_ppu_wave_c_verilator.sh"),
     SuiteDefinition("rom", "test_timer_div_basic.py", "swim", "test_timer_div_basic"),
     SuiteDefinition("rom", "test_timer_irq_halt.py", "swim", "test_timer_irq_halt"),
     SuiteDefinition("lockstep", "test_cpu_lockstep.py", "swim", "test_cpu_lockstep"),
