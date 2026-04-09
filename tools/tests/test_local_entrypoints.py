@@ -340,6 +340,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
         self.assertIn('"test/unit/test_main.py"', text)
         self.assertIn('"test/unit/test_halt_bug.py"', text)
+        self.assertIn('"test/unit/test_bus_fabric.py"', text)
         self.assertIn('"test/unit/test_membus.py"', text)
         self.assertIn('"test/unit/test_memory_map.py"', text)
         self.assertIn('"test/unit/test_hram_ebr.py"', text)

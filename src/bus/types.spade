@@ -45,7 +45,3 @@ pub fn idle_bus_resp() -> BusResp {
 pub fn idle_bus_obs() -> BusObs {
     BusObs$(region: BusRegion::Hram, blocked: false, owner: BusOwner::Idle)
 }
-
-pub fn default_bus_obs() -> BusObs {
-    idle_bus_obs()
-}

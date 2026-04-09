@@ -42,22 +42,16 @@ fn encode_slot(event: TimedPpuEvent, present: bool) -> uint<24> {
 }
 
 fn encode_event(event: TimedPpuEvent) -> uint<24> {
+    let header = (zext(seq_low8(event.seq)) << 14) | (zext(event_kind_code(event.kind)) << 12);
     match event.kind {
         PpuEventKind::MmioWrite$(write: write) => {
-            (zext(seq_low8(event.seq)) << 14)
-                | (zext(event_kind_code(event.kind)) << 12)
-                | (zext(mmio_target_code(write.target)) << 8)
-                | zext(write.value)
+            header | (zext(mmio_target_code(write.target)) << 8) | zext(write.value)
         },
         PpuEventKind::DmaStart$(source_high: source_high) => {
-            (zext(seq_low8(event.seq)) << 14)
-                | (zext(event_kind_code(event.kind)) << 12)
-                | zext(source_high)
+            header | zext(source_high)
         },
         PpuEventKind::ForceLcdPower$(enabled: enabled) => {
-            (zext(seq_low8(event.seq)) << 14)
-                | (zext(event_kind_code(event.kind)) << 12)
-                | zext(lib::util::bit(enabled))
+            header | zext(lib::util::bit(enabled))
         },
     }
 }
