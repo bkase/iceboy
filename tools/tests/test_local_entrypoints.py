@@ -256,6 +256,17 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((ROOT / "bench" / "manifests" / "ppu_backend_diff_scenarios.yaml").exists())
         self.assertTrue((ROOT / "test" / "ppu" / "backend_diff" / "test_backend_diff_smoke.py").exists())
 
+    def test_ppu_wave_c_reference_assets_exist(self) -> None:
+        text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
+        self.assertIn('"test_ppu_wave_c_reference.py"', text)
+        self.assertIn('"tools.tests.test_ppu_wave_c_reference"', text)
+        self.assertTrue((ROOT / "tools" / "tests" / "test_ppu_wave_c_reference.py").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "OBJ_BASIC.asm").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "OBJ_PRIORITY.asm").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "OBJ_8X16.asm").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "OBJ_FLIP.asm").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "OBJ_BG_MASK.asm").exists())
+
     def test_obj_observe_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
         hook_text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")

@@ -126,6 +126,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("meta", "test_ppu_backend_diff.py", "python", "tools.tests.test_ppu_backend_diff"),
     SuiteDefinition("meta", "test_ppu_visibility.py", "python", "tools.tests.test_ppu_visibility"),
     SuiteDefinition("meta", "test_ppu_wave_b_reference.py", "python", "tools.tests.test_ppu_wave_b_reference"),
+    SuiteDefinition("meta", "test_ppu_wave_c_reference.py", "python", "tools.tests.test_ppu_wave_c_reference"),
     SuiteDefinition("meta", "test_activity_capture.py", "python", "tools.tests.test_activity_capture"),
     SuiteDefinition(
         "meta",
