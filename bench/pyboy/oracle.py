@@ -296,6 +296,39 @@ def _normalize_rgba_to_dmg_shades(rgba: numpy.ndarray[Any, Any]) -> bytes:
     return bytes(normalized)
 
 
+def capture_rendered_frame_rgba(
+    rom_path: str | Path,
+    *,
+    cgb: bool = False,
+    frame_batches: Sequence[int] = (84,),
+) -> numpy.ndarray[Any, Any]:
+    pyboy = PyBoy(
+        str(rom_path),
+        window="null",
+        sound_emulated=False,
+        no_input=True,
+        log_level="ERROR",
+        cgb=cgb,
+    )
+    try:
+        pyboy.set_emulation_speed(0)
+        for frame_count in frame_batches:
+            pyboy.tick(int(frame_count), True, False)
+        return numpy.array(pyboy.screen.ndarray, copy=True)
+    finally:
+        pyboy.stop(save=False)
+
+
+def capture_rendered_frame_dmg_shades(
+    rom_path: str | Path,
+    *,
+    frame_batches: Sequence[int] = (84,),
+) -> bytes:
+    return _normalize_rgba_to_dmg_shades(
+        capture_rendered_frame_rgba(rom_path, cgb=False, frame_batches=frame_batches)
+    )
+
+
 def _is_executable_rom(bank: int, addr: int) -> bool:
     if bank == 0:
         return 0x0000 <= addr < 0x8000

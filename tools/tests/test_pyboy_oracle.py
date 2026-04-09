@@ -6,12 +6,21 @@ import warnings
 from pathlib import Path
 
 from bench.actions.generators import IeOverrideEvent, IfClearBitsEvent, IfSetBitsEvent, MemoryWriteEvent
-from bench.pyboy.oracle import CommitPoint, PyBoyOracle, _normalize_rgba_to_dmg_shades
+from bench.pyboy.oracle import (
+    CommitPoint,
+    PyBoyOracle,
+    _normalize_rgba_to_dmg_shades,
+    capture_rendered_frame_dmg_shades,
+)
 from roms.build_micro_rom import build_alu_loop
 from spec.profiles import BehaviorConfig, BehaviorFeature, ModelProfile, ResetProfile, SocRevision
+from test.harness.rom_runner import _decode_png_grayscale
 
 
 HOOK_ADDRS = (0x0150, 0x0152, 0x0154, 0x0155, 0x0156)
+ROOT = Path(__file__).resolve().parents[2]
+DMG_ACID2_ROM = ROOT / "bench" / "external" / "dmg-acid2" / "dmg-acid2.gb"
+DMG_ACID2_EXPECTED = ROOT / "bench" / "expected" / "suite_owned" / "dmg-acid2" / "reference-dmg.png"
 
 
 class PyBoyOracleTest(unittest.TestCase):
@@ -159,6 +168,11 @@ class PyBoyOracleTest(unittest.TestCase):
         self.assertEqual(normalized[40], 0x55)
         self.assertEqual(normalized[80], 0xAA)
         self.assertEqual(normalized[120], 0xFF)
+
+    def test_upstream_style_dmg_acid2_timing_matches_pinned_reference(self) -> None:
+        actual = capture_rendered_frame_dmg_shades(DMG_ACID2_ROM, frame_batches=(59, 25))
+        expected = bytes(value for row in _decode_png_grayscale(DMG_ACID2_EXPECTED) for value in row)
+        self.assertEqual(actual, expected)
 
 
 if __name__ == "__main__":
