@@ -266,6 +266,8 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_8X16.asm").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_FLIP.asm").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_BG_MASK.asm").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "OBJ_10_PER_LINE.asm").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "OBJ_X_HIDDEN_STILL_COUNTS.asm").exists())
 
     def test_obj_observe_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
