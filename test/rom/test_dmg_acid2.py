@@ -20,7 +20,7 @@ from spec.profiles import CPU_BRING_UP_PROFILES
 
 DMG_ACID2_ROM = ROOT / "bench" / "external" / "dmg-acid2" / "dmg-acid2.gb"
 DMG_ACID2_EXPECTED = ROOT / "bench" / "expected" / "suite_owned" / "dmg-acid2" / "reference-dmg.png"
-DMG_ACID2_MAX_MCYCLES = 500_000
+DMG_ACID2_MAX_MCYCLES = 1_800_000
 
 
 def _max_mcycles() -> int:

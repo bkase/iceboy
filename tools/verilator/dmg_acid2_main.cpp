@@ -103,7 +103,7 @@ struct Config {
     std::string rom_path;
     std::string frame_capture_path;
     std::string trace_path;
-    uint64_t max_mcycles = 1600000ULL;
+    uint64_t max_mcycles = 1800000ULL;
     uint64_t progress_interval = 0;
     uint64_t stable_frames = 2;
     uint64_t completed_frames = 0;
@@ -837,6 +837,7 @@ int main(int argc, char** argv) {
     bool have_last_completed_frame = false;
     uint64_t stable_completed_frames = 0;
     bool seen_frame_start = false;
+    bool frame_start_active = false;
     uint64_t completed_mcycles = 0;
     uint64_t completed_frames = 0;
     Observation last_post{};
@@ -880,7 +881,7 @@ int main(int argc, char** argv) {
                 continue;
             }
             if (observation.ppu_scanout_kind == 2) {
-                if (seen_frame_start) {
+                if (!frame_start_active && seen_frame_start) {
                     ++completed_frames;
                     if (cfg.completed_frames != 0 && completed_frames >= cfg.completed_frames) {
                         const auto regs = memory.ppu_debug_regs();
@@ -913,7 +914,7 @@ int main(int argc, char** argv) {
                         have_last_completed_frame = true;
                         stable_completed_frames = 1;
                     }
-                    if (stable_completed_frames >= cfg.stable_frames) {
+                    if (cfg.completed_frames == 0 && stable_completed_frames >= cfg.stable_frames) {
                         std::ofstream raw_out(cfg.frame_capture_path, std::ios::binary | std::ios::trunc);
                         raw_out.write(reinterpret_cast<const char*>(current_frame.data()), current_frame.size());
                         raw_out.close();
@@ -925,10 +926,14 @@ int main(int argc, char** argv) {
                         return 0;
                     }
                 }
-                current_frame.fill(FRAME_SHADE_WHITE);
-                seen_frame_start = true;
+                if (!frame_start_active) {
+                    current_frame.fill(FRAME_SHADE_WHITE);
+                    seen_frame_start = true;
+                }
+                frame_start_active = true;
                 continue;
             }
+            frame_start_active = false;
             capture_shade_pixel(current_frame, observation);
         }
 
