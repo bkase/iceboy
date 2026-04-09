@@ -1,0 +1,170 @@
+use lib::ppu::sem::events::{DotInput, idle_oam_dma_state, idle_timed_ppu_event, zero_video_coord};
+use lib::ppu::sem::memory::{MemClient, MemRegion, PpuMemKind, PpuMemReq, PpuMemResp, PpuMemResult, idle_ppu_mem_req, idle_ppu_mem_resp};
+use lib::ppu::sem::step::step_dot;
+use lib::ppu::sem::types::{
+    FetcherSource,
+    FetcherStep,
+    LcdRunState,
+    LineObjList,
+    PpuPhase,
+    PpuRegs,
+    PpuSamplingState,
+    PpuState,
+    PpuStatusState,
+    PpuVisibleState,
+    SelectedObjTicket,
+    StatIrqState,
+    empty_bg_fifo,
+    empty_obj_fifo,
+    empty_oam_scan_state,
+    initial_fetcher_state,
+};
+use lib::sim::ppu_support::{build_test_lcdc, held_dot_output, ppu_debug_trace};
+
+fn seeded_ticket() -> SelectedObjTicket {
+    SelectedObjTicket$(oam_index: 0u6, x: 9u8, y: 16u8, selection_rank: 0u4)
+}
+
+fn seeded_line_objs() -> LineObjList {
+    LineObjList$(count: 1u4, slots: [seeded_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket()])
+}
+
+fn seeded_regs() -> PpuRegs {
+    PpuRegs$(
+        lcdc: build_test_lcdc(false, false, true, false, false, true, true),
+        stat_sel: lib::ppu::sem::types::zero_stat_select(),
+        scy: 0u8,
+        scx: 0u8,
+        lyc: 0u8,
+        wy: 0u8,
+        wx: 0u8,
+        bgp: 0xfcu8,
+        obp0: 0xffu8,
+        obp1: 0xffu8,
+    )
+}
+
+fn seeded_state() -> PpuState {
+    PpuState$(
+        visible: PpuVisibleState$(regs: seeded_regs(), ly: 0u8),
+        status: PpuStatusState$(
+            run: LcdRunState::Running,
+            phase: PpuPhase::Transfer$(x_out: 1u8, discard_scx: 0u3),
+            stat_irq: StatIrqState$(line_high: false),
+            lyc_match_flag: true,
+        ),
+        sampled: PpuSamplingState$(
+            scx_low3_line: 0u3,
+            wy_triggered_this_frame: false,
+            window_enable_at_mode2_start: false,
+        ),
+        render: lib::ppu::sem::types::PpuRenderState$(
+            dot_in_line: 80u9,
+            x_out: 1u8,
+            window_state: lib::ppu::sem::types::WindowState::Inactive,
+            window_line: 0u8,
+            oam_scan: empty_oam_scan_state(),
+            line_objs: seeded_line_objs(),
+            obj_fetch_ticket: lib::ppu::sem::types::zero_selected_obj_ticket(),
+            obj_fetch_flags: lib::ppu::sem::types::zero_obj_flags(),
+            fetcher: initial_fetcher_state(),
+            bg_fifo: empty_bg_fifo(),
+            obj_fifo: empty_obj_fifo(),
+            first_frame_blank: false,
+        ),
+    )
+}
+
+fn encode_fetcher_source(source: FetcherSource) -> uint<2> {
+    match source {
+        FetcherSource::Background => 0u2,
+        FetcherSource::Window => 1u2,
+        FetcherSource::Object => 2u2,
+    }
+}
+
+fn encode_fetcher_step(step: FetcherStep) -> uint<3> {
+    match step {
+        FetcherStep::GetTile => 0u3,
+        FetcherStep::GetLo => 1u3,
+        FetcherStep::GetHi => 2u3,
+        FetcherStep::Sleep => 3u3,
+        FetcherStep::Push => 4u3,
+    }
+}
+
+fn encode_mem_region(region: MemRegion) -> uint<1> {
+    match region {
+        MemRegion::Vram => 0u1,
+        MemRegion::Oam => 1u1,
+    }
+}
+
+fn encode_mem_client(client: MemClient) -> uint<3> {
+    match client {
+        MemClient::Cpu => 0u3,
+        MemClient::BgFetcher => 1u3,
+        MemClient::ObjFetcher => 2u3,
+        MemClient::OamScanner => 3u3,
+        MemClient::Dma => 4u3,
+    }
+}
+
+fn response_data(req: PpuMemReq) -> uint<8> {
+    match req.tag.region {
+        MemRegion::Oam =>
+            match req.tag.id {
+                0u4 => 0x24u8,
+                1u4 => 0x00u8,
+                _ => 0u8,
+            },
+        MemRegion::Vram =>
+            match req.tag.id {
+                2u4 => 0x50u8,
+                3u4 => 0x30u8,
+                _ => 0u8,
+            },
+    }
+}
+
+fn ok_mem_resp(req: PpuMemReq) -> PpuMemResp {
+    let result = match req.kind {
+        PpuMemKind::Read => PpuMemResult::Ok$(data: response_data(req)),
+        PpuMemKind::Write$(data: data) => PpuMemResult::Ok$(data: data),
+    };
+    PpuMemResp$(tag: req.tag, result: result)
+}
+
+pub entity obj_transfer_live_test_top(clk_i: clock, rst_i: bool, dot_ce_i: bool) -> uint<59> {
+    decl state_reg;
+    decl pending_req_reg;
+    decl pending_resp_valid_reg;
+    let mem_resp_now = if pending_resp_valid_reg { ok_mem_resp(pending_req_reg) } else { idle_ppu_mem_resp() };
+    let step = step_dot(
+        state_reg,
+        DotInput$(bus_events: [idle_timed_ppu_event(); 4], bus_event_count: 0u4, mem_resp: mem_resp_now, dma_state: idle_oam_dma_state()),
+    );
+    let visible = held_dot_output(state_reg, dot_ce_i, step);
+    let trace = ppu_debug_trace(zero_video_coord(), visible);
+    let next_pending_req = if visible.mem_reqs.count != 0u3 { visible.mem_reqs.slots[0] } else { idle_ppu_mem_req() };
+
+    reg(clk_i) state_reg: PpuState reset(rst_i: seeded_state()) =
+        if dot_ce_i { visible.next_state } else { state_reg };
+    reg(clk_i) pending_req_reg: PpuMemReq reset(rst_i: idle_ppu_mem_req()) =
+        if dot_ce_i { next_pending_req } else { pending_req_reg };
+    reg(clk_i) pending_resp_valid_reg: bool reset(rst_i: false) =
+        if dot_ce_i { visible.mem_reqs.count != 0u3 } else { pending_resp_valid_reg };
+
+    zext(encode_fetcher_source(trace.fetcher.source))
+        | (zext(encode_fetcher_step(trace.fetcher.step)) << 2)
+        | (zext(visible.mem_reqs.count) << 5)
+        | (zext(trace.obj_fifo.count) << 8)
+        | (zext(next_pending_req.addr) << 13)
+        | (zext(encode_mem_region(next_pending_req.tag.region)) << 29)
+        | (zext(encode_mem_client(next_pending_req.tag.client)) << 30)
+        | (zext(next_pending_req.tag.id) << 33)
+        | (zext(lib::util::bit(pending_resp_valid_reg)) << 37)
+        | (zext(trace.line_objs.count) << 38)
+        | (zext(trace.ly_after) << 42)
+        | (zext(trace.dot_in_line_after) << 50)
+}

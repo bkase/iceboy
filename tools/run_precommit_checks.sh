@@ -48,6 +48,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/ppu/unit/test_bg_fifo.py"
     "test/ppu/unit/test_line_summary.py"
     "test/ppu/unit/test_scanout_blank.py"
+    "test/ppu/unit/test_obj_transfer_live.py"
     "test/unit/test_interrupt_service.py"
     "test/unit/test_joypad.py"
     "test/unit/test_joypad_interrupts.py"

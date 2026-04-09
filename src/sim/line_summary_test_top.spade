@@ -109,6 +109,8 @@ fn build_render_state(
         window_line: window_line_i,
         oam_scan: base.oam_scan,
         line_objs: build_line_objs(line_obj_count_i, slot0_i, slot1_i),
+        obj_fetch_ticket: base.obj_fetch_ticket,
+        obj_fetch_flags: base.obj_fetch_flags,
         fetcher: base.fetcher,
         bg_fifo: base.bg_fifo,
         obj_fifo: base.obj_fifo,
