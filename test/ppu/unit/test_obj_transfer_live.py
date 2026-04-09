@@ -159,6 +159,27 @@ async def test_two_objects_fetch_in_order_and_accumulate_penalty(dut):
 
 
 @cocotb.test()
+async def test_overlapping_objects_start_second_fetch_before_obj_fifo_drains(dut):
+    await reset_dut(dut, line_obj_count=2, ticket0_x=9, ticket1_x=11, start_x_out=1, start_dot_in_line=80)
+
+    snapshots = await run_steps(dut, 48)
+
+    saw_first_complete = any(s["line_obj_fetch_index"] >= 1 and s["obj_fifo_count"] > 0 for s in snapshots)
+    saw_overlapping_second_fetch = any(
+        s["line_obj_fetch_index"] == 1
+        and s["fetcher_source"] == FETCHER_OBJ
+        and s["mem_req_count"] > 0
+        and s["obj_fifo_count"] > 0
+        for s in snapshots
+    )
+    saw_second_complete = any(s["line_obj_fetch_index"] >= 2 for s in snapshots)
+
+    assert saw_first_complete, snapshots[-1]
+    assert saw_overlapping_second_fetch, snapshots[-1]
+    assert saw_second_complete, snapshots[-1]
+
+
+@cocotb.test()
 async def test_object_fetch_cancels_cleanly_when_transfer_ends(dut):
     await reset_dut(dut, line_obj_count=1, ticket0_x=159, start_x_out=151, start_dot_in_line=252)
 

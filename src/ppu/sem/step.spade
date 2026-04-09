@@ -399,7 +399,6 @@ fn has_pending_line_obj(render: PpuRenderState) -> bool {
 fn should_start_live_obj_fetch(render: PpuRenderState, regs: PpuRegs, x_out: uint<8>) -> bool {
     regs.lcdc.obj_enable
         && has_pending_line_obj(render)
-        && render.obj_fifo.count == 0u5
         && !fetcher_source_is_object(render)
         && x_out >= obj_trigger_x(line_obj_ticket_at(render.line_objs, render.line_obj_fetch_index))
 }
