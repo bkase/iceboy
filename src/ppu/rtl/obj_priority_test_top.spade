@@ -97,7 +97,7 @@ pub entity obj_priority_test_top(
     incoming_x_i: uint<8>,
     incoming_selection_rank_i: uint<4>,
 ) -> uint<58> {
-    let scan = OamScanState$(index: scan_index_i, found: found_i);
+    let scan = OamScanState$(index: scan_index_i, found: found_i, pending_y_valid: false, pending_y: 0u8);
     let line_objs = seeded_line_obj_list(count_i);
     let lcdc = build_test_lcdc(false, false, true, false, obj_size_8x16_i, obj_enable_i, bg_enable_i);
     let step = step_oam_scan_entry(scan, line_objs, ly_i, lcdc, scan_obj_y_i, scan_obj_x_i);

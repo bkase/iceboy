@@ -64,7 +64,7 @@ use lib::ppu::rtl::obj_fetch::{
     obj_fetch_tile_req,
     resolve_obj_meta,
 };
-use lib::ppu::rtl::oam_scan::step_oam_scan_entry;
+use lib::ppu::rtl::oam_scan::{oam_scan_req, step_oam_scan_entry};
 use lib::ppu::rtl::regs::{apply_mmio_write, set_lcd_enable};
 use lib::ppu::rtl::timing::{advance_run_state, advance_timing, handle_lcd_transition};
 
@@ -125,32 +125,8 @@ fn live_oam_scan_req(scan: OamScanState) -> PpuMemReqs {
     if scan.index >= 40u6 {
         idle_ppu_mem_reqs()
     } else {
-        let step = step_oam_scan_entry(
-            scan,
-            lib::ppu::sem::types::empty_line_obj_list(),
-            0u8,
-            lib::ppu::sem::types::zero_lcdc(),
-            0u8,
-            0u8,
-        );
-        PpuMemReqs$(count: 2u3, slots: [step.req_y, step.req_x, idle_ppu_mem_req(), idle_ppu_mem_req()])
-    }
-}
-
-fn oam_pair_advance_dot(dot_in_line: uint<9>) -> bool {
-    (dot_in_line & 1u9) == 1u9
-}
-
-fn advance_live_oam_scan(render: PpuRenderState, status_phase: PpuPhase, visible_ly: uint<8>, regs: PpuRegs) -> (OamScanState, LineObjList) {
-    match status_phase {
-        PpuPhase::OamScan$(index: _, found: _) =>
-            if oam_pair_advance_dot(render.dot_in_line) {
-                let step = step_oam_scan_entry(render.oam_scan, render.line_objs, visible_ly, regs.lcdc, 0u8, 0u8);
-                (step.next_scan, step.next_list)
-            } else {
-                (render.oam_scan, render.line_objs)
-            },
-        _ => (render.oam_scan, render.line_objs),
+        let req = if scan.pending_y_valid { oam_scan_req(scan.index, 1u2) } else { oam_scan_req(scan.index, 0u2) };
+        PpuMemReqs$(count: 1u3, slots: [req, idle_ppu_mem_req(), idle_ppu_mem_req(), idle_ppu_mem_req()])
     }
 }
 
@@ -159,6 +135,7 @@ fn update_render_state(
     status_phase: PpuPhase,
     visible_ly: uint<8>,
     regs: PpuRegs,
+    mem_resp: PpuMemResp,
     next_run: LcdRunState,
     next_phase: PpuPhase,
     line_start: bool,
@@ -167,7 +144,7 @@ fn update_render_state(
         if line_start {
             (lib::ppu::sem::types::empty_oam_scan_state(), lib::ppu::sem::types::empty_line_obj_list())
         } else {
-            advance_live_oam_scan(render, status_phase, visible_ly, regs)
+            advance_live_oam_scan(render, status_phase, visible_ly, regs, mem_resp)
         };
     let next_dot =
         if line_start {
@@ -364,6 +341,71 @@ fn same_mem_client(left: MemClient, right: MemClient) -> bool {
 
 fn same_mem_tag(left: MemTxnTag, right: MemTxnTag) -> bool {
     same_mem_region(left.region, right.region) && same_mem_client(left.client, right.client) && left.id == right.id
+}
+
+fn matching_oam_scan_resp(scan: OamScanState, resp: PpuMemResp) -> bool {
+    let expected_id = if scan.pending_y_valid { 1u4 } else { 0u4 };
+    mem_resp_valid(resp)
+        && same_mem_region(resp.tag.region, MemRegion::Oam)
+        && same_mem_client(resp.tag.client, MemClient::OamScanner)
+        && resp.tag.id == expected_id
+}
+
+fn oam_scan_resp_data(resp: PpuMemResp) -> uint<8> {
+    let (ok, data) = ok_resp_data(resp);
+    if ok { data } else { 0u8 }
+}
+
+fn advance_live_oam_scan(
+    render: PpuRenderState,
+    status_phase: PpuPhase,
+    visible_ly: uint<8>,
+    regs: PpuRegs,
+    mem_resp: PpuMemResp,
+) -> (OamScanState, LineObjList) {
+    match status_phase {
+        PpuPhase::OamScan$(index: _, found: _) =>
+            if matching_oam_scan_resp(render.oam_scan, mem_resp) {
+                let data = oam_scan_resp_data(mem_resp);
+                if render.oam_scan.pending_y_valid {
+                    let step = step_oam_scan_entry(
+                        lib::ppu::sem::types::OamScanState$(
+                            index: render.oam_scan.index,
+                            found: render.oam_scan.found,
+                            pending_y_valid: false,
+                            pending_y: 0u8,
+                        ),
+                        render.line_objs,
+                        visible_ly,
+                        regs.lcdc,
+                        render.oam_scan.pending_y,
+                        data,
+                    );
+                    (
+                        lib::ppu::sem::types::OamScanState$(
+                            index: step.next_scan.index,
+                            found: step.next_scan.found,
+                            pending_y_valid: false,
+                            pending_y: 0u8,
+                        ),
+                        step.next_list,
+                    )
+                } else {
+                    (
+                        lib::ppu::sem::types::OamScanState$(
+                            index: render.oam_scan.index,
+                            found: render.oam_scan.found,
+                            pending_y_valid: true,
+                            pending_y: data,
+                        ),
+                        render.line_objs,
+                    )
+                }
+            } else {
+                (render.oam_scan, render.line_objs)
+            },
+        _ => (render.oam_scan, render.line_objs),
+    }
 }
 
 fn fetcher_source_is_object(render: PpuRenderState) -> bool {
@@ -902,12 +944,7 @@ fn live_scanout_event(
 
 fn live_mem_reqs(state: PpuState) -> PpuMemReqs {
     match state.status.phase {
-        PpuPhase::OamScan$(index: _, found: _) =>
-            if oam_pair_advance_dot(state.render.dot_in_line) {
-                idle_ppu_mem_reqs()
-            } else {
-                live_oam_scan_req(state.render.oam_scan)
-            },
+        PpuPhase::OamScan$(index: _, found: _) => live_oam_scan_req(state.render.oam_scan),
         _ => idle_ppu_mem_reqs(),
     }
 }
@@ -965,6 +1002,7 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
                         state.status.phase,
                         state.visible.ly,
                         next_regs,
+                        input.mem_resp,
                         next_run,
                         next_phase,
                         line_start,

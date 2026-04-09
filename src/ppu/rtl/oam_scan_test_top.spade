@@ -38,7 +38,7 @@ pub entity oam_scan_test_top(
     found_i: uint<4>,
     count_i: uint<4>,
 ) -> uint<105> {
-    let scan = OamScanState$(index: scan_index_i, found: found_i);
+    let scan = OamScanState$(index: scan_index_i, found: found_i, pending_y_valid: false, pending_y: 0u8);
     let line_objs = seeded_line_obj_list(count_i);
     let step = step_oam_scan_entry(scan, line_objs, ly_i, build_test_lcdc(false, false, true, false, obj_size_8x16_i, true, true), obj_y_i, obj_x_i);
     let appended_slot = if count_i < 10u4 { count_i } else { 9u4 };

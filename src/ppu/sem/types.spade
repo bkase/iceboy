@@ -114,6 +114,8 @@ pub struct LineObjList {
 pub struct OamScanState {
     index: uint<6>,
     found: uint<4>,
+    pending_y_valid: bool,
+    pending_y: uint<8>,
 }
 
 pub enum FetcherSource {
@@ -263,7 +265,7 @@ pub fn empty_line_obj_list() -> LineObjList {
 }
 
 pub fn empty_oam_scan_state() -> OamScanState {
-    OamScanState$(index: 0u6, found: 0u4)
+    OamScanState$(index: 0u6, found: 0u4, pending_y_valid: false, pending_y: 0u8)
 }
 
 pub fn initial_fetcher_state() -> FetcherState {

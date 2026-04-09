@@ -95,7 +95,7 @@ pub fn step_oam_scan_entry(
                 line_objs
             };
         OamScanStepOutput$(
-            next_scan: OamScanState$(index: trunc(scan.index + 1u6), found: next_list.count),
+            next_scan: OamScanState$(index: trunc(scan.index + 1u6), found: next_list.count, pending_y_valid: false, pending_y: 0u8),
             next_list: next_list,
             overlap: overlap,
             selected: selected,
