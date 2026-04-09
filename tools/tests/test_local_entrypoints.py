@@ -274,6 +274,15 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((ROOT / "src" / "sim" / "line_summary_test_top.spade").exists())
         self.assertTrue((ROOT / "test" / "ppu" / "unit" / "test_line_summary.py").exists())
 
+    def test_scanout_blank_assets_exist(self) -> None:
+        run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
+        hook_text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
+        self.assertIn('"test_scanout_blank.py"', run_tests_text)
+        self.assertIn('"test/ppu/unit/test_scanout_blank.py"', run_tests_text)
+        self.assertIn('"test/ppu/unit/test_scanout_blank.py"', hook_text)
+        self.assertTrue((ROOT / "src" / "ppu" / "rtl" / "scanout_test_top.spade").exists())
+        self.assertTrue((ROOT / "test" / "ppu" / "unit" / "test_scanout_blank.py").exists())
+
     def test_sim_encode_module_centralizes_shared_sim_helpers(self) -> None:
         util_text = (ROOT / "src" / "util.spade").read_text(encoding="utf-8")
         encode_text = (ROOT / "src" / "sim" / "encode.spade").read_text(encoding="utf-8")
@@ -393,6 +402,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/ppu/unit/test_bg_fetcher.py"', text)
         self.assertIn('"test/ppu/unit/test_bg_fifo.py"', text)
         self.assertIn('"test/ppu/unit/test_line_summary.py"', text)
+        self.assertIn('"test/ppu/unit/test_scanout_blank.py"', text)
         self.assertIn('"test/ppu/unit/test_ppu_core_smoke.py"', text)
         self.assertIn('"test/ppu/unit/test_mixer.py"', text)
         self.assertIn('"test/ppu/unit/test_obj_observe.py"', text)

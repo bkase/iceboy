@@ -65,7 +65,7 @@ class RunTestsTest(unittest.TestCase):
         lines = coverage_lines(selected_tiers(["meta", "unit", "formal", "lockstep"]), nightly=False)
         self.assertEqual(lines[0], "Implemented tiers: 4/4")
         self.assertIn("Meta/Infrastructure: 36 suite(s)", lines)
-        self.assertIn("Unit Tests: 57 suite(s)", lines)
+        self.assertIn("Unit Tests: 58 suite(s)", lines)
         self.assertIn("Formal Verification: 7 suite(s)", lines)
         self.assertIn("Lockstep: 4 suite(s)", lines)
 
@@ -127,6 +127,7 @@ class RunTestsTest(unittest.TestCase):
         self.assertIn("test_obj_priority.py", unit_labels)
         self.assertIn("test_obj_fetch.py", unit_labels)
         self.assertIn("test_line_summary.py", unit_labels)
+        self.assertIn("test_scanout_blank.py", unit_labels)
         self.assertIn("test_semantics_flow.py", unit_labels)
         self.assertIn("test_rom_spram.py", unit_labels)
         self.assertIn("test_spram.py", unit_labels)

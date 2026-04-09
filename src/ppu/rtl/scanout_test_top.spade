@@ -1,0 +1,73 @@
+use std::option::Option;
+
+use lib::ppu::rtl::core::ppu_core;
+use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
+use lib::ppu::sem::events::{idle_oam_dma_state, zero_video_coord};
+use lib::ppu::sem::memory::idle_ppu_mem_resp;
+use lib::sim::encode::{encode_blank_reason, encode_scanout_kind, scanout_blank_reason, scanout_y};
+use lib::sim::ppu_support::{encode_ppu_phase, timed_events_from_direct};
+
+fn decode_mmio_reg(target_i: uint<4>) -> MmioReg {
+    match target_i {
+        1u4 => MmioReg::Stat,
+        2u4 => MmioReg::Scy,
+        3u4 => MmioReg::Scx,
+        4u4 => MmioReg::Lyc,
+        5u4 => MmioReg::Wy,
+        6u4 => MmioReg::Wx,
+        7u4 => MmioReg::Bgp,
+        8u4 => MmioReg::Obp0,
+        9u4 => MmioReg::Obp1,
+        _ => MmioReg::Lcdc,
+    }
+}
+
+pub entity scanout_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    dot_ce_i: bool,
+    write_valid_i: bool,
+    write_target_i: uint<4>,
+    write_value_i: uint<8>,
+) -> uint<24> {
+    let write =
+        if write_valid_i {
+            Option::Some(MmioWrite$(target: decode_mmio_reg(write_target_i), value: write_value_i))
+        } else {
+            Option::None
+        };
+    let (bus_events, bus_event_count) = timed_events_from_direct(zero_video_coord(), 0u64, write, Option::None);
+    let core = inst ppu_core(
+        clk_i,
+        rst_i,
+        dot_ce_i,
+        zero_video_coord(),
+        bus_events,
+        bus_event_count,
+        idle_ppu_mem_resp(),
+        idle_oam_dma_state(),
+    );
+    let scanout_valid = match core.scanout {
+        Option::Some(_) => true,
+        Option::None => false,
+    };
+    let scanout_kind = match core.scanout {
+        Option::Some(event) => encode_scanout_kind(event),
+        Option::None => 0u2,
+    };
+    let scanout_y_value = match core.scanout {
+        Option::Some(event) => scanout_y(event),
+        Option::None => 0u8,
+    };
+    let blank_reason_value = match core.scanout {
+        Option::Some(event) => scanout_blank_reason(event),
+        Option::None => 0u2,
+    };
+
+    zext(encode_ppu_phase(core.trace.phase_after))
+        | (zext(core.trace.ly_after) << 3)
+        | (zext(lib::util::bit(scanout_valid)) << 11)
+        | (zext(scanout_kind) << 12)
+        | (zext(scanout_y_value) << 14)
+        | (zext(blank_reason_value) << 22)
+}

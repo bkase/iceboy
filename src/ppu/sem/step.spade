@@ -13,6 +13,7 @@ use lib::ppu::sem::observe::{
     idle_ppu_mmio_resp,
 };
 use lib::ppu::sem::profiles::dmg_behavior_config;
+use lib::ppu::sem::scanout::{BlankReason, ScanoutEvent, blank_scanout_event};
 use lib::ppu::sem::types::{
     LcdRunState,
     PpuIrqReq,
@@ -200,6 +201,29 @@ fn completed_line_summary(prev_state: PpuState, next_state: PpuState) -> Option<
     }
 }
 
+fn blank_reason(state: PpuState) -> BlankReason {
+    match state.status.run {
+        LcdRunState::Disabled => BlankReason::LcdDisabled,
+        LcdRunState::WarmupBlankFrame => BlankReason::WarmupBlankFrame,
+        LcdRunState::Running =>
+            if state.visible.ly >= 144u8 {
+                BlankReason::NonVisibleLine
+            } else {
+                BlankReason::NonVisibleDot
+            },
+    }
+}
+
+fn live_scanout_event(next_state: PpuState, line_start: bool, frame_start: bool) -> Option<ScanoutEvent> {
+    if frame_start {
+        Option::Some(ScanoutEvent::FrameStart)
+    } else if line_start {
+        Option::Some(ScanoutEvent::LineStart$(y: next_state.visible.ly))
+    } else {
+        Option::Some(blank_scanout_event(next_state.visible.ly, blank_reason(next_state)))
+    }
+}
+
 pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
     let (written_regs, stat_write_seen, force_enable, force_disable) = fold_events(input, state.visible.regs);
     let stored_lcd_enable =
@@ -231,23 +255,27 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
     let old_lcdc7 = state.visible.regs.lcdc.lcd_enable;
     let transition_taken = old_lcdc7 != requested_lcd_enable;
     let transition_state = handle_lcd_transition(state_with_regs, old_lcdc7, requested_lcd_enable);
-    let candidate_state =
+    let (candidate_state, line_start, frame_start) =
         if transition_taken {
-            transition_state
+            (transition_state, false, false)
         } else {
             let (next_phase, next_ly, next_sampled, line_start, frame_start) = advance_timing(state_with_regs, input, next_regs);
             let next_run = advance_run_state(state.status.run, frame_start);
             let next_visible = PpuVisibleState$(regs: next_regs, ly: next_ly);
-            PpuState$(
-                visible: next_visible,
-                status: PpuStatusState$(
-                    run: next_run,
-                    phase: next_phase,
-                    stat_irq: state.status.stat_irq,
-                    lyc_match_flag: state.status.lyc_match_flag,
+            (
+                PpuState$(
+                    visible: next_visible,
+                    status: PpuStatusState$(
+                        run: next_run,
+                        phase: next_phase,
+                        stat_irq: state.status.stat_irq,
+                        lyc_match_flag: state.status.lyc_match_flag,
+                    ),
+                    sampled: next_sampled,
+                    render: update_render_state(state.render, next_run, next_phase, line_start),
                 ),
-                sampled: next_sampled,
-                render: update_render_state(state.render, next_run, next_phase, line_start),
+                line_start,
+                frame_start,
             )
         };
     let candidate_lyc_match_flag =
@@ -315,13 +343,14 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
         scanout: Option::None,
     );
     let line_summary = completed_line_summary(state, final_state);
+    let scanout = live_scanout_event(final_state, line_start, frame_start);
 
     DotOutput$(
         next_state: final_state,
         mem_reqs: idle_ppu_mem_reqs(),
         mmio_resp: idle_ppu_mmio_resp(),
         irq_req: next_irq_req,
-        scanout: Option::None,
+        scanout: scanout,
         semantic: Option::Some(semantic),
         line_summary: line_summary,
     )

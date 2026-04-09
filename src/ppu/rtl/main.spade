@@ -15,6 +15,7 @@ pub mod obj_fetch_test_top;
 pub mod oam_scan;
 pub mod oam_scan_test_top;
 pub mod regs;
+pub mod scanout_test_top;
 pub mod tile;
 pub mod tile_test_top;
 pub mod timing;
