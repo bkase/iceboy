@@ -19,6 +19,7 @@ use lib::ppu::sem::types::{
     empty_oam_scan_state,
     initial_fetcher_state,
 };
+use lib::sim::encode::{encode_scanout_kind, scanout_shade, scanout_source, scanout_x};
 use lib::sim::ppu_support::{build_test_lcdc, held_dot_output, ppu_debug_trace};
 
 fn configured_ticket(oam_index: uint<6>, x: uint<8>, selection_rank: uint<4>) -> SelectedObjTicket {
@@ -165,7 +166,7 @@ pub entity obj_transfer_live_test_top(
     ticket1_x_i: uint<8>,
     start_x_out_i: uint<8>,
     start_dot_in_line_i: uint<9>,
-) -> uint<77> {
+) -> uint<89> {
     decl state_reg;
     decl pending_req_reg;
     decl pending_resp_valid_reg;
@@ -177,6 +178,26 @@ pub entity obj_transfer_live_test_top(
     let visible = held_dot_output(state_reg, dot_ce_i, step);
     let trace = ppu_debug_trace(zero_video_coord(), visible);
     let next_pending_req = if visible.mem_reqs.count != 0u3 { visible.mem_reqs.slots[0] } else { idle_ppu_mem_req() };
+    let scanout_valid = match visible.scanout {
+        std::option::Option::Some(_) => true,
+        std::option::Option::None => false,
+    };
+    let scanout_kind = match visible.scanout {
+        std::option::Option::Some(event) => encode_scanout_kind(event),
+        std::option::Option::None => 0u2,
+    };
+    let scanout_source_value = match visible.scanout {
+        std::option::Option::Some(event) => scanout_source(event),
+        std::option::Option::None => 0u2,
+    };
+    let scanout_x_value = match visible.scanout {
+        std::option::Option::Some(event) => scanout_x(event),
+        std::option::Option::None => 0u8,
+    };
+    let scanout_shade_value = match visible.scanout {
+        std::option::Option::Some(event) => scanout_shade(event),
+        std::option::Option::None => 0u2,
+    };
 
     reg(clk_i) state_reg: PpuState reset(rst_i: seeded_state(line_obj_count_i, ticket0_x_i, ticket1_x_i, start_x_out_i, start_dot_in_line_i)) =
         if dot_ce_i { visible.next_state } else { state_reg };
@@ -200,4 +221,9 @@ pub entity obj_transfer_live_test_top(
         | (zext(trace.ly_after) << 54)
         | (zext(trace.dot_in_line_after) << 62)
         | (zext(lib::sim::ppu_support::encode_ppu_phase(trace.phase_after)) << 71)
+        | (zext(lib::util::bit(scanout_valid)) << 74)
+        | (zext(scanout_kind) << 75)
+        | (zext(scanout_source_value) << 77)
+        | (zext(scanout_x_value) << 79)
+        | (zext(scanout_shade_value) << 87)
 }

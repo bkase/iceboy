@@ -17,6 +17,8 @@ MEM_CLIENT_OBJ_FETCHER = 2
 
 PHASE_TRANSFER = 2
 PHASE_HBLANK = 3
+SCANOUT_PIXEL = 0
+PIXEL_SOURCE_OBJECT = 2
 
 def decode_output(value: int) -> dict[str, int | bool]:
     return {
@@ -35,6 +37,11 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "ly": (value >> 54) & 0xFF,
         "dot_in_line": (value >> 62) & 0x1FF,
         "phase": (value >> 71) & 0x7,
+        "scanout_valid": bool((value >> 74) & 0x1),
+        "scanout_kind": (value >> 75) & 0x3,
+        "scanout_source": (value >> 77) & 0x3,
+        "scanout_x": (value >> 79) & 0xFF,
+        "scanout_shade": (value >> 87) & 0x3,
     }
 
 
@@ -120,6 +127,25 @@ async def test_transfer_drives_live_object_fetch_requests_and_fifo_fill(dut):
     assert saw_oam_req, last
     assert saw_vram_req, last
     assert saw_obj_fifo, last
+
+
+@cocotb.test()
+async def test_seeded_object_fetch_reaches_object_pixel_scanout(dut):
+    await reset_dut(dut, line_obj_count=1, ticket0_x=9, start_x_out=1, start_dot_in_line=80)
+
+    snapshots = await run_steps(dut, 48)
+
+    object_pixels = [
+        s for s in snapshots
+        if s["scanout_valid"]
+        and s["scanout_kind"] == SCANOUT_PIXEL
+        and s["scanout_source"] == PIXEL_SOURCE_OBJECT
+    ]
+
+    assert object_pixels, snapshots
+    assert object_pixels[0]["scanout_x"] >= 1, object_pixels[0]
+    assert object_pixels[0]["scanout_shade"] != 0, object_pixels[0]
+    assert object_pixels[-1]["scanout_x"] > object_pixels[0]["scanout_x"], object_pixels
 
 
 @cocotb.test()
