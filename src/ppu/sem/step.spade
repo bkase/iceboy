@@ -3,9 +3,11 @@ use std::option::Option;
 use lib::ppu::sem::events::DotInput;
 use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
 use lib::ppu::sem::events::{PpuEventKind, TimedPpuEvent};
+use lib::ppu::sem::memory::{PpuMemReq, idle_ppu_mem_req};
 use lib::ppu::sem::observe::{
     DotOutput,
     LineSummary,
+    PpuMemReqs,
     PpuIrqEdge,
     PpuSemanticCommit,
     basic_line_summary,
@@ -16,6 +18,8 @@ use lib::ppu::sem::profiles::dmg_behavior_config;
 use lib::ppu::sem::scanout::{BlankReason, ScanoutEvent, blank_scanout_event};
 use lib::ppu::sem::types::{
     LcdRunState,
+    LineObjList,
+    OamScanState,
     PpuIrqReq,
     PpuPhase,
     PpuRegs,
@@ -27,6 +31,7 @@ use lib::ppu::sem::types::{
     visible_mode,
 };
 use lib::ppu::rtl::irq::irq_req;
+use lib::ppu::rtl::oam_scan::step_oam_scan_entry;
 use lib::ppu::rtl::regs::{apply_mmio_write, set_lcd_enable};
 use lib::ppu::rtl::timing::{advance_run_state, advance_timing, handle_lcd_transition};
 
@@ -83,12 +88,54 @@ fn next_first_frame_blank(run: LcdRunState) -> bool {
     }
 }
 
+fn live_oam_scan_req(scan: OamScanState) -> PpuMemReqs {
+    if scan.index >= 40u6 {
+        idle_ppu_mem_reqs()
+    } else {
+        let step = step_oam_scan_entry(
+            scan,
+            lib::ppu::sem::types::empty_line_obj_list(),
+            0u8,
+            lib::ppu::sem::types::zero_lcdc(),
+            0u8,
+            0u8,
+        );
+        PpuMemReqs$(count: 2u3, slots: [step.req_y, step.req_x, idle_ppu_mem_req(), idle_ppu_mem_req()])
+    }
+}
+
+fn oam_pair_advance_dot(dot_in_line: uint<9>) -> bool {
+    (dot_in_line & 1u9) == 1u9
+}
+
+fn advance_live_oam_scan(render: PpuRenderState, status_phase: PpuPhase, visible_ly: uint<8>, regs: PpuRegs) -> (OamScanState, LineObjList) {
+    match status_phase {
+        PpuPhase::OamScan$(index: _, found: _) =>
+            if oam_pair_advance_dot(render.dot_in_line) {
+                let step = step_oam_scan_entry(render.oam_scan, render.line_objs, visible_ly, regs.lcdc, 0u8, 0u8);
+                (step.next_scan, step.next_list)
+            } else {
+                (render.oam_scan, render.line_objs)
+            },
+        _ => (render.oam_scan, render.line_objs),
+    }
+}
+
 fn update_render_state(
     render: PpuRenderState,
+    status_phase: PpuPhase,
+    visible_ly: uint<8>,
+    regs: PpuRegs,
     next_run: LcdRunState,
     next_phase: PpuPhase,
     line_start: bool,
 ) -> PpuRenderState {
+    let (next_scan, next_list) =
+        if line_start {
+            (lib::ppu::sem::types::empty_oam_scan_state(), lib::ppu::sem::types::empty_line_obj_list())
+        } else {
+            advance_live_oam_scan(render, status_phase, visible_ly, regs)
+        };
     let next_dot =
         if line_start {
             0u9
@@ -104,8 +151,8 @@ fn update_render_state(
         x_out: next_x_out,
         window_state: render.window_state,
         window_line: render.window_line,
-        oam_scan: render.oam_scan,
-        line_objs: render.line_objs,
+        oam_scan: next_scan,
+        line_objs: next_list,
         fetcher: render.fetcher,
         bg_fifo: render.bg_fifo,
         obj_fifo: render.obj_fifo,
@@ -224,6 +271,18 @@ fn live_scanout_event(next_state: PpuState, line_start: bool, frame_start: bool)
     }
 }
 
+fn live_mem_reqs(state: PpuState) -> PpuMemReqs {
+    match state.status.phase {
+        PpuPhase::OamScan$(index: _, found: _) =>
+            if oam_pair_advance_dot(state.render.dot_in_line) {
+                idle_ppu_mem_reqs()
+            } else {
+                live_oam_scan_req(state.render.oam_scan)
+            },
+        _ => idle_ppu_mem_reqs(),
+    }
+}
+
 pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
     let (written_regs, stat_write_seen, force_enable, force_disable) = fold_events(input, state.visible.regs);
     let stored_lcd_enable =
@@ -272,7 +331,15 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
                         lyc_match_flag: state.status.lyc_match_flag,
                     ),
                     sampled: next_sampled,
-                    render: update_render_state(state.render, next_run, next_phase, line_start),
+                    render: update_render_state(
+                        state.render,
+                        state.status.phase,
+                        state.visible.ly,
+                        next_regs,
+                        next_run,
+                        next_phase,
+                        line_start,
+                    ),
                 ),
                 line_start,
                 frame_start,
@@ -344,10 +411,11 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
     );
     let line_summary = completed_line_summary(state, final_state);
     let scanout = live_scanout_event(final_state, line_start, frame_start);
+    let mem_reqs = live_mem_reqs(state);
 
     DotOutput$(
         next_state: final_state,
-        mem_reqs: idle_ppu_mem_reqs(),
+        mem_reqs: mem_reqs,
         mmio_resp: idle_ppu_mmio_resp(),
         irq_req: next_irq_req,
         scanout: scanout,

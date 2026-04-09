@@ -127,11 +127,16 @@ async def test_oam_scan_keeps_fetcher_and_fifos_quiet(dut):
     metrics = (await read_ppu_power_metrics(dut)).subtract(metrics_start)
     append_metrics_artifact(SUITE_LABEL, "test_oam_scan_keeps_fetcher_and_fifos_quiet", metrics)
 
+    assert last["oam_scan_index"] > 0
+    assert last["bg_fifo_count"] == 0
+    assert last["obj_fifo_count"] == 0
+    assert last["pixel_emit"] == 0
     assert metrics.total_dots == 32
+    assert metrics.mem_req_cycles > 0
     assert metrics.pixel_emit_cycles == 0
     assert metrics.ly_mode_mutation_cycles == 0
     assert metrics.window_mutation_cycles == 0
-    assert metrics.oam_scan_mutation_cycles == 0
+    assert metrics.oam_scan_mutation_cycles > 0
     assert metrics.fetcher_mutation_cycles == 0
     assert metrics.bg_fifo_mutation_cycles == 0
     assert metrics.obj_fifo_mutation_cycles == 0

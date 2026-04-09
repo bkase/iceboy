@@ -163,3 +163,29 @@ async def test_obj_observe_surface_stays_well_formed_across_phase_progression(du
     assert 0 <= int(hblank["fetcher_map_x"]) <= 31, hblank
     assert 0 <= int(hblank["fetcher_map_y"]) <= 31, hblank
     assert 0 <= int(hblank["window_line"]) <= 143, hblank
+
+
+@cocotb.test()
+async def test_obj_observe_live_oam_cadence_advances_index_every_two_dots(dut):
+    await reset_dut(dut)
+
+    first = await step(dut)
+    second = await step(dut)
+    third = await step(dut)
+    fourth = await step(dut)
+
+    assert first["phase"] == PHASE_OAM, first
+    assert first["mem_req_count"] == 0, first
+    assert first["oam_index"] == 1, first
+
+    assert second["phase"] == PHASE_OAM, second
+    assert second["mem_req_count"] == 2, second
+    assert second["oam_index"] == 1, second
+
+    assert third["phase"] == PHASE_OAM, third
+    assert third["mem_req_count"] == 0, third
+    assert third["oam_index"] == 2, third
+
+    assert fourth["phase"] == PHASE_OAM, fourth
+    assert fourth["mem_req_count"] == 2, fourth
+    assert fourth["oam_index"] == 2, fourth
