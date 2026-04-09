@@ -1,12 +1,12 @@
 use std::option::Option;
-use lib::cpu::types::IrqAck;
+use lib::cpu::types::{IrqAck, no_irq_ack};
 use lib::periph::interrupts::interrupts;
 
 fn irq_ack_from_inputs(valid: bool, ack_bit: uint<3>) -> IrqAck {
     if valid {
         IrqAck$(ack_bit: Option::Some(ack_bit))
     } else {
-        IrqAck$(ack_bit: Option::None)
+        no_irq_ack()
     }
 }
 
