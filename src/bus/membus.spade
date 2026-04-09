@@ -49,34 +49,6 @@ fn req_owner(req: BusReq) -> BusOwner {
     }
 }
 
-fn region_is_hram(region: BusRegion) -> bool {
-    match region {
-        BusRegion::Hram => true,
-        _ => false,
-    }
-}
-
-fn region_is_io(region: BusRegion) -> bool {
-    match region {
-        BusRegion::Io => true,
-        _ => false,
-    }
-}
-
-fn region_is_vram(region: BusRegion) -> bool {
-    match region {
-        BusRegion::Vram => true,
-        _ => false,
-    }
-}
-
-fn region_is_oam(region: BusRegion) -> bool {
-    match region {
-        BusRegion::Oam => true,
-        _ => false,
-    }
-}
-
 fn region_is_cpu_writable(region: BusRegion) -> bool {
     match region {
         BusRegion::Wram => true,
@@ -95,11 +67,22 @@ fn owner_is_cpu(owner: BusOwner) -> bool {
 }
 
 fn region_owner(region: BusRegion, oam_dma_active: bool, ppu_vram_active: bool, ppu_oam_active: bool) -> BusOwner {
-    if oam_dma_active && !(region_is_hram(region) || region_is_io(region)) {
+    if oam_dma_active
+        && !match region {
+            BusRegion::Hram => true,
+            BusRegion::Io => true,
+            _ => false,
+        } {
         BusOwner::OamDma
-    } else if ppu_vram_active && region_is_vram(region) {
+    } else if ppu_vram_active && match region {
+        BusRegion::Vram => true,
+        _ => false,
+    } {
         BusOwner::Ppu
-    } else if ppu_oam_active && region_is_oam(region) {
+    } else if ppu_oam_active && match region {
+        BusRegion::Oam => true,
+        _ => false,
+    } {
         BusOwner::Ppu
     } else {
         BusOwner::Cpu
