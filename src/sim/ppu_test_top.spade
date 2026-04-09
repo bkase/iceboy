@@ -36,7 +36,7 @@ struct PpuTestTopOut {
     state_export: PpuSimSnapshot,
 }
 
-entity ppu_test_top(
+pub entity ppu_test_top(
     clk: clock,
     rst: bool,
     dot_ce: bool,

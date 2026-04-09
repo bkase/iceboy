@@ -1,9 +1,8 @@
 # AGENTS.md
 
-Always do the following:
+If you are working on a bead, commit after each bead is complete, and do NOT skip hooks
+Do not run `tools/run_precommit_checks.sh` manually before `git commit`; rely on the commit hook to run it once unless a user explicitly asks for a standalone precommit run.
 
-1. Make beads first
-2. Commit after each bead is complete, do NOT skip hooks
 <!-- br-agent-instructions-v1 -->
 
 ---
@@ -57,7 +56,7 @@ br sync --status      # Check sync status
 git status              # Check what changed
 git add <files>         # Stage code changes
 br sync --flush-only    # Export beads changes to JSONL
-git commit -m "..."     # Commit everything
+git commit -m "..."     # Commit everything; let the commit hook run precommit checks
 git push                # Push to remote
 ```
 
@@ -68,6 +67,7 @@ git push                # Push to remote
 - Create new issues with `br create` when you discover tasks
 - Use descriptive titles and set appropriate priority/type
 - Always sync before ending session
+- Do not run the full precommit script manually right before commit unless explicitly requested; the commit hook already runs it
 - Use `Scripts/swiftpm-cache.sh` wrappers instead of raw `swift build`, `swift test`, or `swift run` in repo scripts and repeated local workflows
 - Debug/test/run cache: `.build/apus-debug`
 - Release/benchmark cache: `.build/apus-release`

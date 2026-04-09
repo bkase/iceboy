@@ -1,0 +1,142 @@
+use lib::ppu::sem::events::{PpuEventKind, TimedPpuEvent, idle_oam_dma_state, zero_video_coord, idle_timed_ppu_event};
+use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
+use lib::ppu::sem::memory::{MemClient, MemRegion, PpuMemKind, PpuMemReq, PpuMemResp, PpuMemResult, idle_ppu_mem_req, idle_ppu_mem_resp};
+use lib::ppu::sem::observe::{PpuIrqEdge, PpuSemanticCommit, idle_ppu_semantic_commit};
+use lib::ppu::sem::scanout::ScanoutEvent;
+use lib::sim::encode::{encode_scanout_kind, scanout_y};
+use lib::sim::ppu_support::encode_ppu_mode;
+use lib::sim::trace_observe_top::trace_observe_top;
+
+fn encode_irq_edge(edge: PpuIrqEdge) -> uint<2> {
+    match edge {
+        PpuIrqEdge::None => 0u2,
+        PpuIrqEdge::VBlank => 1u2,
+        PpuIrqEdge::Stat => 2u2,
+        PpuIrqEdge::Both => 3u2,
+    }
+}
+
+fn encode_mem_region(region: MemRegion) -> uint<1> {
+    match region {
+        MemRegion::Vram => 0u1,
+        MemRegion::Oam => 1u1,
+    }
+}
+
+fn encode_mem_client(client: MemClient) -> uint<3> {
+    match client {
+        MemClient::Cpu => 0u3,
+        MemClient::BgFetcher => 1u3,
+        MemClient::ObjFetcher => 2u3,
+        MemClient::OamScanner => 3u3,
+        MemClient::Dma => 4u3,
+    }
+}
+
+fn response_data(req: PpuMemReq) -> uint<8> {
+    match req.tag.region {
+        MemRegion::Oam => trunc((req.addr & 0x00ffu16) ^ 0x0033u16),
+        MemRegion::Vram => trunc((req.addr & 0x00ffu16) ^ 0x005au16),
+    }
+}
+
+fn ok_mem_resp(req: PpuMemReq) -> PpuMemResp {
+    let result = match req.kind {
+        PpuMemKind::Read => PpuMemResult::Ok$(data: response_data(req)),
+        PpuMemKind::Write$(data: data) => PpuMemResult::Ok$(data: data),
+    };
+    PpuMemResp$(tag: req.tag, result: result)
+}
+
+fn semantic_or_idle(semantic: Option<PpuSemanticCommit>) -> PpuSemanticCommit {
+    match semantic {
+        Option::Some(commit) => commit,
+        Option::None => idle_ppu_semantic_commit(),
+    }
+}
+
+fn scanout_or_blank(scanout: Option<ScanoutEvent>) -> ScanoutEvent {
+    match scanout {
+        Option::Some(event) => event,
+        Option::None => ScanoutEvent::FrameStart,
+    }
+}
+
+fn scanout_valid(scanout: Option<ScanoutEvent>) -> bool {
+    match scanout {
+        Option::Some(_) => true,
+        Option::None => false,
+    }
+}
+
+fn enable_lcdc_events(enable_sent: bool) -> ([TimedPpuEvent; 4], uint<4>) {
+    let idle = idle_timed_ppu_event();
+    if !enable_sent {
+        (
+            [
+                TimedPpuEvent$(
+                    seq: 0u64,
+                    at: zero_video_coord(),
+                    kind: PpuEventKind::MmioWrite$(write: MmioWrite$(target: MmioReg::Lcdc, value: 0x91u8)),
+                ),
+                TimedPpuEvent$(
+                    seq: 1u64,
+                    at: zero_video_coord(),
+                    kind: PpuEventKind::ForceLcdPower$(enabled: true),
+                ),
+                idle,
+                idle,
+            ],
+            2u4,
+        )
+    } else {
+        ([idle, idle, idle, idle], 0u4)
+    }
+}
+
+pub entity backend_diff_trace_top(
+    clk_i: clock,
+    rst_i: bool,
+    dot_ce_i: bool,
+) -> uint<53> {
+    decl pending_req_reg;
+    decl pending_resp_valid_reg;
+    decl enable_sent_reg;
+    let mem_resp_now = if pending_resp_valid_reg { ok_mem_resp(pending_req_reg) } else { idle_ppu_mem_resp() };
+    let (bus_events, bus_event_count) = enable_lcdc_events(enable_sent_reg);
+    let top = inst trace_observe_top(
+        clk_i,
+        rst_i,
+        dot_ce_i,
+        zero_video_coord(),
+        bus_events,
+        bus_event_count,
+        mem_resp_now,
+        idle_oam_dma_state(),
+    );
+    let trace = top.trace;
+    let semantic = semantic_or_idle(trace.semantic);
+    let next_pending_req = if trace.mem_reqs.count != 0u3 { trace.mem_reqs.slots[0] } else { idle_ppu_mem_req() };
+    let scanout = scanout_or_blank(trace.scanout);
+
+    reg(clk_i) pending_req_reg: PpuMemReq reset(rst_i: idle_ppu_mem_req()) =
+        if dot_ce_i { next_pending_req } else { pending_req_reg };
+    reg(clk_i) pending_resp_valid_reg: bool reset(rst_i: false) =
+        if dot_ce_i { trace.mem_reqs.count != 0u3 } else { pending_resp_valid_reg };
+    reg(clk_i) enable_sent_reg: bool reset(rst_i: false) =
+        if dot_ce_i { true } else { enable_sent_reg };
+
+    zext(semantic.ly_after)
+        | (zext(encode_ppu_mode(semantic.mode_after)) << 8)
+        | (zext(lib::util::bit(semantic.stat_line_after)) << 11)
+        | (zext(encode_irq_edge(semantic.irq_edge)) << 12)
+        | (zext(lib::util::bit(scanout_valid(trace.scanout))) << 14)
+        | (zext(encode_scanout_kind(scanout)) << 15)
+        | (zext(scanout_y(scanout)) << 17)
+        | (zext(trace.mem_reqs.count) << 25)
+        | (zext(next_pending_req.addr) << 28)
+        | (zext(encode_mem_region(next_pending_req.tag.region)) << 44)
+        | (zext(encode_mem_client(next_pending_req.tag.client)) << 45)
+        | (zext(next_pending_req.tag.id) << 48)
+        | (zext(lib::util::bit(match trace.semantic { Option::Some(_) => true, Option::None => false })) << 52)
+}

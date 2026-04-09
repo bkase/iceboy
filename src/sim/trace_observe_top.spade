@@ -11,7 +11,7 @@ struct TraceObserveTopOut {
     trace: PpuDebugTrace,
 }
 
-entity trace_observe_top(
+pub entity trace_observe_top(
     clk: clock,
     rst: bool,
     dot_ce: bool,

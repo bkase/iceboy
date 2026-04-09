@@ -3,13 +3,17 @@ description: Nightly PPU backend-differential capture comparisons.
 scenarios:
   - name: warmup_blank_smoke
     description: >
-      Compare a minimal early-frame semantic capture across the trivial sim-array
-      backend and the inferred-RAM backend. This is the first backend-diff lane;
-      live memory-traffic activation remains a follow-up once step_dot emits
-      non-idle mem_reqs.
-    sim_array_capture: ../../test/ppu/backend_diff/fixtures/warmup_blank_sim_array.json
-    inferred_ram_capture: ../../test/ppu/backend_diff/fixtures/warmup_blank_inferred_ram.json
+      Compare deterministic live OAM-scan captures generated from the direct
+      ppu_test_top and trace_observe_top surfaces once step_dot emits non-idle
+      memory requests. This activates the nightly lane with real live traffic
+      instead of checked-in placeholder fixtures.
+    sim_array_generator:
+      runner: swim
+      target: test/ppu/backend_diff/test_backend_diff_capture_ppu_test_top.py
+      dots: 520
+    inferred_ram_generator:
+      runner: swim
+      target: test/ppu/backend_diff/test_backend_diff_capture_trace_top.py
+      dots: 520
     scopes:
       - dot_commit
-      - scanline_summary
-      - frame_hash

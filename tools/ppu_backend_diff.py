@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -23,8 +26,10 @@ DEFAULT_MANIFEST = ROOT / "bench" / "manifests" / "ppu_backend_diff_scenarios.ya
 class BackendDiffScenario:
     name: str
     description: str
-    sim_array_capture: Path
-    inferred_ram_capture: Path
+    sim_array_capture: Path | None
+    inferred_ram_capture: Path | None
+    sim_array_generator: "BackendDiffGenerator | None"
+    inferred_ram_generator: "BackendDiffGenerator | None"
     scopes: tuple[PpuCompareScope, ...]
 
 
@@ -37,6 +42,13 @@ class BackendDiffOutcome:
     field_path: str | None
     expected: Any
     actual: Any
+
+
+@dataclass(frozen=True)
+class BackendDiffGenerator:
+    runner: str
+    target: str
+    dots: int = 8
 
 
 def _resolve_path(base: Path, raw: object) -> Path:
@@ -57,6 +69,22 @@ def _parse_scopes(raw: object) -> tuple[PpuCompareScope, ...]:
     return tuple(scopes)
 
 
+def _parse_generator(raw: object) -> BackendDiffGenerator | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("scenario generator must be a mapping")
+    runner = str(raw.get("runner", ""))
+    target = str(raw.get("target", ""))
+    if not runner or not target:
+        raise ValueError("scenario generator requires runner and target")
+    dots_raw = raw.get("dots", 8)
+    dots = int(dots_raw)
+    if dots <= 0:
+        raise ValueError("scenario generator dots must be positive")
+    return BackendDiffGenerator(runner=runner, target=target, dots=dots)
+
+
 def load_manifest(path: Path = DEFAULT_MANIFEST) -> tuple[BackendDiffScenario, ...]:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -73,8 +101,16 @@ def load_manifest(path: Path = DEFAULT_MANIFEST) -> tuple[BackendDiffScenario, .
             BackendDiffScenario(
                 name=str(raw["name"]),
                 description=str(raw["description"]),
-                sim_array_capture=_resolve_path(path.parent, raw["sim_array_capture"]),
-                inferred_ram_capture=_resolve_path(path.parent, raw["inferred_ram_capture"]),
+                sim_array_capture=(
+                    None if raw.get("sim_array_capture") is None else _resolve_path(path.parent, raw["sim_array_capture"])
+                ),
+                inferred_ram_capture=(
+                    None
+                    if raw.get("inferred_ram_capture") is None
+                    else _resolve_path(path.parent, raw["inferred_ram_capture"])
+                ),
+                sim_array_generator=_parse_generator(raw.get("sim_array_generator")),
+                inferred_ram_generator=_parse_generator(raw.get("inferred_ram_generator")),
                 scopes=_parse_scopes(raw["scopes"]),
             )
         )
@@ -86,6 +122,36 @@ def load_capture(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"{path} must contain a JSON object")
     return payload
+
+
+def materialize_capture(
+    scenario: BackendDiffScenario,
+    side: str,
+    *,
+    temp_dir: Path,
+) -> Path:
+    capture = getattr(scenario, f"{side}_capture")
+    generator = getattr(scenario, f"{side}_generator")
+    if capture is not None and generator is None:
+        return capture
+    if generator is None:
+        raise ValueError(f"{scenario.name} {side} requires either a capture path or a generator")
+    if generator.runner != "swim":
+        raise ValueError(f"unsupported backend diff generator runner: {generator.runner}")
+
+    target = temp_dir / f"{scenario.name}_{side}.json"
+    env = os.environ.copy()
+    env["ICEBOY_BACKEND_DIFF_CAPTURE_PATH"] = str(target)
+    env["ICEBOY_BACKEND_DIFF_SCENARIO"] = scenario.name
+    env["ICEBOY_BACKEND_DIFF_BACKEND"] = side
+    env["ICEBOY_BACKEND_DIFF_CAPTURE_DOTS"] = str(generator.dots)
+    subprocess.run(
+        [str(Path.home() / ".cargo" / "bin" / "swim"), "test", generator.target],
+        cwd=ROOT,
+        env=env,
+        check=True,
+    )
+    return target
 
 
 def _stream_for_scope(capture: dict[str, Any], scope: PpuCompareScope) -> list[Any]:
@@ -101,29 +167,31 @@ def _stream_for_scope(capture: dict[str, Any], scope: PpuCompareScope) -> list[A
 
 
 def compare_scenario(scenario: BackendDiffScenario) -> tuple[BackendDiffOutcome, ...]:
-    sim_array = load_capture(scenario.sim_array_capture)
-    inferred_ram = load_capture(scenario.inferred_ram_capture)
-    outcomes: list[BackendDiffOutcome] = []
-    for scope in scenario.scopes:
-        result = compare_oracle_streams(
-            "sim_array",
-            _stream_for_scope(sim_array, scope),
-            "inferred_ram",
-            _stream_for_scope(inferred_ram, scope),
-            scope,
-        )
-        outcomes.append(
-            BackendDiffOutcome(
-                scenario=scenario.name,
-                scope=scope,
-                matched=result.matched,
-                first_bad_index=result.first_bad_index,
-                field_path=result.field_path,
-                expected=result.expected,
-                actual=result.actual,
+    with tempfile.TemporaryDirectory(prefix="iceboy-backend-diff-") as tmpdir:
+        temp_root = Path(tmpdir)
+        sim_array = load_capture(materialize_capture(scenario, "sim_array", temp_dir=temp_root))
+        inferred_ram = load_capture(materialize_capture(scenario, "inferred_ram", temp_dir=temp_root))
+        outcomes: list[BackendDiffOutcome] = []
+        for scope in scenario.scopes:
+            result = compare_oracle_streams(
+                "sim_array",
+                _stream_for_scope(sim_array, scope),
+                "inferred_ram",
+                _stream_for_scope(inferred_ram, scope),
+                scope,
             )
-        )
-    return tuple(outcomes)
+            outcomes.append(
+                BackendDiffOutcome(
+                    scenario=scenario.name,
+                    scope=scope,
+                    matched=result.matched,
+                    first_bad_index=result.first_bad_index,
+                    field_path=result.field_path,
+                    expected=result.expected,
+                    actual=result.actual,
+                )
+            )
+        return tuple(outcomes)
 
 
 def compare_manifest(path: Path = DEFAULT_MANIFEST, *, scenario_name: str | None = None) -> tuple[BackendDiffOutcome, ...]:
