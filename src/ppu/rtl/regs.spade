@@ -51,6 +51,38 @@ fn replace_stat_select(regs: PpuRegs, stat_sel: StatSelect) -> PpuRegs {
     )
 }
 
+fn replace_scy(regs: PpuRegs, scy: uint<8>) -> PpuRegs {
+    PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: scy, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1)
+}
+
+fn replace_scx(regs: PpuRegs, scx: uint<8>) -> PpuRegs {
+    PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: scx, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1)
+}
+
+fn replace_lyc(regs: PpuRegs, lyc: uint<8>) -> PpuRegs {
+    PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: lyc, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1)
+}
+
+fn replace_wy(regs: PpuRegs, wy: uint<8>) -> PpuRegs {
+    PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: wy, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1)
+}
+
+fn replace_wx(regs: PpuRegs, wx: uint<8>) -> PpuRegs {
+    PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: wx, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1)
+}
+
+fn replace_bgp(regs: PpuRegs, bgp: uint<8>) -> PpuRegs {
+    PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: bgp, obp0: regs.obp0, obp1: regs.obp1)
+}
+
+fn replace_obp0(regs: PpuRegs, obp0: uint<8>) -> PpuRegs {
+    PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: obp0, obp1: regs.obp1)
+}
+
+fn replace_obp1(regs: PpuRegs, obp1: uint<8>) -> PpuRegs {
+    PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: obp1)
+}
+
 fn pack_lcdc(lcdc: Lcdc) -> uint<8> {
     (bool_bit(lcdc.lcd_enable) << 7)
     | (bool_bit(lcdc.win_map_hi) << 6)
@@ -107,21 +139,20 @@ pub fn apply_mmio_write(regs: PpuRegs, event: MmioWrite) -> PpuRegs {
     match event.target {
         MmioReg::Lcdc => replace_lcdc(regs, decode_lcdc(event.value)),
         MmioReg::Stat => replace_stat_select(regs, decode_stat_select(event.value)),
-        MmioReg::Scy => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: event.value, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1),
-        MmioReg::Scx => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: event.value, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1),
-        MmioReg::Lyc => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: event.value, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1),
-        MmioReg::Wy => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: event.value, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1),
-        MmioReg::Wx => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: event.value, bgp: regs.bgp, obp0: regs.obp0, obp1: regs.obp1),
-        MmioReg::Bgp => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: event.value, obp0: regs.obp0, obp1: regs.obp1),
-        MmioReg::Obp0 => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: event.value, obp1: regs.obp1),
-        MmioReg::Obp1 => PpuRegs$(lcdc: regs.lcdc, stat_sel: regs.stat_sel, scy: regs.scy, scx: regs.scx, lyc: regs.lyc, wy: regs.wy, wx: regs.wx, bgp: regs.bgp, obp0: regs.obp0, obp1: event.value),
+        MmioReg::Scy => replace_scy(regs, event.value),
+        MmioReg::Scx => replace_scx(regs, event.value),
+        MmioReg::Lyc => replace_lyc(regs, event.value),
+        MmioReg::Wy => replace_wy(regs, event.value),
+        MmioReg::Wx => replace_wx(regs, event.value),
+        MmioReg::Bgp => replace_bgp(regs, event.value),
+        MmioReg::Obp0 => replace_obp0(regs, event.value),
+        MmioReg::Obp1 => replace_obp1(regs, event.value),
     }
 }
 
 // STAT is a mixed readback register: selects are stored, while LYC coincidence
 // and mode bits are always derived from live timing state.
-pub fn read_stat(regs: PpuRegs, status: PpuStatusState, ly: uint<8>) -> uint<8> {
-    let _ = ly;
+pub fn read_stat(regs: PpuRegs, status: PpuStatusState) -> uint<8> {
     let mode = visible_mode(status);
     let lyc_match = if status.lyc_match_flag { 0b0000_0100u8 } else { 0u8 };
     0b1000_0000u8 | pack_stat_select(regs.stat_sel) | lyc_match | mode_bits(mode)
@@ -132,7 +163,7 @@ pub fn read_stat(regs: PpuRegs, status: PpuStatusState, ly: uint<8>) -> uint<8> 
 pub fn readback_register(addr: uint<8>, regs: PpuRegs, status: PpuStatusState, ly: uint<8>) -> uint<8> {
     match addr {
         0x40u8 => pack_lcdc(regs.lcdc),
-        0x41u8 => read_stat(regs, status, ly),
+        0x41u8 => read_stat(regs, status),
         0x42u8 => regs.scy,
         0x43u8 => regs.scx,
         0x44u8 => ly,

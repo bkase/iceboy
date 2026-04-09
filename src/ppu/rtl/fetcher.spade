@@ -33,6 +33,81 @@ fn idle_req() -> PpuMemReq {
     )
 }
 
+fn with_pending_read(state: FetcherState, pending_valid: bool, pending_read: PendingRead) -> FetcherState {
+    FetcherState$(
+        epoch: state.epoch,
+        source: state.source,
+        step: state.step,
+        tile_id: state.tile_id,
+        tile_lo: state.tile_lo,
+        tile_hi: state.tile_hi,
+        map_x: state.map_x,
+        map_y: state.map_y,
+        row: state.row,
+        pending_push: state.pending_push,
+        pending_valid: pending_valid,
+        pending_read: pending_read,
+    )
+}
+
+fn with_epoch(state: FetcherState, epoch: uint<4>) -> FetcherState {
+    FetcherState$(
+        epoch: epoch,
+        source: state.source,
+        step: state.step,
+        tile_id: state.tile_id,
+        tile_lo: state.tile_lo,
+        tile_hi: state.tile_hi,
+        map_x: state.map_x,
+        map_y: state.map_y,
+        row: state.row,
+        pending_push: state.pending_push,
+        pending_valid: state.pending_valid,
+        pending_read: state.pending_read,
+    )
+}
+
+fn fetcher_reset(state: FetcherState, source: FetcherSource, map_x: uint<5>, map_y: uint<5>, row: uint<3>) -> FetcherState {
+    FetcherState$(
+        epoch: state.epoch,
+        source: source,
+        step: FetcherStep::GetTile,
+        tile_id: 0u8,
+        tile_lo: 0u8,
+        tile_hi: 0u8,
+        map_x: map_x,
+        map_y: map_y,
+        row: row,
+        pending_push: false,
+        pending_valid: false,
+        pending_read: state.pending_read,
+    )
+}
+
+fn with_resp_fields(
+    state: FetcherState,
+    step: FetcherStep,
+    tile_id: uint<8>,
+    tile_lo: uint<8>,
+    tile_hi: uint<8>,
+    pending_push: bool,
+) -> FetcherState {
+    FetcherState$(
+        epoch: state.epoch,
+        source: state.source,
+        step: step,
+        tile_id: tile_id,
+        tile_lo: tile_lo,
+        tile_hi: tile_hi,
+        map_x: state.map_x,
+        map_y: state.map_y,
+        row: state.row,
+        pending_push: pending_push,
+        pending_valid: false,
+        pending_read: state.pending_read,
+    )
+}
+
 pub fn idle_bg_fetcher_output(state: FetcherState) -> BgFetcherOutput {
     BgFetcherOutput$(
         next_state: state,
@@ -49,6 +124,7 @@ pub fn next_fetcher_epoch(epoch: uint<4>) -> uint<4> {
 }
 
 fn same_region(left: MemRegion, right: MemRegion) -> bool {
+    // Spade does not currently derive PartialEq for these enums.
     match (left, right) {
         (MemRegion::Vram, MemRegion::Vram) => true,
         (MemRegion::Oam, MemRegion::Oam) => true,
@@ -57,6 +133,7 @@ fn same_region(left: MemRegion, right: MemRegion) -> bool {
 }
 
 fn same_client(left: MemClient, right: MemClient) -> bool {
+    // Spade does not currently derive PartialEq for these enums.
     match (left, right) {
         (MemClient::Cpu, MemClient::Cpu) => true,
         (MemClient::BgFetcher, MemClient::BgFetcher) => true,
@@ -98,31 +175,14 @@ fn tilemap_addr(render: PpuRenderInputs, source: FetcherSource, map_x: uint<5>, 
     trunc(row_addr + col_offset)
 }
 
-fn tile_lo_addr(render: PpuRenderInputs, tile_id: uint<8>, row: uint<3>) -> uint<16> {
-    bgwin_tile_addr(render.lcdc_fetch, tile_id, row)
-}
-
 fn tile_hi_addr(render: PpuRenderInputs, tile_id: uint<8>, row: uint<3>) -> uint<16> {
-    trunc(tile_lo_addr(render, tile_id, row) + 1u16)
+    trunc(bgwin_tile_addr(render.lcdc_fetch, tile_id, row) + 1u16)
 }
 
 fn issue_read(state: FetcherState, addr: uint<16>, step: FetcherStep) -> BgFetcherOutput {
     let tag = tag_for_step(step);
     let req = PpuMemReq$(tag: tag, kind: PpuMemKind::Read, addr: addr);
-    let next_state = FetcherState$(
-        epoch: state.epoch,
-        source: state.source,
-        step: state.step,
-        tile_id: state.tile_id,
-        tile_lo: state.tile_lo,
-        tile_hi: state.tile_hi,
-        map_x: state.map_x,
-        map_y: state.map_y,
-        row: state.row,
-        pending_push: state.pending_push,
-        pending_valid: true,
-        pending_read: PendingRead$(tag: tag, epoch: state.epoch),
-    );
+    let next_state = with_pending_read(state, true, PendingRead$(tag: tag, epoch: state.epoch));
     BgFetcherOutput$(
         next_state: next_state,
         req_valid: true,
@@ -133,61 +193,14 @@ fn issue_read(state: FetcherState, addr: uint<16>, step: FetcherStep) -> BgFetch
     )
 }
 
-fn keep_pending_read(state: FetcherState) -> PendingRead {
-    PendingRead$(tag: state.pending_read.tag, epoch: state.pending_read.epoch)
-}
-
-fn state_with_epoch(state: FetcherState, epoch: uint<4>) -> FetcherState {
-    FetcherState$(
-        epoch: epoch,
-        source: state.source,
-        step: state.step,
-        tile_id: state.tile_id,
-        tile_lo: state.tile_lo,
-        tile_hi: state.tile_hi,
-        map_x: state.map_x,
-        map_y: state.map_y,
-        row: state.row,
-        pending_push: state.pending_push,
-        pending_valid: state.pending_valid,
-        pending_read: keep_pending_read(state),
-    )
-}
-
 pub fn start_bg_fetcher(state: FetcherState, render: PpuRenderInputs, visible_ly: uint<8>, tile_x: uint<5>) -> FetcherState {
     let bg_x: uint<8> = trunc((render.scx_fetch >> 3) + zext(tile_x));
     let bg_y: uint<8> = trunc(render.scy_fetch + visible_ly);
-    FetcherState$(
-        epoch: state.epoch,
-        source: FetcherSource::Background,
-        step: FetcherStep::GetTile,
-        tile_id: 0u8,
-        tile_lo: 0u8,
-        tile_hi: 0u8,
-        map_x: trunc(bg_x),
-        map_y: trunc(bg_y >> 3),
-        row: trunc(bg_y),
-        pending_push: false,
-        pending_valid: false,
-        pending_read: keep_pending_read(state),
-    )
+    fetcher_reset(state, FetcherSource::Background, trunc(bg_x), trunc(bg_y >> 3), trunc(bg_y))
 }
 
 pub fn restart_window_fetcher(state: FetcherState, window_line: uint<8>) -> FetcherState {
-    FetcherState$(
-        epoch: state.epoch,
-        source: FetcherSource::Window,
-        step: FetcherStep::GetTile,
-        tile_id: 0u8,
-        tile_lo: 0u8,
-        tile_hi: 0u8,
-        map_x: 0u5,
-        map_y: trunc(window_line >> 3),
-        row: trunc(window_line),
-        pending_push: false,
-        pending_valid: false,
-        pending_read: keep_pending_read(state),
-    )
+    fetcher_reset(state, FetcherSource::Window, 0u5, trunc(window_line >> 3), trunc(window_line))
 }
 
 pub fn invalidate_fetcher(
@@ -198,7 +211,7 @@ pub fn invalidate_fetcher(
     window_restart: bool,
     window_line: uint<8>,
 ) -> FetcherState {
-    let bumped = state_with_epoch(state, next_fetcher_epoch(state.epoch));
+    let bumped = with_epoch(state, next_fetcher_epoch(state.epoch));
     if window_restart {
         restart_window_fetcher(bumped, window_line)
     } else {
@@ -222,66 +235,14 @@ fn ok_resp_data(resp: PpuMemResp) -> (bool, uint<8>) {
 }
 
 fn clear_pending(state: FetcherState) -> FetcherState {
-    FetcherState$(
-        epoch: state.epoch,
-        source: state.source,
-        step: state.step,
-        tile_id: state.tile_id,
-        tile_lo: state.tile_lo,
-        tile_hi: state.tile_hi,
-        map_x: state.map_x,
-        map_y: state.map_y,
-        row: state.row,
-        pending_push: state.pending_push,
-        pending_valid: false,
-        pending_read: keep_pending_read(state),
-    )
+    with_pending_read(state, false, state.pending_read)
 }
 
 fn state_after_resp(state: FetcherState, step: FetcherStep, data: uint<8>) -> FetcherState {
     match step {
-        FetcherStep::GetTile => FetcherState$(
-            epoch: state.epoch,
-            source: state.source,
-            step: FetcherStep::GetLo,
-            tile_id: data,
-            tile_lo: state.tile_lo,
-            tile_hi: state.tile_hi,
-            map_x: state.map_x,
-            map_y: state.map_y,
-            row: state.row,
-            pending_push: false,
-            pending_valid: false,
-            pending_read: keep_pending_read(state),
-        ),
-        FetcherStep::GetLo => FetcherState$(
-            epoch: state.epoch,
-            source: state.source,
-            step: FetcherStep::GetHi,
-            tile_id: state.tile_id,
-            tile_lo: data,
-            tile_hi: state.tile_hi,
-            map_x: state.map_x,
-            map_y: state.map_y,
-            row: state.row,
-            pending_push: false,
-            pending_valid: false,
-            pending_read: keep_pending_read(state),
-        ),
-        FetcherStep::GetHi => FetcherState$(
-            epoch: state.epoch,
-            source: state.source,
-            step: FetcherStep::Sleep,
-            tile_id: state.tile_id,
-            tile_lo: state.tile_lo,
-            tile_hi: data,
-            map_x: state.map_x,
-            map_y: state.map_y,
-            row: state.row,
-            pending_push: true,
-            pending_valid: false,
-            pending_read: keep_pending_read(state),
-        ),
+        FetcherStep::GetTile => with_resp_fields(state, FetcherStep::GetLo, data, state.tile_lo, state.tile_hi, false),
+        FetcherStep::GetLo => with_resp_fields(state, FetcherStep::GetHi, state.tile_id, data, state.tile_hi, false),
+        FetcherStep::GetHi => with_resp_fields(state, FetcherStep::Sleep, state.tile_id, state.tile_lo, data, true),
         _ => clear_pending(state),
     }
 }
@@ -289,41 +250,15 @@ fn state_after_resp(state: FetcherState, step: FetcherStep, data: uint<8>) -> Fe
 fn advance_no_resp(state: FetcherState, render: PpuRenderInputs, fifo_has_room: bool) -> BgFetcherOutput {
     match state.step {
         FetcherStep::GetTile => issue_read(state, tilemap_addr(render, state.source, state.map_x, state.map_y), FetcherStep::GetTile),
-        FetcherStep::GetLo => issue_read(state, tile_lo_addr(render, state.tile_id, state.row), FetcherStep::GetLo),
+        FetcherStep::GetLo => issue_read(state, bgwin_tile_addr(render.lcdc_fetch, state.tile_id, state.row), FetcherStep::GetLo),
         FetcherStep::GetHi => issue_read(state, tile_hi_addr(render, state.tile_id, state.row), FetcherStep::GetHi),
         FetcherStep::Sleep => idle_bg_fetcher_output(
-            FetcherState$(
-                epoch: state.epoch,
-                source: state.source,
-                step: FetcherStep::Push,
-                tile_id: state.tile_id,
-                tile_lo: state.tile_lo,
-                tile_hi: state.tile_hi,
-                map_x: state.map_x,
-                map_y: state.map_y,
-                row: state.row,
-                pending_push: state.pending_push,
-                pending_valid: false,
-                pending_read: keep_pending_read(state),
-            )
+            with_resp_fields(state, FetcherStep::Push, state.tile_id, state.tile_lo, state.tile_hi, state.pending_push)
         ),
         FetcherStep::Push => if fifo_has_room && state.pending_push {
             let row = decode_tile_row(state.tile_lo, state.tile_hi);
             BgFetcherOutput$(
-                next_state: FetcherState$(
-                    epoch: state.epoch,
-                    source: state.source,
-                    step: FetcherStep::GetTile,
-                    tile_id: 0u8,
-                    tile_lo: 0u8,
-                    tile_hi: 0u8,
-                    map_x: trunc(state.map_x + 1u5),
-                    map_y: state.map_y,
-                    row: state.row,
-                    pending_push: false,
-                    pending_valid: false,
-                    pending_read: keep_pending_read(state),
-                ),
+                next_state: fetcher_reset(state, state.source, trunc(state.map_x + 1u5), state.map_y, state.row),
                 req_valid: false,
                 req: idle_req(),
                 push_valid: true,

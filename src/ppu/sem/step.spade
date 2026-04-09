@@ -5,10 +5,8 @@ use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
 use lib::ppu::sem::events::{PpuEventKind, TimedPpuEvent};
 use lib::ppu::sem::observe::{DotOutput, PpuIrqEdge, PpuSemanticCommit, idle_ppu_mem_reqs, idle_ppu_mmio_resp};
 use lib::ppu::sem::profiles::dmg_behavior_config;
-use lib::ppu::sem::sample::sample_render_inputs;
 use lib::ppu::sem::types::{
     LcdRunState,
-    Lcdc,
     PpuIrqReq,
     PpuPhase,
     PpuRegs,
@@ -33,10 +31,7 @@ fn is_stat_write(write: MmioWrite) -> bool {
 fn apply_event(regs: PpuRegs, event: TimedPpuEvent) -> (PpuRegs, bool, bool, bool) {
     match event.kind {
         PpuEventKind::MmioWrite$(write) => (apply_mmio_write(regs, write), is_stat_write(write), false, false),
-        PpuEventKind::DmaStart$(source_high) => {
-            let _ = source_high;
-            (regs, false, false, false)
-        },
+        PpuEventKind::DmaStart$(source_high: _) => (regs, false, false, false),
         PpuEventKind::ForceLcdPower$(enabled) =>
             if enabled {
                 (regs, false, true, false)
@@ -92,10 +87,7 @@ fn update_render_state(
             next_dot_in_line(next_run, render.dot_in_line)
         };
     let next_x_out = match next_phase {
-        PpuPhase::Transfer$(x_out, discard_scx) => {
-            let _ = discard_scx;
-            x_out
-        },
+        PpuPhase::Transfer$(x_out, discard_scx: _) => x_out,
         _ => 0u8,
     };
     PpuRenderState$(
@@ -228,7 +220,6 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
             let (next_phase, next_ly, next_sampled, line_start, frame_start) = advance_timing(state_with_regs, input, next_regs);
             let next_run = advance_run_state(state.status.run, frame_start);
             let next_visible = PpuVisibleState$(regs: next_regs, ly: next_ly);
-            let _ = sample_render_inputs(next_visible, next_sampled, next_phase);
             PpuState$(
                 visible: next_visible,
                 status: PpuStatusState$(

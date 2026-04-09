@@ -70,17 +70,6 @@ fn merge_obj_pixel(existing: ObjPixel, incoming: ObjPixel) -> ObjPixel {
     resolve_obj_priority(existing, incoming)
 }
 
-fn incoming_row_pixel(row: [ObjPixel; 8], slot: uint<4>, offset: uint<4>) -> ObjPixel {
-    let slot_u7: uint<7> = zext(slot);
-    let offset_u7: uint<7> = zext(offset);
-    let row_end: uint<7> = trunc(offset_u7 + 8u7);
-    if slot_u7 >= offset_u7 && slot_u7 < row_end {
-        row[trunc(slot_u7 - offset_u7)]
-    } else {
-        zero_obj_pixel()
-    }
-}
-
 fn incoming_row_pixel_clipped(row: [ObjPixel; 8], slot: uint<4>, offset: uint<4>, left_clip: uint<4>) -> ObjPixel {
     let slot_u8: uint<8> = zext(slot);
     let offset_u8: uint<8> = zext(offset);
@@ -92,13 +81,6 @@ fn incoming_row_pixel_clipped(row: [ObjPixel; 8], slot: uint<4>, offset: uint<4>
     } else {
         zero_obj_pixel()
     }
-}
-
-fn overlay_count(fifo: ObjFifo, offset: uint<4>) -> uint<5> {
-    let offset_u7: uint<7> = zext(offset);
-    let raw_cover: uint<7> = trunc(offset_u7 + 8u7);
-    let capped_cover: uint<5> = if raw_cover > 16u7 { 16u5 } else { trunc(raw_cover) };
-    if fifo.count > capped_cover { fifo.count } else { capped_cover }
 }
 
 fn overlay_count_clipped(fifo: ObjFifo, offset: uint<4>, left_clip: uint<4>) -> uint<5> {
@@ -183,10 +165,6 @@ pub fn obj_fifo_left_clip(ticket: SelectedObjTicket, x_out: uint<8>) -> uint<4> 
             }
         };
     if clip_raw > 8u9 { 8u4 } else { trunc(clip_raw) }
-}
-
-pub fn obj_fifo_overlay_row(fifo: ObjFifo, row: [ObjPixel; 8], offset: uint<4>) -> ObjFifo {
-    obj_fifo_overlay_row_clipped(fifo, row, offset, 0u4)
 }
 
 pub fn obj_fifo_overlay_row_clipped(fifo: ObjFifo, row: [ObjPixel; 8], offset: uint<4>, left_clip: uint<4>) -> ObjFifo {

@@ -3,7 +3,6 @@ use lib::ppu::rtl::obj_fetch::{
     decode_obj_flags,
     decode_obj_row,
     obj_fifo_left_clip,
-    obj_fifo_overlay_row,
     obj_fifo_overlay_row_clipped,
     obj_fifo_start_offset,
     obj_fetch_flags_req,
@@ -20,8 +19,6 @@ use lib::ppu::sem::types::{
     ObjFifo,
     ObjPixel,
     SelectedObjTicket,
-    empty_obj_fifo,
-    zero_obj_pixel,
 };
 
 fn build_ticket(oam_index_i: uint<6>, x_i: uint<8>, y_i: uint<8>, selection_rank_i: uint<4>) -> SelectedObjTicket {
@@ -85,7 +82,6 @@ fn build_fifo_pixels(packed: uint<32>) -> [ObjPixel; 16] {
 }
 
 fn build_fifo(count_i: uint<5>, packed: uint<32>) -> ObjFifo {
-    let _ = empty_obj_fifo();
     ObjFifo$(count: count_i, pixels: build_fifo_pixels(packed))
 }
 
@@ -134,7 +130,6 @@ pub entity obj_fetch_test_top(
     let offset = obj_fifo_start_offset(ticket, x_out_i);
     let left_clip = obj_fifo_left_clip(ticket, x_out_i);
     let fifo = build_fifo(fifo_count_i, fifo_colors_i);
-    let _ = obj_fifo_overlay_row(fifo, row, offset);
     let overlaid = obj_fifo_overlay_row_clipped(fifo, row, offset, left_clip);
     let cancelled = cancel_obj_fetch(build_fetcher_state(epoch_i, pending_valid_i, pending_id_i, pending_epoch_i));
 

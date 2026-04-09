@@ -24,8 +24,7 @@ pub fn lyc_match(regs: PpuRegs, ly: uint<8>) -> bool {
     ly == regs.lyc
 }
 
-pub fn stat_line(regs: PpuRegs, status: PpuStatusState, ly: uint<8>) -> bool {
-    let _ = ly;
+pub fn stat_line(regs: PpuRegs, status: PpuStatusState, _ly: uint<8>) -> bool {
     if !lcd_enabled(status, regs) {
         false
     } else {

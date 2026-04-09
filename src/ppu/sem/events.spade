@@ -58,15 +58,11 @@ pub fn zero_video_coord() -> VideoCoord {
     VideoCoord$(frame: 0u32, line: 0u8, dot: 0u9)
 }
 
-pub fn zero_mmio_write() -> mmio::MmioWrite {
-    mmio::zero_mmio_write()
-}
-
 pub fn idle_timed_ppu_event() -> TimedPpuEvent {
     TimedPpuEvent$(
         seq: 0u64,
         at: zero_video_coord(),
-        kind: PpuEventKind::MmioWrite$(write: zero_mmio_write()),
+        kind: PpuEventKind::MmioWrite$(write: mmio::zero_mmio_write()),
     )
 }
 

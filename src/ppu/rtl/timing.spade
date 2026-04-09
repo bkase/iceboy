@@ -74,8 +74,7 @@ fn sample_visible_line(next_regs: PpuRegs, next_ly: uint<8>, sampled: PpuSamplin
     )
 }
 
-fn enabled_visible_phase(sampled: PpuSamplingState) -> PpuPhase {
-    let _ = sampled;
+fn enabled_visible_phase(_sampled: PpuSamplingState) -> PpuPhase {
     PpuPhase::OamScan$(index: 0u6, found: 0u4)
 }
 
@@ -298,12 +297,10 @@ fn advance_phase(
             advance_oam_phase(ly, sampled, dot_in_line, index, found, is_warmup_line0),
         PpuPhase::Transfer$(x_out, discard_scx) =>
             advance_transfer_phase(ly, sampled, dot_in_line, x_out, discard_scx, is_warmup_line0),
-        PpuPhase::HBlank$(dots_left) => {
-            let _ = dots_left;
+        PpuPhase::HBlank$(dots_left: _) => {
             advance_hblank_phase(ly, sampled, dot_in_line, next_regs, is_warmup_line0)
         },
-        PpuPhase::VBlank$(line, dots_left) => {
-            let _ = (line, dots_left);
+        PpuPhase::VBlank$(line: _, dots_left: _) => {
             advance_vblank_phase(ly, sampled, dot_in_line, next_regs)
         },
     }
@@ -324,10 +321,9 @@ pub fn advance_run_state(run: LcdRunState, frame_start: bool) -> LcdRunState {
 
 pub fn advance_timing(
     state: PpuState,
-    input: lib::ppu::sem::events::DotInput,
+    _input: lib::ppu::sem::events::DotInput,
     next_regs: PpuRegs,
 ) -> (PpuPhase, uint<8>, PpuSamplingState, bool, bool) {
-    let _ = input;
     match state.status.run {
         LcdRunState::Disabled => (PpuPhase::LcdOff, 0u8, initial_ppu_sampling_state(), false, false),
         LcdRunState::WarmupBlankFrame => {

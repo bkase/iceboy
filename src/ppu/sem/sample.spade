@@ -30,13 +30,8 @@ pub fn sample_render_inputs(
     sampled: PpuSamplingState,
     phase: PpuPhase,
 ) -> PpuRenderInputs {
-    let fetch_regs = match phase {
-        PpuPhase::Transfer$(x_out: _, discard_scx: _) => visible.regs,
-        PpuPhase::OamScan$(index: _, found: _) => visible.regs,
-        PpuPhase::HBlank$(dots_left: _) => visible.regs,
-        PpuPhase::VBlank$(line: _, dots_left: _) => visible.regs,
-        PpuPhase::LcdOff => visible.regs,
-    };
+    let _ = phase;
+    let fetch_regs = visible.regs;
     PpuRenderInputs$(
         lcdc_fetch: fetch_regs.lcdc,
         scx_fetch: fetch_regs.scx,
