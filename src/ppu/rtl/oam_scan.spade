@@ -39,18 +39,24 @@ pub fn oam_scan_done(scan: OamScanState) -> bool {
 }
 
 fn append_ticket(list: LineObjList, ticket: SelectedObjTicket) -> LineObjList {
-    match list.count {
-        0u4 => LineObjList$(count: 1u4, slots: [ticket, list.slots[1], list.slots[2], list.slots[3], list.slots[4], list.slots[5], list.slots[6], list.slots[7], list.slots[8], list.slots[9]]),
-        1u4 => LineObjList$(count: 2u4, slots: [list.slots[0], ticket, list.slots[2], list.slots[3], list.slots[4], list.slots[5], list.slots[6], list.slots[7], list.slots[8], list.slots[9]]),
-        2u4 => LineObjList$(count: 3u4, slots: [list.slots[0], list.slots[1], ticket, list.slots[3], list.slots[4], list.slots[5], list.slots[6], list.slots[7], list.slots[8], list.slots[9]]),
-        3u4 => LineObjList$(count: 4u4, slots: [list.slots[0], list.slots[1], list.slots[2], ticket, list.slots[4], list.slots[5], list.slots[6], list.slots[7], list.slots[8], list.slots[9]]),
-        4u4 => LineObjList$(count: 5u4, slots: [list.slots[0], list.slots[1], list.slots[2], list.slots[3], ticket, list.slots[5], list.slots[6], list.slots[7], list.slots[8], list.slots[9]]),
-        5u4 => LineObjList$(count: 6u4, slots: [list.slots[0], list.slots[1], list.slots[2], list.slots[3], list.slots[4], ticket, list.slots[6], list.slots[7], list.slots[8], list.slots[9]]),
-        6u4 => LineObjList$(count: 7u4, slots: [list.slots[0], list.slots[1], list.slots[2], list.slots[3], list.slots[4], list.slots[5], ticket, list.slots[7], list.slots[8], list.slots[9]]),
-        7u4 => LineObjList$(count: 8u4, slots: [list.slots[0], list.slots[1], list.slots[2], list.slots[3], list.slots[4], list.slots[5], list.slots[6], ticket, list.slots[8], list.slots[9]]),
-        8u4 => LineObjList$(count: 9u4, slots: [list.slots[0], list.slots[1], list.slots[2], list.slots[3], list.slots[4], list.slots[5], list.slots[6], list.slots[7], ticket, list.slots[9]]),
-        9u4 => LineObjList$(count: 10u4, slots: [list.slots[0], list.slots[1], list.slots[2], list.slots[3], list.slots[4], list.slots[5], list.slots[6], list.slots[7], list.slots[8], ticket]),
-        _ => list,
+    if list.count >= 10u4 {
+        list
+    } else {
+        LineObjList$(
+            count: trunc(list.count + 1u4),
+            slots: [
+                if list.count == 0u4 { ticket } else { list.slots[0] },
+                if list.count == 1u4 { ticket } else { list.slots[1] },
+                if list.count == 2u4 { ticket } else { list.slots[2] },
+                if list.count == 3u4 { ticket } else { list.slots[3] },
+                if list.count == 4u4 { ticket } else { list.slots[4] },
+                if list.count == 5u4 { ticket } else { list.slots[5] },
+                if list.count == 6u4 { ticket } else { list.slots[6] },
+                if list.count == 7u4 { ticket } else { list.slots[7] },
+                if list.count == 8u4 { ticket } else { list.slots[8] },
+                if list.count == 9u4 { ticket } else { list.slots[9] },
+            ],
+        )
     }
 }
 

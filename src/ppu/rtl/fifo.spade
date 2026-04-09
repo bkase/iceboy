@@ -51,6 +51,53 @@ fn row_pixels(row: [uint<2>; 8], palette: uint<8>) -> [BgPixel; 8] {
     ]
 }
 
+fn bg_fifo_pixel_at(fifo: BgFifo, slot: uint<5>) -> BgPixel {
+    match slot {
+        0u5 => fifo.pixels[0],
+        1u5 => fifo.pixels[1],
+        2u5 => fifo.pixels[2],
+        3u5 => fifo.pixels[3],
+        4u5 => fifo.pixels[4],
+        5u5 => fifo.pixels[5],
+        6u5 => fifo.pixels[6],
+        7u5 => fifo.pixels[7],
+        8u5 => fifo.pixels[8],
+        9u5 => fifo.pixels[9],
+        10u5 => fifo.pixels[10],
+        11u5 => fifo.pixels[11],
+        12u5 => fifo.pixels[12],
+        13u5 => fifo.pixels[13],
+        14u5 => fifo.pixels[14],
+        _ => fifo.pixels[15],
+    }
+}
+
+fn row_pixel_at(row: [BgPixel; 8], slot: uint<4>) -> BgPixel {
+    match slot {
+        0u4 => row[0],
+        1u4 => row[1],
+        2u4 => row[2],
+        3u4 => row[3],
+        4u4 => row[4],
+        5u4 => row[5],
+        6u4 => row[6],
+        _ => row[7],
+    }
+}
+
+fn pushed_bg_slot(fifo: BgFifo, pushed: [BgPixel; 8], slot: uint<5>) -> BgPixel {
+    if slot < fifo.count {
+        bg_fifo_pixel_at(fifo, slot)
+    } else {
+        let pushed_slot: uint<6> = zext(slot) - zext(fifo.count);
+        if pushed_slot < 8u6 {
+            row_pixel_at(pushed, trunc(pushed_slot))
+        } else {
+            zero_bg_pixel()
+        }
+    }
+}
+
 pub fn bg_fifo_is_empty(fifo: BgFifo) -> bool {
     fifo.count == 0u5
 }
@@ -65,197 +112,30 @@ pub fn clear_bg_fifo() -> BgFifo {
 
 pub fn push_bg_row(fifo: BgFifo, row: [uint<2>; 8], palette: uint<8>) -> BgFifo {
     let pushed = row_pixels(row, palette);
-    match fifo.count {
-        0u5 => BgFifo$(
-            count: 8u5,
+    if fifo.count > 8u5 {
+        fifo
+    } else {
+        BgFifo$(
+            count: trunc(fifo.count + 8u5),
             pixels: [
-                pushed[0],
-                pushed[1],
-                pushed[2],
-                pushed[3],
-                pushed[4],
-                pushed[5],
-                pushed[6],
-                pushed[7],
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
+                pushed_bg_slot(fifo, pushed, 0u5),
+                pushed_bg_slot(fifo, pushed, 1u5),
+                pushed_bg_slot(fifo, pushed, 2u5),
+                pushed_bg_slot(fifo, pushed, 3u5),
+                pushed_bg_slot(fifo, pushed, 4u5),
+                pushed_bg_slot(fifo, pushed, 5u5),
+                pushed_bg_slot(fifo, pushed, 6u5),
+                pushed_bg_slot(fifo, pushed, 7u5),
+                pushed_bg_slot(fifo, pushed, 8u5),
+                pushed_bg_slot(fifo, pushed, 9u5),
+                pushed_bg_slot(fifo, pushed, 10u5),
+                pushed_bg_slot(fifo, pushed, 11u5),
+                pushed_bg_slot(fifo, pushed, 12u5),
+                pushed_bg_slot(fifo, pushed, 13u5),
+                pushed_bg_slot(fifo, pushed, 14u5),
+                pushed_bg_slot(fifo, pushed, 15u5),
             ],
-        ),
-        1u5 => BgFifo$(
-            count: 9u5,
-            pixels: [
-                fifo.pixels[0],
-                pushed[0],
-                pushed[1],
-                pushed[2],
-                pushed[3],
-                pushed[4],
-                pushed[5],
-                pushed[6],
-                pushed[7],
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-            ],
-        ),
-        2u5 => BgFifo$(
-            count: 10u5,
-            pixels: [
-                fifo.pixels[0],
-                fifo.pixels[1],
-                pushed[0],
-                pushed[1],
-                pushed[2],
-                pushed[3],
-                pushed[4],
-                pushed[5],
-                pushed[6],
-                pushed[7],
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-            ],
-        ),
-        3u5 => BgFifo$(
-            count: 11u5,
-            pixels: [
-                fifo.pixels[0],
-                fifo.pixels[1],
-                fifo.pixels[2],
-                pushed[0],
-                pushed[1],
-                pushed[2],
-                pushed[3],
-                pushed[4],
-                pushed[5],
-                pushed[6],
-                pushed[7],
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-            ],
-        ),
-        4u5 => BgFifo$(
-            count: 12u5,
-            pixels: [
-                fifo.pixels[0],
-                fifo.pixels[1],
-                fifo.pixels[2],
-                fifo.pixels[3],
-                pushed[0],
-                pushed[1],
-                pushed[2],
-                pushed[3],
-                pushed[4],
-                pushed[5],
-                pushed[6],
-                pushed[7],
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-            ],
-        ),
-        5u5 => BgFifo$(
-            count: 13u5,
-            pixels: [
-                fifo.pixels[0],
-                fifo.pixels[1],
-                fifo.pixels[2],
-                fifo.pixels[3],
-                fifo.pixels[4],
-                pushed[0],
-                pushed[1],
-                pushed[2],
-                pushed[3],
-                pushed[4],
-                pushed[5],
-                pushed[6],
-                pushed[7],
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-            ],
-        ),
-        6u5 => BgFifo$(
-            count: 14u5,
-            pixels: [
-                fifo.pixels[0],
-                fifo.pixels[1],
-                fifo.pixels[2],
-                fifo.pixels[3],
-                fifo.pixels[4],
-                fifo.pixels[5],
-                pushed[0],
-                pushed[1],
-                pushed[2],
-                pushed[3],
-                pushed[4],
-                pushed[5],
-                pushed[6],
-                pushed[7],
-                zero_bg_pixel(),
-                zero_bg_pixel(),
-            ],
-        ),
-        7u5 => BgFifo$(
-            count: 15u5,
-            pixels: [
-                fifo.pixels[0],
-                fifo.pixels[1],
-                fifo.pixels[2],
-                fifo.pixels[3],
-                fifo.pixels[4],
-                fifo.pixels[5],
-                fifo.pixels[6],
-                pushed[0],
-                pushed[1],
-                pushed[2],
-                pushed[3],
-                pushed[4],
-                pushed[5],
-                pushed[6],
-                pushed[7],
-                zero_bg_pixel(),
-            ],
-        ),
-        8u5 => BgFifo$(
-            count: 16u5,
-            pixels: [
-                fifo.pixels[0],
-                fifo.pixels[1],
-                fifo.pixels[2],
-                fifo.pixels[3],
-                fifo.pixels[4],
-                fifo.pixels[5],
-                fifo.pixels[6],
-                fifo.pixels[7],
-                pushed[0],
-                pushed[1],
-                pushed[2],
-                pushed[3],
-                pushed[4],
-                pushed[5],
-                pushed[6],
-                pushed[7],
-            ],
-        ),
-        _ => fifo,
+        )
     }
 }
 
