@@ -48,12 +48,14 @@ entity semantic_observe_top(
     );
     let visible = held_dot_output(state_reg, dot_ce, step);
     let visible_state = visible.next_state;
-    let _ = video_now;
+    let visible_seq = if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq };
+    // Keep the coordinate input in the public test-top interface even though this top only exports state after the dot.
+    let _keep_video_coord_interface = video_now;
     reg(clk) state_reg: PpuState reset(rst: initial_ppu_state()) = visible_state;
-    reg(clk) commit_seq: uint<64> reset(rst: 0u64) = if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq };
+    reg(clk) commit_seq: uint<64> reset(rst: 0u64) = visible_seq;
 
     SemanticObserveTopOut$(
-        commit_seq: if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq },
+        commit_seq: visible_seq,
         dot_in_line: visible_state.render.dot_in_line,
         line_index: visible_state.visible.ly,
         phase_kind: encode_ppu_phase(visible_state.status.phase),

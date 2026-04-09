@@ -217,7 +217,7 @@ pub entity frame_sink_test_top(
         };
 
     let line_summary_valid = match line_summary_opt {
-        Option::Some(summary) => { let _ = summary; true },
+        Option::Some(_) => true,
         Option::None => false,
     };
     let line_summary = match line_summary_opt {
@@ -225,7 +225,7 @@ pub entity frame_sink_test_top(
         Option::None => zero_line_summary(),
     };
     let frame_summary_valid = match frame_summary_opt {
-        Option::Some(summary) => { let _ = summary; true },
+        Option::Some(_) => true,
         Option::None => false,
     };
     let frame_summary = match frame_summary_opt {

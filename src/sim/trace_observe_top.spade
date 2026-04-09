@@ -29,11 +29,12 @@ entity trace_observe_top(
     );
     let visible = held_dot_output(state_reg, dot_ce, step);
     let visible_state = visible.next_state;
+    let visible_seq = if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq };
     reg(clk) state_reg: PpuState reset(rst: initial_ppu_state()) = visible_state;
-    reg(clk) commit_seq: uint<64> reset(rst: 0u64) = if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq };
+    reg(clk) commit_seq: uint<64> reset(rst: 0u64) = visible_seq;
 
     TraceObserveTopOut$(
-        commit_seq: if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq },
+        commit_seq: visible_seq,
         trace_valid: dot_ce,
         trace: if dot_ce { ppu_debug_trace(video_now, visible) } else { idle_trace_for_state(video_now, visible_state) },
     )

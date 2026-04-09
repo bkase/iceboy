@@ -159,10 +159,7 @@ pub fn held_dot_output(state: PpuState, dot_ce: bool, stepped: DotOutput) -> Dot
 
 pub fn semantic_valid(semantic: Option<PpuSemanticCommit>) -> bool {
     match semantic {
-        Option::Some(commit) => {
-            let _ = commit;
-            true
-        },
+        Option::Some(_) => true,
         Option::None => false,
     }
 }
@@ -176,10 +173,7 @@ pub fn semantic_or_idle(semantic: Option<PpuSemanticCommit>) -> PpuSemanticCommi
 
 pub fn line_summary_valid(summary: Option<LineSummary>) -> bool {
     match summary {
-        Option::Some(line) => {
-            let _ = line;
-            true
-        },
+        Option::Some(_) => true,
         Option::None => false,
     }
 }
@@ -198,8 +192,7 @@ pub fn scanout_or_blank(scanout: Option<ScanoutEvent>, ly: uint<8>) -> ScanoutEv
     }
 }
 
-pub fn ppu_debug_trace(at: VideoCoord, output: DotOutput) -> PpuDebugTrace {
-    let state = output.next_state;
+fn base_debug_trace(at: VideoCoord, state: PpuState) -> PpuDebugTrace {
     PpuDebugTrace$(
         at: at,
         ly_after: state.visible.ly,
@@ -210,12 +203,12 @@ pub fn ppu_debug_trace(at: VideoCoord, output: DotOutput) -> PpuDebugTrace {
         stat_line_after: state.status.stat_irq.line_high,
         first_frame_blank_after: state.render.first_frame_blank,
         stat_readback_after: read_stat(state.visible.regs, state.status),
-        mem_reqs: output.mem_reqs,
-        mmio_resp: output.mmio_resp,
-        irq_req: output.irq_req,
-        scanout: output.scanout,
-        semantic: output.semantic,
-        line_summary: output.line_summary,
+        mem_reqs: idle_ppu_debug_trace().mem_reqs,
+        mmio_resp: idle_ppu_debug_trace().mmio_resp,
+        irq_req: idle_ppu_debug_trace().irq_req,
+        scanout: idle_ppu_debug_trace().scanout,
+        semantic: idle_ppu_debug_trace().semantic,
+        line_summary: idle_ppu_debug_trace().line_summary,
         window_state: state.render.window_state,
         window_line: state.render.window_line,
         oam_scan: state.render.oam_scan,
@@ -226,30 +219,60 @@ pub fn ppu_debug_trace(at: VideoCoord, output: DotOutput) -> PpuDebugTrace {
     )
 }
 
+pub fn ppu_debug_trace(at: VideoCoord, output: DotOutput) -> PpuDebugTrace {
+    let state = output.next_state;
+    let base = base_debug_trace(at, state);
+    PpuDebugTrace$(
+        at: base.at,
+        ly_after: base.ly_after,
+        dot_in_line_after: base.dot_in_line_after,
+        run_after: base.run_after,
+        mode_after: base.mode_after,
+        phase_after: base.phase_after,
+        stat_line_after: base.stat_line_after,
+        first_frame_blank_after: base.first_frame_blank_after,
+        stat_readback_after: base.stat_readback_after,
+        mem_reqs: output.mem_reqs,
+        mmio_resp: output.mmio_resp,
+        irq_req: output.irq_req,
+        scanout: output.scanout,
+        semantic: output.semantic,
+        line_summary: output.line_summary,
+        window_state: base.window_state,
+        window_line: base.window_line,
+        oam_scan: base.oam_scan,
+        line_objs: base.line_objs,
+        fetcher: base.fetcher,
+        bg_fifo: base.bg_fifo,
+        obj_fifo: base.obj_fifo,
+    )
+}
+
 pub fn idle_trace_for_state(at: VideoCoord, state: PpuState) -> PpuDebugTrace {
     let idle = idle_ppu_debug_trace();
+    let base = base_debug_trace(at, state);
     PpuDebugTrace$(
-        at: at,
-        ly_after: state.visible.ly,
-        dot_in_line_after: state.render.dot_in_line,
-        run_after: state.status.run,
-        mode_after: visible_mode(state.status),
-        phase_after: state.status.phase,
-        stat_line_after: state.status.stat_irq.line_high,
-        first_frame_blank_after: state.render.first_frame_blank,
-        stat_readback_after: read_stat(state.visible.regs, state.status),
+        at: base.at,
+        ly_after: base.ly_after,
+        dot_in_line_after: base.dot_in_line_after,
+        run_after: base.run_after,
+        mode_after: base.mode_after,
+        phase_after: base.phase_after,
+        stat_line_after: base.stat_line_after,
+        first_frame_blank_after: base.first_frame_blank_after,
+        stat_readback_after: base.stat_readback_after,
         mem_reqs: idle.mem_reqs,
         mmio_resp: idle.mmio_resp,
         irq_req: idle.irq_req,
         scanout: idle.scanout,
         semantic: idle.semantic,
         line_summary: idle.line_summary,
-        window_state: state.render.window_state,
-        window_line: state.render.window_line,
-        oam_scan: state.render.oam_scan,
-        line_objs: state.render.line_objs,
-        fetcher: state.render.fetcher,
-        bg_fifo: state.render.bg_fifo,
-        obj_fifo: state.render.obj_fifo,
+        window_state: base.window_state,
+        window_line: base.window_line,
+        oam_scan: base.oam_scan,
+        line_objs: base.line_objs,
+        fetcher: base.fetcher,
+        bg_fifo: base.bg_fifo,
+        obj_fifo: base.obj_fifo,
     )
 }

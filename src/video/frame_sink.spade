@@ -77,15 +77,6 @@ pub fn source_bits(source: PixelSource) -> uint<2> {
     }
 }
 
-pub fn blank_reason_bits(reason: BlankReason) -> uint<2> {
-    match reason {
-        BlankReason::LcdDisabled => 0u2,
-        BlankReason::WarmupBlankFrame => 1u2,
-        BlankReason::NonVisibleLine => 2u2,
-        BlankReason::NonVisibleDot => 3u2,
-    }
-}
-
 pub fn zero_pixel_reference() -> PixelReference {
     PixelReference$(valid: false, shade: 0u2, source: PixelSource::Background)
 }

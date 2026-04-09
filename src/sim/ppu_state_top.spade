@@ -39,11 +39,12 @@ entity ppu_state_top(
     );
     let visible = held_dot_output(imported_state, dot_ce, step);
     let visible_state = visible.next_state;
+    let visible_seq = if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq };
     reg(clk) state_reg: PpuState reset(rst: initial_ppu_state()) = visible_state;
-    reg(clk) commit_seq: uint<64> reset(rst: 0u64) = if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq };
+    reg(clk) commit_seq: uint<64> reset(rst: 0u64) = visible_seq;
 
     PpuStateTopOut$(
-        commit_seq: if dot_ce { trunc(commit_seq + 1u64) } else { commit_seq },
+        commit_seq: visible_seq,
         state: visible_state,
         semantic_valid: semantic_valid(visible.semantic),
         semantic: semantic_or_idle(visible.semantic),
