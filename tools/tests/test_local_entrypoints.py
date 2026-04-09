@@ -452,6 +452,46 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('run_checked "$test_file" --skip-build', text)
         self.assertNotIn('label="$(basename "${test_file%.py}")"', text)
 
+    def test_default_precommit_moves_long_rom_runs_to_extended_lane(self) -> None:
+        text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
+        default_match = re.search(
+            r"PRECOMMIT_SWIM_TESTS_DEFAULT=\((?P<body>.*?)\)\n\nPRECOMMIT_SWIM_TESTS_EXTENDED=\(",
+            text,
+            re.DOTALL,
+        )
+        extended_match = re.search(
+            r"PRECOMMIT_SWIM_TESTS_EXTENDED=\((?P<body>.*?)\)\n\nif \[\[ ! -x",
+            text,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(default_match)
+        self.assertIsNotNone(extended_match)
+        default_body = default_match.group("body")
+        extended_body = extended_match.group("body")
+
+        self.assertNotIn('"tools/run_cpu_instrs_blargg_verilator.sh"', default_body)
+        self.assertNotIn('"test/rom/test_loads_basic.py"', default_body)
+        self.assertNotIn('"test/ppu/unit/test_ppu_core_smoke.py"', default_body)
+        self.assertNotIn('"test/ppu/unit/test_mixer.py"', default_body)
+        self.assertNotIn('"test/ppu/unit/test_obj_observe.py"', default_body)
+        self.assertNotIn('"test/ppu/unit/test_obj_priority.py"', default_body)
+        self.assertNotIn('"test/ppu/unit/test_obj_fetch.py"', default_body)
+        self.assertNotIn('"test/ppu/unit/test_oam_scan.py"', default_body)
+        self.assertNotIn('"test/ppu/unit/test_window.py"', default_body)
+        self.assertNotIn('"test/ppu/unit/test_tile.py"', default_body)
+        self.assertNotIn('"test/power/test_ppu_power_quiescence.py"', default_body)
+        self.assertIn('"tools/run_cpu_instrs_blargg_verilator.sh"', extended_body)
+        self.assertIn('"test/rom/test_loads_basic.py"', extended_body)
+        self.assertIn('"test/ppu/unit/test_ppu_core_smoke.py"', extended_body)
+        self.assertIn('"test/ppu/unit/test_mixer.py"', extended_body)
+        self.assertIn('"test/ppu/unit/test_obj_observe.py"', extended_body)
+        self.assertIn('"test/ppu/unit/test_obj_priority.py"', extended_body)
+        self.assertIn('"test/ppu/unit/test_obj_fetch.py"', extended_body)
+        self.assertIn('"test/ppu/unit/test_oam_scan.py"', extended_body)
+        self.assertIn('"test/ppu/unit/test_window.py"', extended_body)
+        self.assertIn('"test/ppu/unit/test_tile.py"', extended_body)
+        self.assertIn('"test/power/test_ppu_power_quiescence.py"', extended_body)
+
     def test_shared_util_module_centralizes_bool_bit_and_io_write_helpers(self) -> None:
         util_text = (ROOT / "src" / "util.spade").read_text(encoding="utf-8")
         self.assertIn("pub fn bit(value: bool)", util_text)

@@ -48,22 +48,11 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/ppu/unit/test_bg_fifo.py"
     "test/ppu/unit/test_line_summary.py"
     "test/ppu/unit/test_scanout_blank.py"
-    "test/ppu/unit/test_ppu_core_smoke.py"
-    "test/ppu/unit/test_mixer.py"
-    "test/ppu/unit/test_obj_observe.py"
-    "test/ppu/unit/test_obj_priority.py"
-    "test/ppu/unit/test_obj_fetch.py"
-    "test/ppu/unit/test_oam_scan.py"
-    "test/ppu/unit/test_window.py"
-    "test/ppu/unit/test_tile.py"
-    "test/power/test_ppu_power_quiescence.py"
     "test/unit/test_interrupt_service.py"
     "test/unit/test_joypad.py"
     "test/unit/test_joypad_interrupts.py"
     "test/unit/test_serial.py"
     "test/unit/test_timer.py"
-    "tools/run_cpu_instrs_blargg_verilator.sh"
-    "test/rom/test_loads_basic.py"
 )
 
 PRECOMMIT_SWIM_TESTS_EXTENDED=(
@@ -106,6 +95,17 @@ PRECOMMIT_SWIM_TESTS_EXTENDED=(
     "test/rom/test_ppu_wave_b.py"
     "test/rom/test_timer_div_basic.py"
     "test/rom/test_timer_irq_halt.py"
+    "test/rom/test_loads_basic.py"
+    "tools/run_cpu_instrs_blargg_verilator.sh"
+    "test/ppu/unit/test_ppu_core_smoke.py"
+    "test/ppu/unit/test_mixer.py"
+    "test/ppu/unit/test_obj_observe.py"
+    "test/ppu/unit/test_obj_priority.py"
+    "test/ppu/unit/test_obj_fetch.py"
+    "test/ppu/unit/test_oam_scan.py"
+    "test/ppu/unit/test_window.py"
+    "test/ppu/unit/test_tile.py"
+    "test/power/test_ppu_power_quiescence.py"
 )
 
 if [[ ! -x "$SWIM" ]]; then
