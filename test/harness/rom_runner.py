@@ -248,6 +248,97 @@ def _decode_png_1bit_grayscale(path: Path) -> tuple[tuple[int, ...], ...]:
     return tuple(rows)
 
 
+def _decode_png_grayscale(path: Path) -> tuple[tuple[int, ...], ...]:
+    import struct
+    import zlib
+
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError(f"{path} is not a PNG file")
+    offset = 8
+    width = 0
+    height = 0
+    bit_depth = 0
+    color_type = 0
+    idat = bytearray()
+
+    while offset < len(data):
+        chunk_len = struct.unpack(">I", data[offset : offset + 4])[0]
+        chunk_type = data[offset + 4 : offset + 8]
+        chunk_data = data[offset + 8 : offset + 8 + chunk_len]
+        offset += 12 + chunk_len
+        if chunk_type == b"IHDR":
+            width, height, bit_depth, color_type, _compression, _filter, interlace = struct.unpack(
+                ">IIBBBBB", chunk_data
+            )
+            if interlace != 0:
+                raise ValueError(f"{path} uses unsupported interlaced PNG encoding")
+            if color_type != 0 or bit_depth not in {1, 2, 8}:
+                raise ValueError(
+                    f"{path} must be grayscale PNG with bit_depth 1, 2, or 8; "
+                    f"got bit_depth={bit_depth} color_type={color_type}"
+                )
+        elif chunk_type == b"IDAT":
+            idat.extend(chunk_data)
+        elif chunk_type == b"IEND":
+            break
+
+    raw = zlib.decompress(bytes(idat))
+    stride = (width * bit_depth + 7) // 8
+    rows: list[tuple[int, ...]] = []
+    cursor = 0
+    prev = bytearray(stride)
+
+    def paeth(a: int, b: int, c: int) -> int:
+        prediction = a + b - c
+        pa = abs(prediction - a)
+        pb = abs(prediction - b)
+        pc = abs(prediction - c)
+        if pa <= pb and pa <= pc:
+            return a
+        if pb <= pc:
+            return b
+        return c
+
+    def decode_sample(scan: bytearray, index: int) -> int:
+        if bit_depth == 8:
+            return scan[index]
+        samples_per_byte = 8 // bit_depth
+        byte = scan[index // samples_per_byte]
+        shift = (samples_per_byte - 1 - (index % samples_per_byte)) * bit_depth
+        sample = (byte >> shift) & ((1 << bit_depth) - 1)
+        if bit_depth == 1:
+            return sample * 0xFF
+        if bit_depth == 2:
+            return sample * 0x55
+        raise AssertionError("unreachable bit depth")
+
+    for _ in range(height):
+        filt = raw[cursor]
+        cursor += 1
+        scan = bytearray(raw[cursor : cursor + stride])
+        cursor += stride
+        if filt == 1:
+            for index in range(stride):
+                scan[index] = (scan[index] + (scan[index - 1] if index else 0)) & 0xFF
+        elif filt == 2:
+            for index in range(stride):
+                scan[index] = (scan[index] + prev[index]) & 0xFF
+        elif filt == 3:
+            for index in range(stride):
+                left = scan[index - 1] if index else 0
+                scan[index] = (scan[index] + ((left + prev[index]) >> 1)) & 0xFF
+        elif filt == 4:
+            for index in range(stride):
+                left = scan[index - 1] if index else 0
+                up = prev[index]
+                up_left = prev[index - 1] if index else 0
+                scan[index] = (scan[index] + paeth(left, up, up_left)) & 0xFF
+        rows.append(tuple(decode_sample(scan, x) for x in range(width)))
+        prev = scan
+    return tuple(rows)
+
+
 def _blob_frame_zero() -> list[list[int]]:
     return [[0 for _ in range(SCREEN_WIDTH)] for _ in range(SCREEN_HEIGHT)]
 
@@ -256,8 +347,25 @@ def _freeze_blob_frame(frame: list[list[int]]) -> tuple[tuple[int, ...], ...]:
     return tuple(tuple(row) for row in frame)
 
 
+def _shade_frame_zero() -> list[list[int]]:
+    return [[0xFF for _ in range(SCREEN_WIDTH)] for _ in range(SCREEN_HEIGHT)]
+
+
+def _freeze_shade_frame(frame: list[list[int]]) -> tuple[tuple[int, ...], ...]:
+    return tuple(tuple(row) for row in frame)
+
+
 def _scanout_blob_bit(shade: int, *, light_shades: frozenset[int]) -> int:
     return 1 if (int(shade) & 0x3) in light_shades else 0
+
+
+def _scanout_dmg_gray(shade: int) -> int:
+    return {
+        0: 0xFF,
+        1: 0xAA,
+        2: 0x55,
+        3: 0x00,
+    }[int(shade) & 0x3]
 
 
 def _capture_blob_pixel(
@@ -276,6 +384,15 @@ def _capture_blob_pixel(
         frame[y][x] = _scanout_blob_bit(getattr(observation, "ppu_scanout_shade", 0), light_shades=light_shades)
 
 
+def _capture_shade_pixel(frame: list[list[int]], observation: Any) -> None:
+    if int(getattr(observation, "ppu_scanout_kind", 0)) != 0:
+        return
+    x = int(getattr(observation, "ppu_scanout_x", 0))
+    y = int(getattr(observation, "ppu_scanout_y", 0))
+    if 0 <= x < SCREEN_WIDTH and 0 <= y < SCREEN_HEIGHT:
+        frame[y][x] = _scanout_dmg_gray(getattr(observation, "ppu_scanout_shade", 0))
+
+
 def _blob_frame_mismatch(
     actual: tuple[tuple[int, ...], ...],
     expected: tuple[tuple[int, ...], ...],
@@ -288,6 +405,21 @@ def _blob_frame_mismatch(
                 mismatches += 1
                 if first is None:
                     first = (x, y, actual_bit, expected_bit)
+    return mismatches, first
+
+
+def _shade_frame_mismatch(
+    actual: tuple[tuple[int, ...], ...],
+    expected: tuple[tuple[int, ...], ...],
+) -> tuple[int, tuple[int, int, int, int] | None]:
+    mismatches = 0
+    first: tuple[int, int, int, int] | None = None
+    for y, (actual_row, expected_row) in enumerate(zip(actual, expected)):
+        for x, (actual_px, expected_px) in enumerate(zip(actual_row, expected_row)):
+            if actual_px != expected_px:
+                mismatches += 1
+                if first is None:
+                    first = (x, y, actual_px, expected_px)
     return mismatches, first
 
 
@@ -1648,6 +1780,69 @@ async def run_soc_dut_to_mealybug_blob_frame(
     )
 
 
+async def run_soc_dut_to_shaded_frame(
+    driver: Any,
+    *,
+    rom_bytes: bytes,
+    max_mcycles: int,
+    stable_frames: int = 2,
+) -> tuple[tuple[int, ...], ...]:
+    memory = ExternalMemoryBus(rom_bytes, use_integrated_ppu=True)
+    current_frame = _shade_frame_zero()
+    last_completed_frame: tuple[tuple[int, ...], ...] | None = None
+    stable_completed_frames = 0
+    seen_frame_start = False
+    completed_frames = 0
+    last_post = None
+
+    while completed_frames < max_mcycles:
+        post, _preview_kind, _preview_addr, _preview_data, _video_sample, video_write_allowed, observations = (
+            await _soc_step_to_commit_with_observations(driver, memory)
+        )
+        last_post = post
+        completed_frames += 1
+        write_en = int(getattr(post, "bus_req_kind", BUS_REQ_IDLE)) == BUS_REQ_WRITE
+        write_addr = int(getattr(post, "bus_req_addr", 0)) if write_en else 0
+        write_data = int(getattr(post, "bus_req_data", 0)) if write_en else 0
+        if write_en and not (DIV_ADDR <= write_addr <= TAC_ADDR) and write_addr not in (IF_ADDR, IE_ADDR):
+            if video_write_allowed is not None:
+                if video_write_allowed:
+                    memory.write_video_direct(write_addr, write_data)
+            else:
+                memory.write(write_addr, write_data)
+        memory.advance_cycle(
+            write_en=write_en,
+            write_addr=write_addr,
+            write_data=write_data,
+            if_set_bits=0,
+            irq_ack_valid=bool(getattr(post, "irq_ack_valid", False)),
+            irq_ack_bit=int(getattr(post, "irq_ack_bit", 0)),
+        )
+
+        for observation in observations:
+            if not bool(getattr(observation, "ppu_scanout_valid", False)):
+                continue
+            if int(getattr(observation, "ppu_scanout_kind", 0)) == 2:
+                if seen_frame_start:
+                    frozen = _freeze_shade_frame(current_frame)
+                    if frozen == last_completed_frame:
+                        stable_completed_frames += 1
+                    else:
+                        last_completed_frame = frozen
+                        stable_completed_frames = 1
+                    if stable_completed_frames >= stable_frames:
+                        return frozen
+                current_frame = _shade_frame_zero()
+                seen_frame_start = True
+                continue
+            _capture_shade_pixel(current_frame, observation)
+
+    raise TimeoutError(
+        f"SoC DUT did not stabilize a shaded frame within {max_mcycles} M-cycles; "
+        f"last_pc=0x{int(getattr(last_post, 'pc', 0)):04X}"
+    )
+
+
 async def assert_mealybug_ppu_soc_rom_matches_reference(
     driver: Any,
     *,
@@ -1677,6 +1872,39 @@ async def assert_mealybug_ppu_soc_rom_matches_reference(
         first_text = f" first mismatch at ({x}, {y}): actual={actual_bit} expected={expected_bit}"
     raise AssertionError(
         f"mealybug frame mismatch for {rom_path.name} vs {expected_path.name}: "
+        f"{mismatches} pixels differ.{first_text}"
+    )
+
+
+async def assert_ppu_soc_rom_matches_reference_grayscale(
+    driver: Any,
+    *,
+    rom_path: Path,
+    expected_path: Path,
+    max_mcycles: int,
+) -> None:
+    actual = await run_soc_dut_to_shaded_frame(
+        driver,
+        rom_bytes=rom_path.read_bytes(),
+        max_mcycles=max_mcycles,
+    )
+    expected = _decode_png_grayscale(expected_path)
+    if len(expected) != SCREEN_HEIGHT or any(len(row) != SCREEN_WIDTH for row in expected):
+        raise AssertionError(
+            f"{expected_path} must decode to {SCREEN_WIDTH}x{SCREEN_HEIGHT}, "
+            f"got {len(expected[0]) if expected else 0}x{len(expected)}"
+        )
+    mismatches, first = _shade_frame_mismatch(actual, expected)
+    if mismatches == 0:
+        return
+    first_text = ""
+    if first is not None:
+        x, y, actual_px, expected_px = first
+        first_text = (
+            f" first mismatch at ({x}, {y}): actual=0x{actual_px:02X} expected=0x{expected_px:02X}"
+        )
+    raise AssertionError(
+        f"frame mismatch for {rom_path.name} vs {expected_path.name}: "
         f"{mismatches} pixels differ.{first_text}"
     )
 

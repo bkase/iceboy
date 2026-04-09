@@ -14,6 +14,7 @@ MOONEYE_README = ROOT / "bench" / "external" / "mooneye-test-suite" / "README.md
 MOONEYE_PPU_ROOT = ROOT / "bench" / "external" / "mooneye-test-suite" / "acceptance" / "ppu"
 MEALYBUG_README = ROOT / "bench" / "external" / "mealybug-tearoom-tests" / "README.md"
 MEALYBUG_PPU_ROOT = ROOT / "bench" / "external" / "mealybug-tearoom-tests" / "ppu"
+DMG_ACID2_ROM = ROOT / "bench" / "external" / "dmg-acid2" / "dmg-acid2.gb"
 
 
 class PpuExternalAssetsTest(unittest.TestCase):
@@ -95,6 +96,10 @@ class PpuExternalAssetsTest(unittest.TestCase):
             "m3_window_timing.gb",
         }
         self.assertEqual({path.name for path in MEALYBUG_PPU_ROOT.glob("*.gb")}, expected)
+
+    def test_dmg_acid2_rom_is_vendored_offline(self) -> None:
+        self.assertTrue(DMG_ACID2_ROM.is_file())
+        self.assertGreater(DMG_ACID2_ROM.stat().st_size, 0)
 
 
 if __name__ == "__main__":

@@ -191,6 +191,17 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("soc_rom_top_verilator_wrapper.sv", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
+    def test_dmg_acid2_verilator_wrapper_dry_run_uses_sanitized_verilog_path(self) -> None:
+        completed = self.run_script("run_dmg_acid2_verilator.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("tools/prepare_verilator_sv.py", completed.stdout)
+        self.assertIn("build/spade.verilator.sv", completed.stdout)
+        self.assertIn("soc_rom_top_verilator_wrapper.sv", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+
     def test_spram_synth_smoke_dry_run_targets_named_test_top(self) -> None:
         completed = self.run_script("run_spram_synth_smoke.sh", "--dry-run", "--skip-build")
         self.assertEqual(completed.returncode, 0, completed.stderr)

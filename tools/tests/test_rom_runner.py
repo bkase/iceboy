@@ -33,8 +33,11 @@ from test.harness.rom_runner import (
     ExternalMemoryBus,
     _ScriptedJoypadOracleState,
     _blob_frame_mismatch,
+    _decode_png_grayscale,
     _decode_png_1bit_grayscale,
+    _scanout_dmg_gray,
     _scanout_blob_bit,
+    _shade_frame_mismatch,
     classify_blargg_serial_capture,
     classify_mooneye_register_signature,
     classify_mooneye_screen_text,
@@ -51,6 +54,9 @@ from test.harness.rom_runner import (
 
 MEALYBUG_EXPECTED_ROOT = (
     Path(__file__).resolve().parents[2] / "bench" / "expected" / "suite_owned" / "mealybug-tearoom-tests" / "DMG-blob"
+)
+DMG_ACID2_EXPECTED = (
+    Path(__file__).resolve().parents[2] / "bench" / "expected" / "suite_owned" / "dmg-acid2" / "reference-dmg.png"
 )
 
 
@@ -429,6 +435,22 @@ class RomRunnerTest(unittest.TestCase):
         actual = ((1, 0), (0, 1))
         expected = ((1, 1), (0, 1))
         self.assertEqual(_blob_frame_mismatch(actual, expected), (1, (1, 0, 0, 1)))
+
+    def test_decode_png_grayscale_reads_pinned_dmg_acid2_reference(self) -> None:
+        image = _decode_png_grayscale(DMG_ACID2_EXPECTED)
+        self.assertEqual(len(image), 144)
+        self.assertTrue(all(len(row) == 160 for row in image))
+        self.assertEqual(set(pixel for row in image for pixel in row), {0x00, 0x55, 0xAA, 0xFF})
+
+    def test_shade_frame_helpers_report_canonical_dmg_shades_and_first_mismatch(self) -> None:
+        self.assertEqual(_scanout_dmg_gray(0), 0xFF)
+        self.assertEqual(_scanout_dmg_gray(1), 0xAA)
+        self.assertEqual(_scanout_dmg_gray(2), 0x55)
+        self.assertEqual(_scanout_dmg_gray(3), 0x00)
+
+        actual = ((0xFF, 0x55), (0xAA, 0x00))
+        expected = ((0xFF, 0xAA), (0xAA, 0x00))
+        self.assertEqual(_shade_frame_mismatch(actual, expected), (1, (1, 0, 0x55, 0xAA)))
 
     def test_external_memory_bus_models_joyp_selection_and_press_edges(self) -> None:
         bus = ExternalMemoryBus(bytes(0x8000))
