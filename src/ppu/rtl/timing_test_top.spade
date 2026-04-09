@@ -129,6 +129,7 @@ pub entity timing_test_top(
             window_line: 0u8,
             oam_scan: lib::ppu::sem::types::empty_oam_scan_state(),
             line_objs: lib::ppu::sem::types::empty_line_obj_list(),
+            line_obj_fetch_index: 0u4,
             obj_fetch_ticket: lib::ppu::sem::types::zero_selected_obj_ticket(),
             obj_fetch_flags: lib::ppu::sem::types::zero_obj_flags(),
             fetcher: lib::ppu::sem::types::initial_fetcher_state(),

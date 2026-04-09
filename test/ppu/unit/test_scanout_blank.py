@@ -34,12 +34,25 @@ def decode_output(value: int) -> dict[str, int | bool]:
     }
 
 
-async def reset_dut(dut) -> None:
+async def reset_dut(
+    dut,
+    *,
+    seed_valid: bool = False,
+    seed_run: int = 0,
+    seed_phase: int = 0,
+    seed_ly: int = 0,
+    seed_dot_in_line: int = 0,
+) -> None:
     cocotb.start_soon(Clock(dut.clk_i, 10, units="ns").start())
     dut.dot_ce_i.value = 0
     dut.write_valid_i.value = 0
     dut.write_target_i.value = 0
     dut.write_value_i.value = 0
+    dut.seed_valid_i.value = int(seed_valid)
+    dut.seed_run_i.value = seed_run
+    dut.seed_phase_i.value = seed_phase
+    dut.seed_ly_i.value = seed_ly
+    dut.seed_dot_in_line_i.value = seed_dot_in_line
     dut.rst_i.value = 1
     await ClockCycles(dut.clk_i, 3)
     dut.rst_i.value = 0
@@ -74,10 +87,10 @@ async def test_visible_nonpixel_dots_emit_blank_reason(dut):
 
 @cocotb.test()
 async def test_vblank_entry_emits_line_start_then_nonvisible_blank(dut):
-    await reset_dut(dut)
+    await reset_dut(dut, seed_valid=True, seed_run=2, seed_phase=3, seed_ly=143, seed_dot_in_line=400)
 
     line_start = None
-    for _ in range(154 * 456):
+    for _ in range(64):
         snapshot = await step(dut)
         if snapshot["scanout_kind"] == SCANOUT_LINE_START and snapshot["scanout_y"] == 144:
             line_start = snapshot
@@ -85,6 +98,9 @@ async def test_vblank_entry_emits_line_start_then_nonvisible_blank(dut):
 
     assert line_start is not None
     assert line_start["ly"] == 144
+    assert line_start["scanout_valid"] is True
+    assert line_start["scanout_kind"] == SCANOUT_LINE_START
+    assert line_start["scanout_y"] == 144
     assert line_start["phase"] == PHASE_VBLANK
 
     blank = await step(dut)

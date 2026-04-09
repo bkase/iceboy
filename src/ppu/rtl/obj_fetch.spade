@@ -191,6 +191,66 @@ pub fn obj_fifo_overlay_row_clipped(fifo: ObjFifo, row: [ObjPixel; 8], offset: u
     )
 }
 
+fn obj_fifo_pixel_at(fifo: ObjFifo, slot: uint<5>) -> ObjPixel {
+    match slot {
+        0u5 => fifo.pixels[0],
+        1u5 => fifo.pixels[1],
+        2u5 => fifo.pixels[2],
+        3u5 => fifo.pixels[3],
+        4u5 => fifo.pixels[4],
+        5u5 => fifo.pixels[5],
+        6u5 => fifo.pixels[6],
+        7u5 => fifo.pixels[7],
+        8u5 => fifo.pixels[8],
+        9u5 => fifo.pixels[9],
+        10u5 => fifo.pixels[10],
+        11u5 => fifo.pixels[11],
+        12u5 => fifo.pixels[12],
+        13u5 => fifo.pixels[13],
+        14u5 => fifo.pixels[14],
+        _ => fifo.pixels[15],
+    }
+}
+
+fn pop_obj_pixels(fifo: ObjFifo) -> [ObjPixel; 16] {
+    [
+        fifo.pixels[1],
+        fifo.pixels[2],
+        fifo.pixels[3],
+        fifo.pixels[4],
+        fifo.pixels[5],
+        fifo.pixels[6],
+        fifo.pixels[7],
+        fifo.pixels[8],
+        fifo.pixels[9],
+        fifo.pixels[10],
+        fifo.pixels[11],
+        fifo.pixels[12],
+        fifo.pixels[13],
+        fifo.pixels[14],
+        fifo.pixels[15],
+        zero_obj_pixel(),
+    ]
+}
+
+pub struct ObjFifoPopResult {
+    next_fifo: ObjFifo,
+    pixel_valid: bool,
+    pixel: ObjPixel,
+}
+
+pub fn pop_obj_fifo(fifo: ObjFifo) -> ObjFifoPopResult {
+    if fifo.count == 0u5 {
+        ObjFifoPopResult$(next_fifo: fifo, pixel_valid: false, pixel: zero_obj_pixel())
+    } else {
+        ObjFifoPopResult$(
+            next_fifo: ObjFifo$(count: trunc(fifo.count - 1u5), pixels: pop_obj_pixels(fifo)),
+            pixel_valid: true,
+            pixel: obj_fifo_pixel_at(fifo, 0u5),
+        )
+    }
+}
+
 pub fn cancel_obj_fetch(state: FetcherState) -> FetcherState {
     FetcherState$(
         epoch: next_fetcher_epoch(state.epoch),

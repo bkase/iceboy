@@ -21,12 +21,26 @@ use lib::ppu::sem::types::{
 };
 use lib::sim::ppu_support::{build_test_lcdc, held_dot_output, ppu_debug_trace};
 
-fn seeded_ticket() -> SelectedObjTicket {
-    SelectedObjTicket$(oam_index: 0u6, x: 9u8, y: 16u8, selection_rank: 0u4)
+fn configured_ticket(oam_index: uint<6>, x: uint<8>, selection_rank: uint<4>) -> SelectedObjTicket {
+    SelectedObjTicket$(oam_index: oam_index, x: x, y: 16u8, selection_rank: selection_rank)
 }
 
-fn seeded_line_objs() -> LineObjList {
-    LineObjList$(count: 1u4, slots: [seeded_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket(), lib::ppu::sem::types::zero_selected_obj_ticket()])
+fn configured_line_objs(line_obj_count_i: uint<4>, ticket0_x_i: uint<8>, ticket1_x_i: uint<8>) -> LineObjList {
+    LineObjList$(
+        count: line_obj_count_i,
+        slots: [
+            configured_ticket(0u6, ticket0_x_i, 0u4),
+            configured_ticket(1u6, ticket1_x_i, 1u4),
+            lib::ppu::sem::types::zero_selected_obj_ticket(),
+            lib::ppu::sem::types::zero_selected_obj_ticket(),
+            lib::ppu::sem::types::zero_selected_obj_ticket(),
+            lib::ppu::sem::types::zero_selected_obj_ticket(),
+            lib::ppu::sem::types::zero_selected_obj_ticket(),
+            lib::ppu::sem::types::zero_selected_obj_ticket(),
+            lib::ppu::sem::types::zero_selected_obj_ticket(),
+            lib::ppu::sem::types::zero_selected_obj_ticket(),
+        ],
+    )
 }
 
 fn seeded_regs() -> PpuRegs {
@@ -44,12 +58,18 @@ fn seeded_regs() -> PpuRegs {
     )
 }
 
-fn seeded_state() -> PpuState {
+fn seeded_state(
+    line_obj_count_i: uint<4>,
+    ticket0_x_i: uint<8>,
+    ticket1_x_i: uint<8>,
+    start_x_out_i: uint<8>,
+    start_dot_in_line_i: uint<9>,
+) -> PpuState {
     PpuState$(
         visible: PpuVisibleState$(regs: seeded_regs(), ly: 0u8),
         status: PpuStatusState$(
             run: LcdRunState::Running,
-            phase: PpuPhase::Transfer$(x_out: 1u8, discard_scx: 0u3),
+            phase: PpuPhase::Transfer$(x_out: start_x_out_i, discard_scx: 0u3),
             stat_irq: StatIrqState$(line_high: false),
             lyc_match_flag: true,
         ),
@@ -59,12 +79,13 @@ fn seeded_state() -> PpuState {
             window_enable_at_mode2_start: false,
         ),
         render: lib::ppu::sem::types::PpuRenderState$(
-            dot_in_line: 80u9,
-            x_out: 1u8,
+            dot_in_line: start_dot_in_line_i,
+            x_out: start_x_out_i,
             window_state: lib::ppu::sem::types::WindowState::Inactive,
             window_line: 0u8,
             oam_scan: empty_oam_scan_state(),
-            line_objs: seeded_line_objs(),
+            line_objs: configured_line_objs(line_obj_count_i, ticket0_x_i, ticket1_x_i),
+            line_obj_fetch_index: 0u4,
             obj_fetch_ticket: lib::ppu::sem::types::zero_selected_obj_ticket(),
             obj_fetch_flags: lib::ppu::sem::types::zero_obj_flags(),
             fetcher: initial_fetcher_state(),
@@ -135,7 +156,16 @@ fn ok_mem_resp(req: PpuMemReq) -> PpuMemResp {
     PpuMemResp$(tag: req.tag, result: result)
 }
 
-pub entity obj_transfer_live_test_top(clk_i: clock, rst_i: bool, dot_ce_i: bool) -> uint<59> {
+pub entity obj_transfer_live_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    dot_ce_i: bool,
+    line_obj_count_i: uint<4>,
+    ticket0_x_i: uint<8>,
+    ticket1_x_i: uint<8>,
+    start_x_out_i: uint<8>,
+    start_dot_in_line_i: uint<9>,
+) -> uint<77> {
     decl state_reg;
     decl pending_req_reg;
     decl pending_resp_valid_reg;
@@ -148,7 +178,7 @@ pub entity obj_transfer_live_test_top(clk_i: clock, rst_i: bool, dot_ce_i: bool)
     let trace = ppu_debug_trace(zero_video_coord(), visible);
     let next_pending_req = if visible.mem_reqs.count != 0u3 { visible.mem_reqs.slots[0] } else { idle_ppu_mem_req() };
 
-    reg(clk_i) state_reg: PpuState reset(rst_i: seeded_state()) =
+    reg(clk_i) state_reg: PpuState reset(rst_i: seeded_state(line_obj_count_i, ticket0_x_i, ticket1_x_i, start_x_out_i, start_dot_in_line_i)) =
         if dot_ce_i { visible.next_state } else { state_reg };
     reg(clk_i) pending_req_reg: PpuMemReq reset(rst_i: idle_ppu_mem_req()) =
         if dot_ce_i { next_pending_req } else { pending_req_reg };
@@ -165,6 +195,9 @@ pub entity obj_transfer_live_test_top(clk_i: clock, rst_i: bool, dot_ce_i: bool)
         | (zext(next_pending_req.tag.id) << 33)
         | (zext(lib::util::bit(pending_resp_valid_reg)) << 37)
         | (zext(trace.line_objs.count) << 38)
-        | (zext(trace.ly_after) << 42)
-        | (zext(trace.dot_in_line_after) << 50)
+        | (zext(visible.next_state.render.line_obj_fetch_index) << 42)
+        | (zext(visible.next_state.render.x_out) << 46)
+        | (zext(trace.ly_after) << 54)
+        | (zext(trace.dot_in_line_after) << 62)
+        | (zext(lib::sim::ppu_support::encode_ppu_phase(trace.phase_after)) << 71)
 }

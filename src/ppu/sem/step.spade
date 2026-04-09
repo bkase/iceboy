@@ -50,10 +50,11 @@ use lib::ppu::sem::types::{
 use lib::ppu::rtl::fetcher::{advance_bg_fetcher, initial_bg_fetcher_state, next_fetcher_epoch, start_bg_fetcher};
 use lib::ppu::rtl::fifo::{advance_bg_pipe, bg_fifo_has_room_for_row, clear_bg_fifo, note_window_tile_push};
 use lib::ppu::rtl::irq::irq_req;
-use lib::ppu::rtl::mixer::emit_bg_scanout;
 use lib::ppu::rtl::obj_fetch::{
     decode_obj_flags,
     decode_obj_row,
+    ObjFifoPopResult,
+    pop_obj_fifo,
     obj_fifo_left_clip,
     obj_fifo_overlay_row_clipped,
     obj_fifo_start_offset,
@@ -185,6 +186,7 @@ fn update_render_state(
         window_line: render.window_line,
         oam_scan: next_scan,
         line_objs: next_list,
+        line_obj_fetch_index: if line_start { 0u4 } else { render.line_obj_fetch_index },
         obj_fetch_ticket: if line_start { zero_selected_obj_ticket() } else { render.obj_fetch_ticket },
         obj_fetch_flags: if line_start { zero_obj_flags() } else { render.obj_fetch_flags },
         fetcher: render.fetcher,
@@ -375,12 +377,31 @@ fn obj_trigger_x(ticket: SelectedObjTicket) -> uint<8> {
     if ticket.x > 8u8 { trunc(ticket.x - 8u8) } else { 0u8 }
 }
 
+fn line_obj_ticket_at(line_objs: LineObjList, index: uint<4>) -> SelectedObjTicket {
+    match index {
+        0u4 => line_objs.slots[0],
+        1u4 => line_objs.slots[1],
+        2u4 => line_objs.slots[2],
+        3u4 => line_objs.slots[3],
+        4u4 => line_objs.slots[4],
+        5u4 => line_objs.slots[5],
+        6u4 => line_objs.slots[6],
+        7u4 => line_objs.slots[7],
+        8u4 => line_objs.slots[8],
+        _ => line_objs.slots[9],
+    }
+}
+
+fn has_pending_line_obj(render: PpuRenderState) -> bool {
+    render.line_obj_fetch_index < render.line_objs.count
+}
+
 fn should_start_live_obj_fetch(render: PpuRenderState, regs: PpuRegs, x_out: uint<8>) -> bool {
     regs.lcdc.obj_enable
-        && render.line_objs.count != 0u4
+        && has_pending_line_obj(render)
         && render.obj_fifo.count == 0u5
         && !fetcher_source_is_object(render)
-        && x_out >= obj_trigger_x(render.line_objs.slots[0])
+        && x_out >= obj_trigger_x(line_obj_ticket_at(render.line_objs, render.line_obj_fetch_index))
 }
 
 fn obj_fetch_with_req(render: PpuRenderState, step: FetcherStep, req: PpuMemReq) -> (PpuRenderState, PpuMemReqs) {
@@ -407,6 +428,7 @@ fn obj_fetch_with_req(render: PpuRenderState, step: FetcherStep, req: PpuMemReq)
             window_line: render.window_line,
             oam_scan: render.oam_scan,
             line_objs: render.line_objs,
+            line_obj_fetch_index: render.line_obj_fetch_index,
             obj_fetch_ticket: render.obj_fetch_ticket,
             obj_fetch_flags: render.obj_fetch_flags,
             fetcher: next_fetcher,
@@ -427,7 +449,8 @@ fn start_live_obj_fetch(render: PpuRenderState) -> PpuRenderState {
         window_line: render.window_line,
         oam_scan: render.oam_scan,
         line_objs: render.line_objs,
-        obj_fetch_ticket: render.line_objs.slots[0],
+        line_obj_fetch_index: render.line_obj_fetch_index,
+        obj_fetch_ticket: line_obj_ticket_at(render.line_objs, render.line_obj_fetch_index),
         obj_fetch_flags: zero_obj_flags(),
         fetcher: lib::ppu::sem::types::FetcherState$(
             epoch: next_fetcher_epoch(fetcher.epoch),
@@ -486,6 +509,7 @@ fn complete_live_obj_fetch(
         window_line: render.window_line,
         oam_scan: render.oam_scan,
         line_objs: render.line_objs,
+        line_obj_fetch_index: trunc(render.line_obj_fetch_index + 1u4),
         obj_fetch_ticket: zero_selected_obj_ticket(),
         obj_fetch_flags: zero_obj_flags(),
         fetcher: resume_bg_fetcher(render, render_inputs, visible_ly, x_out),
@@ -513,6 +537,7 @@ fn advance_live_obj_fetch(
                     window_line: render.window_line,
                     oam_scan: render.oam_scan,
                     line_objs: render.line_objs,
+                    line_obj_fetch_index: render.line_obj_fetch_index,
                     obj_fetch_ticket: zero_selected_obj_ticket(),
                     obj_fetch_flags: zero_obj_flags(),
                     fetcher: resume_bg_fetcher(render, render_inputs, visible_ly, x_out),
@@ -532,6 +557,7 @@ fn advance_live_obj_fetch(
                         window_line: render.window_line,
                         oam_scan: render.oam_scan,
                         line_objs: render.line_objs,
+                        line_obj_fetch_index: render.line_obj_fetch_index,
                         obj_fetch_ticket: render.obj_fetch_ticket,
                         obj_fetch_flags: render.obj_fetch_flags,
                         fetcher: lib::ppu::sem::types::FetcherState$(
@@ -562,6 +588,7 @@ fn advance_live_obj_fetch(
                         window_line: render.window_line,
                         oam_scan: render.oam_scan,
                         line_objs: render.line_objs,
+                        line_obj_fetch_index: render.line_obj_fetch_index,
                         obj_fetch_ticket: render.obj_fetch_ticket,
                         obj_fetch_flags: decode_obj_flags(data),
                         fetcher: lib::ppu::sem::types::FetcherState$(
@@ -592,6 +619,7 @@ fn advance_live_obj_fetch(
                         window_line: render.window_line,
                         oam_scan: render.oam_scan,
                         line_objs: render.line_objs,
+                        line_obj_fetch_index: render.line_obj_fetch_index,
                         obj_fetch_ticket: render.obj_fetch_ticket,
                         obj_fetch_flags: render.obj_fetch_flags,
                         fetcher: lib::ppu::sem::types::FetcherState$(
@@ -622,6 +650,7 @@ fn advance_live_obj_fetch(
                         window_line: render.window_line,
                         oam_scan: render.oam_scan,
                         line_objs: render.line_objs,
+                        line_obj_fetch_index: render.line_obj_fetch_index,
                         obj_fetch_ticket: render.obj_fetch_ticket,
                         obj_fetch_flags: render.obj_fetch_flags,
                         fetcher: lib::ppu::sem::types::FetcherState$(
@@ -717,6 +746,7 @@ fn apply_live_transfer(
                         window_line: candidate_state.render.window_line,
                         oam_scan: candidate_state.render.oam_scan,
                         line_objs: candidate_state.render.line_objs,
+                        line_obj_fetch_index: next_obj_render.line_obj_fetch_index,
                         obj_fetch_ticket: next_obj_render.obj_fetch_ticket,
                         obj_fetch_flags: next_obj_render.obj_fetch_flags,
                         fetcher: next_obj_render.fetcher,
@@ -732,6 +762,7 @@ fn apply_live_transfer(
                         window_line: candidate_state.render.window_line,
                         oam_scan: candidate_state.render.oam_scan,
                         line_objs: candidate_state.render.line_objs,
+                        line_obj_fetch_index: 0u4,
                         obj_fetch_ticket: zero_selected_obj_ticket(),
                         obj_fetch_flags: zero_obj_flags(),
                         fetcher: initial_bg_fetcher_state(),
@@ -792,15 +823,23 @@ fn apply_live_transfer(
             } else {
                 pipe_output.next_window_state
             };
+        let obj_popped =
+            if pipe_output.pixel_valid {
+                pop_obj_fifo(state.render.obj_fifo)
+            } else {
+                ObjFifoPopResult$(next_fifo: state.render.obj_fifo, pixel_valid: false, pixel: lib::ppu::sem::types::zero_obj_pixel())
+            };
         let next_x_out =
             if pipe_output.pixel_valid {
                 trunc(base_x_out + 1u8)
             } else {
                 base_x_out
             };
-        let pixel_scanout = emit_bg_scanout(
+        let pixel_scanout = lib::ppu::rtl::mixer::emit_mixed_scanout(
             pipe_output.pixel_valid && !candidate_state.render.first_frame_blank && candidate_state.visible.ly < 144u8,
             pipe_output.pixel,
+            obj_popped.pixel_valid,
+            obj_popped.pixel,
             render_inputs,
             base_x_out,
             candidate_state.visible.ly,
@@ -828,11 +867,12 @@ fn apply_live_transfer(
                     window_line: pipe_output.next_window_line,
                     oam_scan: candidate_state.render.oam_scan,
                     line_objs: candidate_state.render.line_objs,
+                    line_obj_fetch_index: candidate_state.render.line_obj_fetch_index,
                     obj_fetch_ticket: if next_is_transfer { candidate_state.render.obj_fetch_ticket } else { zero_selected_obj_ticket() },
                     obj_fetch_flags: if next_is_transfer { candidate_state.render.obj_fetch_flags } else { zero_obj_flags() },
                     fetcher: if next_is_transfer { fetcher_output.next_state } else { initial_bg_fetcher_state() },
                     bg_fifo: if next_is_transfer { pipe_output.next_fifo } else { clear_bg_fifo() },
-                    obj_fifo: if next_is_transfer { candidate_state.render.obj_fifo } else { empty_obj_fifo() },
+                    obj_fifo: if next_is_transfer { obj_popped.next_fifo } else { empty_obj_fifo() },
                     first_frame_blank: candidate_state.render.first_frame_blank,
                 ),
             ),

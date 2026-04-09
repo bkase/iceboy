@@ -1,11 +1,25 @@
 use std::option::Option;
 
-use lib::ppu::rtl::core::ppu_core;
+use lib::ppu::sem::events::idle_oam_dma_state;
+use lib::ppu::sem::events::idle_timed_ppu_event;
 use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
-use lib::ppu::sem::events::{idle_oam_dma_state, zero_video_coord};
-use lib::ppu::sem::memory::idle_ppu_mem_resp;
+use lib::ppu::sem::events::zero_video_coord;
+use lib::ppu::sem::step::step_dot;
+use lib::ppu::sem::types::{
+    LcdRunState,
+    Lcdc,
+    PpuPhase,
+    PpuRegs,
+    PpuSamplingState,
+    PpuState,
+    PpuStatusState,
+    PpuVisibleState,
+    StatSelect,
+    initial_ppu_render_state,
+    initial_stat_irq_state,
+};
 use lib::sim::encode::{encode_blank_reason, encode_scanout_kind, scanout_blank_reason, scanout_y};
-use lib::sim::ppu_support::{encode_ppu_phase, timed_events_from_direct};
+use lib::sim::ppu_support::{decode_lcd_run, encode_ppu_phase, held_dot_output, ppu_debug_trace, timed_events_from_direct};
 
 fn decode_mmio_reg(target_i: uint<4>) -> MmioReg {
     match target_i {
@@ -22,6 +36,91 @@ fn decode_mmio_reg(target_i: uint<4>) -> MmioReg {
     }
 }
 
+fn decode_seed_phase(phase_i: uint<3>, ly_i: uint<8>) -> PpuPhase {
+    match phase_i {
+        1u3 => PpuPhase::OamScan$(index: 0u6, found: 0u4),
+        2u3 => PpuPhase::Transfer$(x_out: 0u8, discard_scx: 0u3),
+        3u3 => PpuPhase::HBlank$(dots_left: 1u9),
+        4u3 => PpuPhase::VBlank$(line: ly_i, dots_left: 1u9),
+        _ => PpuPhase::LcdOff,
+    }
+}
+
+fn dmg_skipboot_regs() -> PpuRegs {
+    PpuRegs$(
+        lcdc: Lcdc$(
+            lcd_enable: true,
+            win_map_hi: false,
+            win_enable: false,
+            bgwin_data_hi: true,
+            bg_map_hi: false,
+            obj_size_8x16: false,
+            obj_enable: false,
+            bg_enable: true,
+        ),
+        stat_sel: StatSelect$(lyc_sel: false, mode2_sel: false, mode1_sel: false, mode0_sel: false),
+        scy: 0u8,
+        scx: 0u8,
+        lyc: 0u8,
+        wy: 0u8,
+        wx: 0u8,
+        bgp: 0xfcu8,
+        obp0: 0xffu8,
+        obp1: 0xffu8,
+    )
+}
+
+fn dmg_skipboot_state() -> PpuState {
+    PpuState$(
+        visible: PpuVisibleState$(regs: dmg_skipboot_regs(), ly: 0u8),
+        status: PpuStatusState$(
+            run: LcdRunState::Running,
+            phase: PpuPhase::OamScan$(index: 0u6, found: 0u4),
+            stat_irq: initial_stat_irq_state(),
+            lyc_match_flag: true,
+        ),
+        sampled: PpuSamplingState$(
+            scx_low3_line: 0u3,
+            wy_triggered_this_frame: false,
+            window_enable_at_mode2_start: false,
+        ),
+        render: initial_ppu_render_state(),
+    )
+}
+
+fn seeded_state(seed_run_i: uint<2>, seed_phase_i: uint<3>, seed_ly_i: uint<8>, seed_dot_in_line_i: uint<9>) -> PpuState {
+    let base = dmg_skipboot_state();
+    PpuState$(
+        visible: lib::ppu::sem::types::PpuVisibleState$(regs: base.visible.regs, ly: seed_ly_i),
+        status: lib::ppu::sem::types::PpuStatusState$(
+            run: decode_lcd_run(seed_run_i),
+            phase: decode_seed_phase(seed_phase_i, seed_ly_i),
+            stat_irq: base.status.stat_irq,
+            lyc_match_flag: base.status.lyc_match_flag,
+        ),
+        sampled: base.sampled,
+        render: lib::ppu::sem::types::PpuRenderState$(
+            dot_in_line: seed_dot_in_line_i,
+            x_out: base.render.x_out,
+            window_state: base.render.window_state,
+            window_line: base.render.window_line,
+            oam_scan: base.render.oam_scan,
+            line_objs: base.render.line_objs,
+            line_obj_fetch_index: base.render.line_obj_fetch_index,
+            obj_fetch_ticket: base.render.obj_fetch_ticket,
+            obj_fetch_flags: base.render.obj_fetch_flags,
+            fetcher: base.render.fetcher,
+            bg_fifo: base.render.bg_fifo,
+            obj_fifo: base.render.obj_fifo,
+            first_frame_blank: base.render.first_frame_blank,
+        ),
+    )
+}
+
+fn default_reset_state() -> PpuState {
+    dmg_skipboot_state()
+}
+
 pub entity scanout_test_top(
     clk_i: clock,
     rst_i: bool,
@@ -29,6 +128,11 @@ pub entity scanout_test_top(
     write_valid_i: bool,
     write_target_i: uint<4>,
     write_value_i: uint<8>,
+    seed_valid_i: bool,
+    seed_run_i: uint<2>,
+    seed_phase_i: uint<3>,
+    seed_ly_i: uint<8>,
+    seed_dot_in_line_i: uint<9>,
 ) -> uint<24> {
     let write =
         if write_valid_i {
@@ -37,35 +141,47 @@ pub entity scanout_test_top(
             Option::None
         };
     let (bus_events, bus_event_count) = timed_events_from_direct(zero_video_coord(), 0u64, write, Option::None);
-    let core = inst ppu_core(
-        clk_i,
-        rst_i,
-        dot_ce_i,
-        zero_video_coord(),
-        bus_events,
-        bus_event_count,
-        idle_ppu_mem_resp(),
-        idle_oam_dma_state(),
+    decl state_reg;
+    let stepped = step_dot(
+        state_reg,
+        lib::ppu::sem::events::DotInput$(
+            bus_events: bus_events,
+            bus_event_count: bus_event_count,
+            mem_resp: lib::ppu::sem::memory::idle_ppu_mem_resp(),
+            dma_state: idle_oam_dma_state(),
+        ),
     );
-    let scanout_valid = match core.scanout {
+    let visible = held_dot_output(state_reg, dot_ce_i, stepped);
+    let trace = ppu_debug_trace(zero_video_coord(), visible);
+    let reset_state =
+        if seed_valid_i {
+            seeded_state(seed_run_i, seed_phase_i, seed_ly_i, seed_dot_in_line_i)
+        } else {
+            default_reset_state()
+        };
+
+    reg(clk_i) state_reg: PpuState reset(rst_i: reset_state) =
+        if dot_ce_i { visible.next_state } else { state_reg };
+
+    let scanout_valid = match visible.scanout {
         Option::Some(_) => true,
         Option::None => false,
     };
-    let scanout_kind = match core.scanout {
+    let scanout_kind = match visible.scanout {
         Option::Some(event) => encode_scanout_kind(event),
         Option::None => 0u2,
     };
-    let scanout_y_value = match core.scanout {
+    let scanout_y_value = match visible.scanout {
         Option::Some(event) => scanout_y(event),
         Option::None => 0u8,
     };
-    let blank_reason_value = match core.scanout {
+    let blank_reason_value = match visible.scanout {
         Option::Some(event) => scanout_blank_reason(event),
         Option::None => 0u2,
     };
 
-    zext(encode_ppu_phase(core.trace.phase_after))
-        | (zext(core.trace.ly_after) << 3)
+    zext(encode_ppu_phase(trace.phase_after))
+        | (zext(trace.ly_after) << 3)
         | (zext(lib::util::bit(scanout_valid)) << 11)
         | (zext(scanout_kind) << 12)
         | (zext(scanout_y_value) << 14)
