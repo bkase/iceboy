@@ -1,3 +1,6 @@
+use std::mem::{clocked_memory_init, read_memory};
+use std::option::Option;
+
 use lib::board::clockgen::timebase;
 use lib::bus::ppu_event_bridge::ppu_event_bridge;
 use lib::bus::types::{BusReq, BusResp};
@@ -5,7 +8,7 @@ use lib::cpu::core::cpu_core;
 use lib::cpu::types::{IrqPending, SimulationProfiles};
 use lib::ppu::rtl::core::ppu_core;
 use lib::ppu::sem::events::{VideoCoord, idle_oam_dma_state};
-use lib::ppu::sem::memory::idle_ppu_mem_resp;
+use lib::ppu::sem::memory::{MemRegion, PpuMemKind, PpuMemReq, PpuMemResp, PpuMemResult, idle_ppu_mem_req, idle_ppu_mem_resp};
 use lib::sim::encode::{encode_halt, encode_ime, encode_phase, encode_scanout_kind, scanout_blank_reason, scanout_shade, scanout_source, scanout_x, scanout_y};
 use lib::sim::ppu_support::{encode_ppu_mode, scanout_or_blank};
 use lib::sim::types::{SimStimulus, cpu_arch_time_enable, peripheral_arch_time_enable};
@@ -92,6 +95,42 @@ fn next_ppu_if_latch_low2(
     after_if_write | set_bits
 }
 
+fn is_vram_addr(addr: uint<16>) -> bool {
+    addr >= 0x8000u16 && addr <= 0x9fffu16
+}
+
+fn is_oam_addr(addr: uint<16>) -> bool {
+    addr >= 0xfe00u16 && addr <= 0xfe9fu16
+}
+
+fn req_is_vram(req: PpuMemReq) -> bool {
+    match req.tag.region {
+        MemRegion::Vram => true,
+        MemRegion::Oam => false,
+    }
+}
+
+fn req_vram_addr(req: PpuMemReq) -> uint<13> {
+    trunc(req.addr - 0x8000u16)
+}
+
+fn req_oam_addr(req: PpuMemReq) -> uint<8> {
+    trunc(req.addr - 0xfe00u16)
+}
+
+fn ok_mem_resp(req: PpuMemReq, vram_data: uint<8>, oam_data: uint<8>) -> PpuMemResp {
+    let data = match req.kind {
+        PpuMemKind::Read =>
+            if req_is_vram(req) {
+                vram_data
+            } else {
+                oam_data
+            },
+        PpuMemKind::Write$(data: data) => data,
+    };
+    PpuMemResp$(tag: req.tag, result: PpuMemResult::Ok$(data: data))
+}
+
 entity soc_rom_top(
     clk: clock,
     rst: bool,
@@ -115,6 +154,7 @@ entity soc_rom_top(
     decl prev_ppu_stat_window_high;
     decl ppu_if_latch_low2;
     decl cpu_req;
+    decl mem_resp_now;
     let ppu_dot_ce = requested_peripheral_arch_time && tb.dot_ce;
     let (ppu_bus_events, ppu_bus_event_count) = inst ppu_event_bridge(
         clk,
@@ -132,7 +172,7 @@ entity soc_rom_top(
         video_now,
         ppu_bus_events,
         ppu_bus_event_count,
-        idle_ppu_mem_resp(),
+        mem_resp_now,
         idle_oam_dma_state(),
     );
     reg(clk) ppu_vblank_req_accum: bool reset(rst: false) =
@@ -150,6 +190,27 @@ entity soc_rom_top(
     let cpu = inst cpu_core(clk, rst, cpu_m_ce, cpu_bus_resp, cpu_irq_pending);
     let cpu_req = cpu_bus_req(cpu.bus_req_kind, cpu.bus_req_addr, cpu.bus_req_data);
     let (if_write_seen, if_write_value_low2) = if_write_low2(cpu_req);
+    let cpu_vram_write_en = cpu_m_ce && is_vram_addr(cpu.bus_req_addr) && cpu.bus_req_kind == 2u2;
+    let cpu_oam_write_en = cpu_m_ce && is_oam_addr(cpu.bus_req_addr) && cpu.bus_req_kind == 2u2;
+    let cpu_vram_write_addr: uint<13> = trunc(cpu.bus_req_addr - 0x8000u16);
+    let cpu_oam_write_addr: uint<8> = trunc(cpu.bus_req_addr - 0xfe00u16);
+    let next_pending_req = if ppu.mem_reqs.count != 0u3 { ppu.mem_reqs.slots[0] } else { idle_ppu_mem_req() };
+    reg(clk) pending_req_reg: PpuMemReq reset(rst: idle_ppu_mem_req()) =
+        if ppu_dot_ce { next_pending_req } else { pending_req_reg };
+    reg(clk) pending_resp_valid_reg: bool reset(rst: false) =
+        if ppu_dot_ce { ppu.mem_reqs.count != 0u3 } else { pending_resp_valid_reg };
+    let vram_mem = inst clocked_memory_init::<8192, 1, 13, uint<8>>(
+        clk,
+        [(cpu_vram_write_en, cpu_vram_write_addr, cpu.bus_req_data)],
+        [0u8; 8192],
+    );
+    let oam_mem = inst clocked_memory_init::<256, 1, 8, uint<8>>(
+        clk,
+        [(cpu_oam_write_en, cpu_oam_write_addr, cpu.bus_req_data)],
+        [0u8; 256],
+    );
+    let vram_read_data = inst read_memory(vram_mem, req_vram_addr(pending_req_reg));
+    let oam_read_data = inst read_memory(oam_mem, req_oam_addr(pending_req_reg));
     reg(clk) prev_ppu_vblank_window_high: bool reset(rst: false) = ppu_vblank_window_high;
     reg(clk) prev_ppu_stat_window_high: bool reset(rst: false) = ppu_stat_window_high;
     reg(clk) ppu_if_latch_low2: uint<2> reset(rst: 0u2) = next_ppu_if_latch_low2(
@@ -160,6 +221,11 @@ entity soc_rom_top(
         if_write_value_low2,
         ppu_if_set_low2,
     );
+    let mem_resp_now = if pending_resp_valid_reg {
+        ok_mem_resp(pending_req_reg, vram_read_data, oam_read_data)
+    } else {
+        idle_ppu_mem_resp()
+    };
     let ppu_scanout = scanout_or_blank(ppu.scanout, ppu.visible_trace.ly_after);
 
     SocRomTopOut$(

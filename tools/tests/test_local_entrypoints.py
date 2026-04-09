@@ -200,6 +200,8 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("tools/prepare_verilator_sv.py", completed.stdout)
         self.assertIn("build/spade.verilator.sv", completed.stdout)
         self.assertIn("soc_rom_top_verilator_wrapper.sv", completed.stdout)
+        self.assertIn("tools/verilator/dmg_acid2_main.cpp", completed.stdout)
+        self.assertIn("tools/compare_shaded_frame.py", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
     def test_spram_synth_smoke_dry_run_targets_named_test_top(self) -> None:

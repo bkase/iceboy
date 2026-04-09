@@ -87,3 +87,19 @@ async def test_soc_rom_top_ppu_advances_and_packed_regs_match_arch_state(dut):
     assert (transfer.cpu_a, transfer.cpu_b, transfer.cpu_c, transfer.cpu_d, transfer.cpu_e, transfer.cpu_h, transfer.cpu_l) == (
         decode_arch_state_abcdehl(dut)
     )
+
+
+@cocotb.test()
+async def test_soc_rom_top_eventually_emits_pixel_scanout(dut):
+    driver = soc_rom_dut(dut)
+    await driver.reset(CPU_BRING_UP_PROFILES)
+
+    saw_pixel = False
+    for _ in range(600):
+        observation = await driver.step_mcycle(bus_read_data=0x00, irq_pending=0)
+        if observation.ppu_scanout_valid and observation.ppu_scanout_kind == 0:
+            saw_pixel = True
+            assert observation.ppu_scanout_y < 144
+            break
+
+    assert saw_pixel

@@ -141,6 +141,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
         "tools.tests.test_pipeline_insertion_evaluation",
     ),
     SuiteDefinition("meta", "test_build_profiles.py", "python", "tools.tests.test_build_profiles"),
+    SuiteDefinition("meta", "test_compare_shaded_frame.py", "python", "tools.tests.test_compare_shaded_frame"),
     SuiteDefinition(
         "meta",
         "test_backend_diff_smoke.py",
