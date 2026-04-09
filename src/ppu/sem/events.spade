@@ -24,10 +24,6 @@ pub mod mmio {
         target: MmioReg,
         value: uint<8>,
     }
-
-    pub fn zero_mmio_write() -> MmioWrite {
-        MmioWrite$(target: MmioReg::Lcdc, value: 0u8)
-    }
 }
 
 pub enum PpuEventKind {
@@ -62,7 +58,7 @@ pub fn idle_timed_ppu_event() -> TimedPpuEvent {
     TimedPpuEvent$(
         seq: 0u64,
         at: zero_video_coord(),
-        kind: PpuEventKind::MmioWrite$(write: mmio::zero_mmio_write()),
+        kind: PpuEventKind::MmioWrite$(write: mmio::MmioWrite$(target: mmio::MmioReg::Lcdc, value: 0u8)),
     )
 }
 
