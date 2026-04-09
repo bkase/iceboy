@@ -1,0 +1,235 @@
+use std::option::Option;
+
+use lib::ppu::sem::events::idle_dot_input;
+use lib::ppu::sem::step::step_dot;
+use lib::ppu::sem::types::{
+    LcdRunState,
+    LineObjList,
+    PpuPhase,
+    PpuRenderState,
+    PpuRegs,
+    PpuState,
+    PpuStatusState,
+    PpuVisibleState,
+    SelectedObjTicket,
+    WindowState,
+    initial_ppu_state,
+    zero_lcdc,
+    zero_selected_obj_ticket,
+};
+use lib::sim::ppu_support::encode_ppu_phase;
+
+fn decode_run(run_i: uint<2>) -> LcdRunState {
+    match run_i {
+        1u2 => LcdRunState::WarmupBlankFrame,
+        2u2 => LcdRunState::Running,
+        _ => LcdRunState::Disabled,
+    }
+}
+
+fn decode_phase(phase_i: uint<3>, x_out_i: uint<8>, discard_scx_i: uint<3>) -> PpuPhase {
+    match phase_i {
+        1u3 => PpuPhase::OamScan$(index: 0u6, found: 0u4),
+        2u3 => PpuPhase::Transfer$(x_out: x_out_i, discard_scx: discard_scx_i),
+        3u3 => PpuPhase::HBlank$(dots_left: 1u9),
+        4u3 => PpuPhase::VBlank$(line: 144u8, dots_left: 456u9),
+        _ => PpuPhase::LcdOff,
+    }
+}
+
+fn build_ticket(oam_index: uint<6>, selection_rank: uint<4>) -> SelectedObjTicket {
+    SelectedObjTicket$(oam_index: oam_index, x: 0u8, y: 0u8, selection_rank: selection_rank)
+}
+
+fn build_line_objs(count_i: uint<4>, slot0_i: uint<6>, slot1_i: uint<6>) -> LineObjList {
+    LineObjList$(
+        count: count_i,
+        slots: [
+            build_ticket(slot0_i, 0u4),
+            build_ticket(slot1_i, 1u4),
+            zero_selected_obj_ticket(),
+            zero_selected_obj_ticket(),
+            zero_selected_obj_ticket(),
+            zero_selected_obj_ticket(),
+            zero_selected_obj_ticket(),
+            zero_selected_obj_ticket(),
+            zero_selected_obj_ticket(),
+            zero_selected_obj_ticket(),
+        ],
+    )
+}
+
+fn build_window_state(window_active_i: bool, window_line_i: uint<8>) -> WindowState {
+    if window_active_i {
+        WindowState::ActiveOnLine$(win_x: 0u5, win_line: window_line_i)
+    } else {
+        WindowState::Inactive
+    }
+}
+
+fn build_regs(wx_i: uint<8>, window_active_i: bool) -> PpuRegs {
+    let base = initial_ppu_state().visible.regs;
+    PpuRegs$(
+        lcdc: lib::ppu::sem::types::Lcdc$(
+            lcd_enable: true,
+            win_map_hi: false,
+            win_enable: window_active_i,
+            bgwin_data_hi: true,
+            bg_map_hi: false,
+            obj_size_8x16: false,
+            obj_enable: true,
+            bg_enable: true,
+        ),
+        stat_sel: base.stat_sel,
+        scy: base.scy,
+        scx: base.scx,
+        lyc: base.lyc,
+        wy: base.wy,
+        wx: wx_i,
+        bgp: base.bgp,
+        obp0: base.obp0,
+        obp1: base.obp1,
+    )
+}
+
+fn build_render_state(
+    dot_in_line_i: uint<9>,
+    window_active_i: bool,
+    window_line_i: uint<8>,
+    line_obj_count_i: uint<4>,
+    slot0_i: uint<6>,
+    slot1_i: uint<6>,
+    first_frame_blank_i: bool,
+) -> PpuRenderState {
+    let base = initial_ppu_state().render;
+    PpuRenderState$(
+        dot_in_line: dot_in_line_i,
+        x_out: 0u8,
+        window_state: build_window_state(window_active_i, window_line_i),
+        window_line: window_line_i,
+        oam_scan: base.oam_scan,
+        line_objs: build_line_objs(line_obj_count_i, slot0_i, slot1_i),
+        fetcher: base.fetcher,
+        bg_fifo: base.bg_fifo,
+        obj_fifo: base.obj_fifo,
+        first_frame_blank: first_frame_blank_i,
+    )
+}
+
+fn build_state(
+    run_i: uint<2>,
+    phase_i: uint<3>,
+    ly_i: uint<8>,
+    dot_in_line_i: uint<9>,
+    wx_i: uint<8>,
+    window_active_i: bool,
+    window_line_i: uint<8>,
+    line_obj_count_i: uint<4>,
+    slot0_i: uint<6>,
+    slot1_i: uint<6>,
+    x_out_i: uint<8>,
+    discard_scx_i: uint<3>,
+    first_frame_blank_i: bool,
+) -> PpuState {
+    let base = initial_ppu_state();
+    PpuState$(
+        visible: PpuVisibleState$(regs: build_regs(wx_i, window_active_i), ly: ly_i),
+        status: PpuStatusState$(
+            run: decode_run(run_i),
+            phase: decode_phase(phase_i, x_out_i, discard_scx_i),
+            stat_irq: base.status.stat_irq,
+            lyc_match_flag: base.status.lyc_match_flag,
+        ),
+        sampled: base.sampled,
+        render: build_render_state(
+            dot_in_line_i,
+            window_active_i,
+            window_line_i,
+            line_obj_count_i,
+            slot0_i,
+            slot1_i,
+            first_frame_blank_i,
+        ),
+    )
+}
+
+pub entity line_summary_test_top(
+    run_i: uint<2>,
+    phase_i: uint<3>,
+    ly_i: uint<8>,
+    dot_in_line_i: uint<9>,
+    wx_i: uint<8>,
+    window_active_i: bool,
+    window_line_i: uint<8>,
+    line_obj_count_i: uint<4>,
+    slot0_i: uint<6>,
+    slot1_i: uint<6>,
+    x_out_i: uint<8>,
+    discard_scx_i: uint<3>,
+    first_frame_blank_i: bool,
+) -> uint<120> {
+    let output = step_dot(
+        build_state(
+            run_i,
+            phase_i,
+            ly_i,
+            dot_in_line_i,
+            wx_i,
+            window_active_i,
+            window_line_i,
+            line_obj_count_i,
+            slot0_i,
+            slot1_i,
+            x_out_i,
+            discard_scx_i,
+            first_frame_blank_i,
+        ),
+        idle_dot_input(),
+    );
+    let line_summary_valid = match output.line_summary {
+        Option::Some(_) => true,
+        Option::None => false,
+    };
+    let line_summary = match output.line_summary {
+        Option::Some(summary) => summary,
+        Option::None => lib::ppu::sem::observe::empty_line_summary(),
+    };
+    let slot0_valid = match line_summary.selected_objs[0] {
+        Option::Some(_) => true,
+        Option::None => false,
+    };
+    let slot0_id = match line_summary.selected_objs[0] {
+        Option::Some(id) => id,
+        Option::None => 0u6,
+    };
+    let slot1_valid = match line_summary.selected_objs[1] {
+        Option::Some(_) => true,
+        Option::None => false,
+    };
+    let slot1_id = match line_summary.selected_objs[1] {
+        Option::Some(id) => id,
+        Option::None => 0u6,
+    };
+    let window_start_valid = match line_summary.window_start_x {
+        Option::Some(_) => true,
+        Option::None => false,
+    };
+    let window_start_x = match line_summary.window_start_x {
+        Option::Some(x) => x,
+        Option::None => 0u8,
+    };
+
+    zext(lib::util::bit(line_summary_valid))
+        | (zext(encode_ppu_phase(output.next_state.status.phase)) << 1)
+        | (zext(output.next_state.visible.ly) << 4)
+        | (zext(line_summary.mode3_len) << 12)
+        | (zext(lib::util::bit(window_start_valid)) << 21)
+        | (zext(window_start_x) << 22)
+        | (zext(line_summary.window_line_after) << 30)
+        | (zext(line_summary.obj_count) << 38)
+        | (zext(lib::util::bit(slot0_valid)) << 42)
+        | (zext(slot0_id) << 43)
+        | (zext(lib::util::bit(slot1_valid)) << 49)
+        | (zext(slot1_id) << 50)
+        | (zext(line_summary.line_hash) << 56)
+}

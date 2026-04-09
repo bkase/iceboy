@@ -3,7 +3,15 @@ use std::option::Option;
 use lib::ppu::sem::events::DotInput;
 use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
 use lib::ppu::sem::events::{PpuEventKind, TimedPpuEvent};
-use lib::ppu::sem::observe::{DotOutput, PpuIrqEdge, PpuSemanticCommit, idle_ppu_mem_reqs, idle_ppu_mmio_resp};
+use lib::ppu::sem::observe::{
+    DotOutput,
+    LineSummary,
+    PpuIrqEdge,
+    PpuSemanticCommit,
+    basic_line_summary,
+    idle_ppu_mem_reqs,
+    idle_ppu_mmio_resp,
+};
 use lib::ppu::sem::profiles::dmg_behavior_config;
 use lib::ppu::sem::types::{
     LcdRunState,
@@ -182,6 +190,16 @@ fn lcd_reenable_lyc_level_hold(
         && next_lyc_match_flag
 }
 
+fn completed_line_summary(prev_state: PpuState, next_state: PpuState) -> Option<LineSummary> {
+    match prev_state.status.phase {
+        PpuPhase::Transfer$(x_out: _, discard_scx: _) => match next_state.status.phase {
+            PpuPhase::HBlank$(dots_left: _) => Option::Some(basic_line_summary(prev_state, next_state)),
+            _ => Option::None,
+        },
+        _ => Option::None,
+    }
+}
+
 pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
     let (written_regs, stat_write_seen, force_enable, force_disable) = fold_events(input, state.visible.regs);
     let stored_lcd_enable =
@@ -296,6 +314,7 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
         irq_edge: irq_edge(next_irq_req),
         scanout: Option::None,
     );
+    let line_summary = completed_line_summary(state, final_state);
 
     DotOutput$(
         next_state: final_state,
@@ -304,6 +323,6 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
         irq_req: next_irq_req,
         scanout: Option::None,
         semantic: Option::Some(semantic),
-        line_summary: Option::None,
+        line_summary: line_summary,
     )
 }

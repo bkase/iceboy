@@ -13,6 +13,7 @@ use lib::ppu::sem::types::{
     PpuIrqReq,
     PpuMode,
     PpuPhase,
+    PpuRegs,
     PpuState,
     WindowState,
     empty_line_obj_list,
@@ -123,6 +124,95 @@ pub fn idle_ppu_irq_edge() -> PpuIrqEdge {
 
 pub fn zero_transfer_digest() -> TransferDigest {
     TransferDigest$(event_count: 0u16, event_hash: 0u64, window_restart_count: 0u2, obj_fetch_count: 0u4)
+}
+
+fn mix_hash64(hash: uint<64>, sample: uint<64>) -> uint<64> {
+    trunc((hash << 5) ^ hash ^ sample ^ 0x9e3779b97f4a7c15u64)
+}
+
+fn option_u8_hash_sample(value: Option<uint<8>>) -> uint<64> {
+    match value {
+        Option::Some(inner) => 0x100u64 | zext(inner),
+        Option::None => 0u64,
+    }
+}
+
+fn option_u6_hash_sample(value: Option<uint<6>>) -> uint<64> {
+    match value {
+        Option::Some(inner) => 0x40u64 | zext(inner),
+        Option::None => 0u64,
+    }
+}
+
+fn summary_window_start_x(regs: PpuRegs, window_state: WindowState) -> Option<uint<8>> {
+    match window_state {
+        WindowState::ActiveOnLine$(win_x: _, win_line: _) =>
+            if regs.wx <= 7u8 {
+                Option::Some(0u8)
+            } else {
+                Option::Some(trunc(regs.wx - 7u8))
+            },
+        _ => Option::None,
+    }
+}
+
+fn selected_obj_ids(line_objs: LineObjList) -> [Option<uint<6>>; 10] {
+    [
+        if line_objs.count > 0u4 { Option::Some(line_objs.slots[0].oam_index) } else { Option::None },
+        if line_objs.count > 1u4 { Option::Some(line_objs.slots[1].oam_index) } else { Option::None },
+        if line_objs.count > 2u4 { Option::Some(line_objs.slots[2].oam_index) } else { Option::None },
+        if line_objs.count > 3u4 { Option::Some(line_objs.slots[3].oam_index) } else { Option::None },
+        if line_objs.count > 4u4 { Option::Some(line_objs.slots[4].oam_index) } else { Option::None },
+        if line_objs.count > 5u4 { Option::Some(line_objs.slots[5].oam_index) } else { Option::None },
+        if line_objs.count > 6u4 { Option::Some(line_objs.slots[6].oam_index) } else { Option::None },
+        if line_objs.count > 7u4 { Option::Some(line_objs.slots[7].oam_index) } else { Option::None },
+        if line_objs.count > 8u4 { Option::Some(line_objs.slots[8].oam_index) } else { Option::None },
+        if line_objs.count > 9u4 { Option::Some(line_objs.slots[9].oam_index) } else { Option::None },
+    ]
+}
+
+fn fixed_mode3_len(state_before: PpuState) -> uint<9> {
+    match state_before.status.run {
+        LcdRunState::WarmupBlankFrame =>
+            if state_before.visible.ly == 0u8 {
+                160u9
+            } else {
+                176u9
+            },
+        _ => 176u9,
+    }
+}
+
+pub fn basic_line_summary(state_before: PpuState, state_after: PpuState) -> LineSummary {
+    let window_start_x = summary_window_start_x(state_after.visible.regs, state_after.render.window_state);
+    let selected_objs = selected_obj_ids(state_after.render.line_objs);
+    let mode3_len = fixed_mode3_len(state_before);
+    let hash0 = mix_hash64(0u64, zext(state_after.visible.ly));
+    let hash1 = mix_hash64(hash0, zext(mode3_len));
+    let hash2 = mix_hash64(hash1, option_u8_hash_sample(window_start_x));
+    let hash3 = mix_hash64(hash2, zext(state_after.render.window_line));
+    let hash4 = mix_hash64(hash3, zext(state_after.render.line_objs.count));
+    let hash5 = mix_hash64(hash4, option_u6_hash_sample(selected_objs[0]));
+    let hash6 = mix_hash64(hash5, option_u6_hash_sample(selected_objs[1]));
+    let hash7 = mix_hash64(hash6, option_u6_hash_sample(selected_objs[2]));
+    let hash8 = mix_hash64(hash7, option_u6_hash_sample(selected_objs[3]));
+    let hash9 = mix_hash64(hash8, option_u6_hash_sample(selected_objs[4]));
+    let hash10 = mix_hash64(hash9, option_u6_hash_sample(selected_objs[5]));
+    let hash11 = mix_hash64(hash10, option_u6_hash_sample(selected_objs[6]));
+    let hash12 = mix_hash64(hash11, option_u6_hash_sample(selected_objs[7]));
+    let hash13 = mix_hash64(hash12, option_u6_hash_sample(selected_objs[8]));
+    let hash14 = mix_hash64(hash13, option_u6_hash_sample(selected_objs[9]));
+    LineSummary$(
+        frame: 0u32,
+        ly: state_after.visible.ly,
+        mode3_len: mode3_len,
+        window_start_x: window_start_x,
+        window_line_after: state_after.render.window_line,
+        obj_count: state_after.render.line_objs.count,
+        selected_objs: selected_objs,
+        transfer: zero_transfer_digest(),
+        line_hash: hash14,
+    )
 }
 
 pub fn empty_line_summary() -> LineSummary {
