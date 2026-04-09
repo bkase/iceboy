@@ -3,7 +3,7 @@ use std::option::Option;
 use lib::ppu::sem::events::DotInput;
 use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
 use lib::ppu::sem::events::{PpuEventKind, TimedPpuEvent};
-use lib::ppu::sem::memory::{PpuMemReq, idle_ppu_mem_req};
+use lib::ppu::sem::memory::{MemClient, MemRegion, PpuMemReq, PpuMemResp, PpuMemResult, idle_ppu_mem_req};
 use lib::ppu::sem::observe::{
     DotOutput,
     LineSummary,
@@ -15,6 +15,7 @@ use lib::ppu::sem::observe::{
     idle_ppu_mmio_resp,
 };
 use lib::ppu::sem::profiles::dmg_behavior_config;
+use lib::ppu::sem::sample::sample_render_inputs;
 use lib::ppu::sem::scanout::{BlankReason, ScanoutEvent, blank_scanout_event};
 use lib::ppu::sem::types::{
     LcdRunState,
@@ -30,7 +31,10 @@ use lib::ppu::sem::types::{
     idle_ppu_irq_req,
     visible_mode,
 };
+use lib::ppu::rtl::fetcher::{advance_bg_fetcher, initial_bg_fetcher_state, start_bg_fetcher};
+use lib::ppu::rtl::fifo::{advance_bg_pipe, bg_fifo_has_room_for_row, clear_bg_fifo, note_window_tile_push};
 use lib::ppu::rtl::irq::irq_req;
+use lib::ppu::rtl::mixer::emit_bg_scanout;
 use lib::ppu::rtl::oam_scan::step_oam_scan_entry;
 use lib::ppu::rtl::regs::{apply_mmio_write, set_lcd_enable};
 use lib::ppu::rtl::timing::{advance_run_state, advance_timing, handle_lcd_transition};
@@ -261,13 +265,165 @@ fn blank_reason(state: PpuState) -> BlankReason {
     }
 }
 
-fn live_scanout_event(next_state: PpuState, line_start: bool, frame_start: bool) -> Option<ScanoutEvent> {
+fn idle_mem_resp(resp: PpuMemResp) -> bool {
+    match resp.result {
+        PpuMemResult::Denied =>
+            match resp.tag.region {
+                MemRegion::Vram =>
+                    match resp.tag.client {
+                        MemClient::Cpu => resp.tag.id == 0u4,
+                        _ => false,
+                    },
+                _ => false,
+            },
+        _ => false,
+    }
+}
+
+fn mem_resp_valid(resp: PpuMemResp) -> bool {
+    !idle_mem_resp(resp)
+}
+
+fn fetcher_mem_reqs(req_valid: bool, req: PpuMemReq) -> PpuMemReqs {
+    if req_valid {
+        PpuMemReqs$(count: 1u3, slots: [req, idle_ppu_mem_req(), idle_ppu_mem_req(), idle_ppu_mem_req()])
+    } else {
+        idle_ppu_mem_reqs()
+    }
+}
+
+fn apply_live_transfer(
+    state: PpuState,
+    candidate_state: PpuState,
+    mem_resp: PpuMemResp,
+    frame_start: bool,
+) -> (PpuState, PpuMemReqs, Option<ScanoutEvent>) {
+    let was_transfer = match state.status.phase {
+        PpuPhase::Transfer$(x_out: _, discard_scx: _) => true,
+        _ => false,
+    };
+    let next_is_transfer = match candidate_state.status.phase {
+        PpuPhase::Transfer$(x_out: _, discard_scx: _) => true,
+        _ => false,
+    };
+    if !was_transfer && !next_is_transfer {
+        (candidate_state, live_mem_reqs(state), Option::None)
+    } else {
+        let entering_transfer = !was_transfer && next_is_transfer;
+        let next_discard_seed = match candidate_state.status.phase {
+            PpuPhase::Transfer$(x_out: _, discard_scx: discard_scx) => discard_scx,
+            _ => 0u3,
+        };
+        let base_x_out = if entering_transfer { 0u8 } else { state.render.x_out };
+        let base_discard_scx = match state.status.phase {
+            PpuPhase::Transfer$(x_out: _, discard_scx: discard_scx) => discard_scx,
+            _ => next_discard_seed,
+        };
+        let render_inputs = sample_render_inputs(candidate_state.visible, candidate_state.sampled, candidate_state.status.phase);
+        let base_fetcher =
+            if entering_transfer {
+                start_bg_fetcher(state.render.fetcher, render_inputs, candidate_state.visible.ly, 0u5)
+            } else {
+                state.render.fetcher
+            };
+        let base_bg_fifo = if entering_transfer { clear_bg_fifo() } else { state.render.bg_fifo };
+        let fetcher_output = advance_bg_fetcher(
+            base_fetcher,
+            render_inputs,
+            candidate_state.visible.ly,
+            trunc(base_x_out >> 3),
+            state.render.window_line,
+            bg_fifo_has_room_for_row(base_bg_fifo),
+            mem_resp_valid(mem_resp),
+            mem_resp,
+            false,
+            false,
+            false,
+            false,
+        );
+        let pipe_output = advance_bg_pipe(
+            base_bg_fifo,
+            state.render.window_state,
+            state.render.window_line,
+            candidate_state.sampled,
+            render_inputs,
+            base_x_out,
+            frame_start,
+            false,
+            base_discard_scx,
+            fetcher_output.push_valid,
+            fetcher_output.push_row,
+            render_inputs.bgp_pop,
+        );
+        let next_window_state =
+            if fetcher_output.push_valid {
+                note_window_tile_push(pipe_output.next_window_state)
+            } else {
+                pipe_output.next_window_state
+            };
+        let next_x_out =
+            if pipe_output.pixel_valid {
+                trunc(base_x_out + 1u8)
+            } else {
+                base_x_out
+            };
+        let pixel_scanout = emit_bg_scanout(
+            pipe_output.pixel_valid && !candidate_state.render.first_frame_blank && candidate_state.visible.ly < 144u8,
+            pipe_output.pixel,
+            render_inputs,
+            base_x_out,
+            candidate_state.visible.ly,
+        );
+        let next_status = PpuStatusState$(
+            run: candidate_state.status.run,
+            phase:
+                if next_is_transfer {
+                    PpuPhase::Transfer$(x_out: next_x_out, discard_scx: pipe_output.next_discard_scx)
+                } else {
+                    candidate_state.status.phase
+                },
+            stat_irq: candidate_state.status.stat_irq,
+            lyc_match_flag: candidate_state.status.lyc_match_flag,
+        );
+        (
+            PpuState$(
+                visible: candidate_state.visible,
+                status: next_status,
+                sampled: candidate_state.sampled,
+                render: PpuRenderState$(
+                    dot_in_line: candidate_state.render.dot_in_line,
+                    x_out: if next_is_transfer { next_x_out } else { 0u8 },
+                    window_state: next_window_state,
+                    window_line: pipe_output.next_window_line,
+                    oam_scan: candidate_state.render.oam_scan,
+                    line_objs: candidate_state.render.line_objs,
+                    fetcher: if next_is_transfer { fetcher_output.next_state } else { initial_bg_fetcher_state() },
+                    bg_fifo: if next_is_transfer { pipe_output.next_fifo } else { clear_bg_fifo() },
+                    obj_fifo: candidate_state.render.obj_fifo,
+                    first_frame_blank: candidate_state.render.first_frame_blank,
+                ),
+            ),
+            fetcher_mem_reqs(fetcher_output.req_valid, fetcher_output.req),
+            pixel_scanout,
+        )
+    }
+}
+
+fn live_scanout_event(
+    next_state: PpuState,
+    line_start: bool,
+    frame_start: bool,
+    pixel_scanout: Option<ScanoutEvent>,
+) -> Option<ScanoutEvent> {
     if frame_start {
         Option::Some(ScanoutEvent::FrameStart)
     } else if line_start {
         Option::Some(ScanoutEvent::LineStart$(y: next_state.visible.ly))
     } else {
-        Option::Some(blank_scanout_event(next_state.visible.ly, blank_reason(next_state)))
+        match pixel_scanout {
+            Option::Some(event) => Option::Some(event),
+            Option::None => Option::Some(blank_scanout_event(next_state.visible.ly, blank_reason(next_state))),
+        }
     }
 }
 
@@ -402,16 +558,16 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
         sampled: candidate_state.sampled,
         render: candidate_state.render,
     );
+    let (final_state, mem_reqs, pixel_scanout) = apply_live_transfer(state, final_state, input.mem_resp, frame_start);
+    let line_summary = completed_line_summary(state, final_state);
+    let scanout = live_scanout_event(final_state, line_start, frame_start, pixel_scanout);
     let semantic = PpuSemanticCommit$(
         ly_after: final_state.visible.ly,
-        mode_after: visible_mode(final_status),
-        stat_line_after: next_stat_irq.line_high,
+        mode_after: visible_mode(final_state.status),
+        stat_line_after: final_state.status.stat_irq.line_high,
         irq_edge: irq_edge(next_irq_req),
-        scanout: Option::None,
+        scanout: scanout,
     );
-    let line_summary = completed_line_summary(state, final_state);
-    let scanout = live_scanout_event(final_state, line_start, frame_start);
-    let mem_reqs = live_mem_reqs(state);
 
     DotOutput$(
         next_state: final_state,

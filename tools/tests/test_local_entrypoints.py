@@ -265,6 +265,14 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((ROOT / "src" / "ppu" / "rtl" / "obj_observe_test_top.spade").exists())
         self.assertTrue((ROOT / "test" / "ppu" / "unit" / "test_obj_observe.py").exists())
 
+    def test_bg_transfer_live_assets_exist(self) -> None:
+        run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
+        hook_text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
+        self.assertIn('"test_bg_transfer_live.py"', run_tests_text)
+        self.assertIn('"test/ppu/unit/test_bg_transfer_live.py"', run_tests_text)
+        self.assertIn('"test/ppu/unit/test_bg_transfer_live.py"', hook_text)
+        self.assertTrue((ROOT / "test" / "ppu" / "unit" / "test_bg_transfer_live.py").exists())
+
     def test_line_summary_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
         hook_text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
@@ -400,6 +408,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/ppu/unit/test_tile.py"', text)
         self.assertIn('"test/ppu/unit/test_access_policy.py"', text)
         self.assertIn('"test/ppu/unit/test_bg_fetcher.py"', text)
+        self.assertIn('"test/ppu/unit/test_bg_transfer_live.py"', text)
         self.assertIn('"test/ppu/unit/test_bg_fifo.py"', text)
         self.assertIn('"test/ppu/unit/test_line_summary.py"', text)
         self.assertIn('"test/ppu/unit/test_scanout_blank.py"', text)

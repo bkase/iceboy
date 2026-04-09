@@ -150,6 +150,8 @@ async def test_hblank_keeps_render_pipe_quiet(dut):
 
     hblank = await advance_to_mode(dut, MODE_HBLANK, max_dots=1024)
     assert hblank["mode"] == MODE_HBLANK
+    hblank = await step_dot(dut)
+    assert hblank["mode"] == MODE_HBLANK
     metrics_start = await read_ppu_power_metrics(dut)
     last = hblank
     for _ in range(24):
