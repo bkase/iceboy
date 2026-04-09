@@ -132,6 +132,7 @@ pub entity timing_test_top(
             line_obj_fetch_index: 0u4,
             obj_fetch_ticket: lib::ppu::sem::types::zero_selected_obj_ticket(),
             obj_fetch_flags: lib::ppu::sem::types::zero_obj_flags(),
+            bg_fetcher_resume: lib::ppu::sem::types::initial_fetcher_state(),
             fetcher: lib::ppu::sem::types::initial_fetcher_state(),
             bg_fifo: lib::ppu::sem::types::empty_bg_fifo(),
             obj_fifo: lib::ppu::sem::types::empty_obj_fifo(),

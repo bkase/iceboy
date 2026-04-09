@@ -42,6 +42,7 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "scanout_source": (value >> 77) & 0x3,
         "scanout_x": (value >> 79) & 0xFF,
         "scanout_shade": (value >> 87) & 0x3,
+        "phase_x_out": (value >> 89) & 0xFF,
     }
 
 
@@ -53,6 +54,8 @@ async def reset_dut(
     ticket1_x: int = 17,
     start_x_out: int = 1,
     start_dot_in_line: int = 80,
+    tile_lo: int = 0x50,
+    tile_hi: int = 0x30,
 ) -> None:
     cocotb.start_soon(Clock(dut.clk_i, 10, units="ns").start())
     dut.dot_ce_i.value = 0
@@ -61,6 +64,8 @@ async def reset_dut(
     dut.ticket1_x_i.value = ticket1_x & 0xFF
     dut.start_x_out_i.value = start_x_out & 0xFF
     dut.start_dot_in_line_i.value = start_dot_in_line & 0x1FF
+    dut.tile_lo_i.value = tile_lo & 0xFF
+    dut.tile_hi_i.value = tile_hi & 0xFF
     dut.rst_i.value = 1
     await RisingEdge(dut.clk_i)
     await RisingEdge(dut.clk_i)
@@ -146,6 +151,55 @@ async def test_seeded_object_fetch_reaches_object_pixel_scanout(dut):
     assert object_pixels[0]["scanout_x"] >= 1, object_pixels[0]
     assert object_pixels[0]["scanout_shade"] != 0, object_pixels[0]
     assert object_pixels[-1]["scanout_x"] > object_pixels[0]["scanout_x"], object_pixels
+
+
+@cocotb.test()
+async def test_seeded_solid_object_row_emits_contiguous_pixels(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=1,
+        ticket0_x=9,
+        start_x_out=1,
+        start_dot_in_line=80,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+    )
+
+    snapshots = await run_steps(dut, 48)
+    object_pixels = [
+        s for s in snapshots
+        if s["scanout_valid"]
+        and s["scanout_kind"] == SCANOUT_PIXEL
+        and s["scanout_source"] == PIXEL_SOURCE_OBJECT
+    ]
+
+    assert len(object_pixels) >= 8, snapshots
+    first_eight = object_pixels[:8]
+    xs = [int(s["scanout_x"]) for s in first_eight]
+    shades = [int(s["scanout_shade"]) for s in first_eight]
+    assert xs == list(range(xs[0], xs[0] + 8)), first_eight
+    assert all(shade == shades[0] for shade in shades), first_eight
+
+
+@cocotb.test()
+async def test_late_object_fetch_keeps_phase_x_out_aligned(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=1,
+        ticket0_x=40,
+        start_x_out=30,
+        start_dot_in_line=109,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+    )
+
+    snapshots = await run_steps(dut, 80)
+    obj_fetch = [s for s in snapshots if s["fetcher_source"] == FETCHER_OBJ]
+
+    assert obj_fetch, snapshots
+    assert int(obj_fetch[0]["x_out"]) == 32, obj_fetch[0]
+    assert all(int(s["x_out"]) == 32 for s in obj_fetch), obj_fetch
+    assert all(int(s["phase_x_out"]) == 32 for s in obj_fetch), obj_fetch
 
 
 @cocotb.test()

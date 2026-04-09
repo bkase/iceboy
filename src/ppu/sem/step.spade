@@ -166,6 +166,7 @@ fn update_render_state(
         line_obj_fetch_index: if line_start { 0u4 } else { render.line_obj_fetch_index },
         obj_fetch_ticket: if line_start { zero_selected_obj_ticket() } else { render.obj_fetch_ticket },
         obj_fetch_flags: if line_start { zero_obj_flags() } else { render.obj_fetch_flags },
+        bg_fetcher_resume: if line_start { initial_bg_fetcher_state() } else { render.bg_fetcher_resume },
         fetcher: render.fetcher,
         bg_fifo: render.bg_fifo,
         obj_fifo: if line_start { empty_obj_fifo() } else { render.obj_fifo },
@@ -472,6 +473,7 @@ fn obj_fetch_with_req(render: PpuRenderState, step: FetcherStep, req: PpuMemReq)
             line_obj_fetch_index: render.line_obj_fetch_index,
             obj_fetch_ticket: render.obj_fetch_ticket,
             obj_fetch_flags: render.obj_fetch_flags,
+            bg_fetcher_resume: render.bg_fetcher_resume,
             fetcher: next_fetcher,
             bg_fifo: render.bg_fifo,
             obj_fifo: render.obj_fifo,
@@ -493,6 +495,7 @@ fn start_live_obj_fetch(render: PpuRenderState) -> PpuRenderState {
         line_obj_fetch_index: render.line_obj_fetch_index,
         obj_fetch_ticket: line_obj_ticket_at(render.line_objs, render.line_obj_fetch_index),
         obj_fetch_flags: zero_obj_flags(),
+        bg_fetcher_resume: render.fetcher,
         fetcher: lib::ppu::sem::types::FetcherState$(
             epoch: next_fetcher_epoch(fetcher.epoch),
             source: FetcherSource::Object,
@@ -519,7 +522,7 @@ fn resume_bg_fetcher(
     visible_ly: uint<8>,
     x_out: uint<8>,
 ) -> lib::ppu::sem::types::FetcherState {
-    start_bg_fetcher(render.fetcher, render_inputs, visible_ly, trunc(x_out >> 3))
+    render.bg_fetcher_resume
 }
 
 fn matching_obj_resp(render: PpuRenderState, resp: PpuMemResp) -> bool {
@@ -553,6 +556,7 @@ fn complete_live_obj_fetch(
         line_obj_fetch_index: trunc(render.line_obj_fetch_index + 1u4),
         obj_fetch_ticket: zero_selected_obj_ticket(),
         obj_fetch_flags: zero_obj_flags(),
+        bg_fetcher_resume: render.bg_fetcher_resume,
         fetcher: resume_bg_fetcher(render, render_inputs, visible_ly, x_out),
         bg_fifo: render.bg_fifo,
         obj_fifo: obj_fifo_overlay_row_clipped(render.obj_fifo, row, offset, left_clip),
@@ -581,6 +585,7 @@ fn advance_live_obj_fetch(
                     line_obj_fetch_index: render.line_obj_fetch_index,
                     obj_fetch_ticket: zero_selected_obj_ticket(),
                     obj_fetch_flags: zero_obj_flags(),
+                    bg_fetcher_resume: render.bg_fetcher_resume,
                     fetcher: resume_bg_fetcher(render, render_inputs, visible_ly, x_out),
                     bg_fifo: render.bg_fifo,
                     obj_fifo: render.obj_fifo,
@@ -601,6 +606,7 @@ fn advance_live_obj_fetch(
                         line_obj_fetch_index: render.line_obj_fetch_index,
                         obj_fetch_ticket: render.obj_fetch_ticket,
                         obj_fetch_flags: render.obj_fetch_flags,
+                        bg_fetcher_resume: render.bg_fetcher_resume,
                         fetcher: lib::ppu::sem::types::FetcherState$(
                             epoch: render.fetcher.epoch,
                             source: FetcherSource::Object,
@@ -632,6 +638,7 @@ fn advance_live_obj_fetch(
                         line_obj_fetch_index: render.line_obj_fetch_index,
                         obj_fetch_ticket: render.obj_fetch_ticket,
                         obj_fetch_flags: decode_obj_flags(data),
+                        bg_fetcher_resume: render.bg_fetcher_resume,
                         fetcher: lib::ppu::sem::types::FetcherState$(
                             epoch: render.fetcher.epoch,
                             source: FetcherSource::Object,
@@ -663,6 +670,7 @@ fn advance_live_obj_fetch(
                         line_obj_fetch_index: render.line_obj_fetch_index,
                         obj_fetch_ticket: render.obj_fetch_ticket,
                         obj_fetch_flags: render.obj_fetch_flags,
+                        bg_fetcher_resume: render.bg_fetcher_resume,
                         fetcher: lib::ppu::sem::types::FetcherState$(
                             epoch: render.fetcher.epoch,
                             source: FetcherSource::Object,
@@ -694,6 +702,7 @@ fn advance_live_obj_fetch(
                         line_obj_fetch_index: render.line_obj_fetch_index,
                         obj_fetch_ticket: render.obj_fetch_ticket,
                         obj_fetch_flags: render.obj_fetch_flags,
+                        bg_fetcher_resume: render.bg_fetcher_resume,
                         fetcher: lib::ppu::sem::types::FetcherState$(
                             epoch: render.fetcher.epoch,
                             source: FetcherSource::Object,
@@ -778,6 +787,21 @@ fn apply_live_transfer(
                 base_x_out,
                 mem_resp,
             );
+            let next_status =
+                if next_is_transfer {
+                    let next_discard_scx = match candidate_state.status.phase {
+                        PpuPhase::Transfer$(x_out: _, discard_scx: discard_scx) => discard_scx,
+                        _ => base_discard_scx,
+                    };
+                    PpuStatusState$(
+                        run: candidate_state.status.run,
+                        phase: PpuPhase::Transfer$(x_out: base_x_out, discard_scx: next_discard_scx),
+                        stat_irq: candidate_state.status.stat_irq,
+                        lyc_match_flag: candidate_state.status.lyc_match_flag,
+                    )
+                } else {
+                    candidate_state.status
+                };
             let next_render =
                 if next_is_transfer {
                     PpuRenderState$(
@@ -790,6 +814,7 @@ fn apply_live_transfer(
                         line_obj_fetch_index: next_obj_render.line_obj_fetch_index,
                         obj_fetch_ticket: next_obj_render.obj_fetch_ticket,
                         obj_fetch_flags: next_obj_render.obj_fetch_flags,
+                        bg_fetcher_resume: next_obj_render.bg_fetcher_resume,
                         fetcher: next_obj_render.fetcher,
                         bg_fifo: next_obj_render.bg_fifo,
                         obj_fifo: next_obj_render.obj_fifo,
@@ -806,6 +831,7 @@ fn apply_live_transfer(
                         line_obj_fetch_index: 0u4,
                         obj_fetch_ticket: zero_selected_obj_ticket(),
                         obj_fetch_flags: zero_obj_flags(),
+                        bg_fetcher_resume: initial_bg_fetcher_state(),
                         fetcher: initial_bg_fetcher_state(),
                         bg_fifo: clear_bg_fifo(),
                         obj_fifo: empty_obj_fifo(),
@@ -815,7 +841,7 @@ fn apply_live_transfer(
             (
                 PpuState$(
                     visible: candidate_state.visible,
-                    status: candidate_state.status,
+                    status: next_status,
                     sampled: candidate_state.sampled,
                     render: next_render,
                 ),
@@ -911,6 +937,7 @@ fn apply_live_transfer(
                     line_obj_fetch_index: candidate_state.render.line_obj_fetch_index,
                     obj_fetch_ticket: if next_is_transfer { candidate_state.render.obj_fetch_ticket } else { zero_selected_obj_ticket() },
                     obj_fetch_flags: if next_is_transfer { candidate_state.render.obj_fetch_flags } else { zero_obj_flags() },
+                    bg_fetcher_resume: if next_is_transfer { candidate_state.render.bg_fetcher_resume } else { initial_bg_fetcher_state() },
                     fetcher: if next_is_transfer { fetcher_output.next_state } else { initial_bg_fetcher_state() },
                     bg_fifo: if next_is_transfer { pipe_output.next_fifo } else { clear_bg_fifo() },
                     obj_fifo: if next_is_transfer { obj_popped.next_fifo } else { empty_obj_fifo() },

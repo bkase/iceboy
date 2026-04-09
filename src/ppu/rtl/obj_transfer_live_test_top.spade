@@ -89,6 +89,7 @@ fn seeded_state(
             line_obj_fetch_index: 0u4,
             obj_fetch_ticket: lib::ppu::sem::types::zero_selected_obj_ticket(),
             obj_fetch_flags: lib::ppu::sem::types::zero_obj_flags(),
+            bg_fetcher_resume: initial_fetcher_state(),
             fetcher: initial_fetcher_state(),
             bg_fifo: empty_bg_fifo(),
             obj_fifo: empty_obj_fifo(),
@@ -132,6 +133,13 @@ fn encode_mem_client(client: MemClient) -> uint<3> {
     }
 }
 
+fn phase_x_out(phase: PpuPhase) -> uint<8> {
+    match phase {
+        PpuPhase::Transfer$(x_out, discard_scx: _) => x_out,
+        _ => 0u8,
+    }
+}
+
 fn response_data(req: PpuMemReq) -> uint<8> {
     match req.tag.region {
         MemRegion::Oam =>
@@ -149,9 +157,26 @@ fn response_data(req: PpuMemReq) -> uint<8> {
     }
 }
 
-fn ok_mem_resp(req: PpuMemReq) -> PpuMemResp {
+fn response_data_configured(req: PpuMemReq, tile_lo_i: uint<8>, tile_hi_i: uint<8>) -> uint<8> {
+    match req.tag.region {
+        MemRegion::Oam =>
+            match req.tag.id {
+                0u4 => 0x24u8,
+                1u4 => 0x00u8,
+                _ => 0u8,
+            },
+        MemRegion::Vram =>
+            match req.tag.id {
+                2u4 => tile_lo_i,
+                3u4 => tile_hi_i,
+                _ => 0u8,
+            },
+    }
+}
+
+fn ok_mem_resp(req: PpuMemReq, tile_lo_i: uint<8>, tile_hi_i: uint<8>) -> PpuMemResp {
     let result = match req.kind {
-        PpuMemKind::Read => PpuMemResult::Ok$(data: response_data(req)),
+        PpuMemKind::Read => PpuMemResult::Ok$(data: response_data_configured(req, tile_lo_i, tile_hi_i)),
         PpuMemKind::Write$(data: data) => PpuMemResult::Ok$(data: data),
     };
     PpuMemResp$(tag: req.tag, result: result)
@@ -166,11 +191,13 @@ pub entity obj_transfer_live_test_top(
     ticket1_x_i: uint<8>,
     start_x_out_i: uint<8>,
     start_dot_in_line_i: uint<9>,
-) -> uint<89> {
+    tile_lo_i: uint<8>,
+    tile_hi_i: uint<8>,
+) -> uint<97> {
     decl state_reg;
     decl pending_req_reg;
     decl pending_resp_valid_reg;
-    let mem_resp_now = if pending_resp_valid_reg { ok_mem_resp(pending_req_reg) } else { idle_ppu_mem_resp() };
+    let mem_resp_now = if pending_resp_valid_reg { ok_mem_resp(pending_req_reg, tile_lo_i, tile_hi_i) } else { idle_ppu_mem_resp() };
     let step = step_dot(
         state_reg,
         DotInput$(bus_events: [idle_timed_ppu_event(); 4], bus_event_count: 0u4, mem_resp: mem_resp_now, dma_state: idle_oam_dma_state()),
@@ -226,4 +253,5 @@ pub entity obj_transfer_live_test_top(
         | (zext(scanout_source_value) << 77)
         | (zext(scanout_x_value) << 79)
         | (zext(scanout_shade_value) << 87)
+        | (zext(phase_x_out(trace.phase_after)) << 89)
 }
