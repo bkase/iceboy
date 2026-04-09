@@ -20,32 +20,8 @@ use lib::ppu::sem::types::{
     visible_mode,
 };
 use lib::ppu::rtl::irq::irq_req;
-use lib::ppu::rtl::regs::apply_mmio_write;
+use lib::ppu::rtl::regs::{apply_mmio_write, set_lcd_enable};
 use lib::ppu::rtl::timing::{advance_run_state, advance_timing, handle_lcd_transition};
-
-fn set_lcd_enable(regs: PpuRegs, enabled: bool) -> PpuRegs {
-    PpuRegs$(
-        lcdc: Lcdc$(
-            lcd_enable: enabled,
-            win_map_hi: regs.lcdc.win_map_hi,
-            win_enable: regs.lcdc.win_enable,
-            bgwin_data_hi: regs.lcdc.bgwin_data_hi,
-            bg_map_hi: regs.lcdc.bg_map_hi,
-            obj_size_8x16: regs.lcdc.obj_size_8x16,
-            obj_enable: regs.lcdc.obj_enable,
-            bg_enable: regs.lcdc.bg_enable,
-        ),
-        stat_sel: regs.stat_sel,
-        scy: regs.scy,
-        scx: regs.scx,
-        lyc: regs.lyc,
-        wy: regs.wy,
-        wx: regs.wx,
-        bgp: regs.bgp,
-        obp0: regs.obp0,
-        obp1: regs.obp1,
-    )
-}
 
 fn is_stat_write(write: MmioWrite) -> bool {
     match write.target {
@@ -91,9 +67,7 @@ fn fold_events(input: DotInput, regs: PpuRegs) -> (PpuRegs, bool, bool, bool) {
 fn next_dot_in_line(run: LcdRunState, dot_in_line: uint<9>) -> uint<9> {
     match run {
         LcdRunState::Disabled => 0u9,
-        LcdRunState::WarmupBlankFrame =>
-            if dot_in_line == 455u9 { 0u9 } else { trunc(dot_in_line + 1u9) },
-        LcdRunState::Running =>
+        _ =>
             if dot_in_line == 455u9 { 0u9 } else { trunc(dot_in_line + 1u9) },
     }
 }

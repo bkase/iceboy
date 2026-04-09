@@ -313,7 +313,7 @@ pub fn initial_ppu_sampling_state() -> PpuSamplingState {
     )
 }
 
-pub fn initial_ppu_render_state() -> PpuRenderState {
+pub fn ppu_render_state(first_frame_blank: bool) -> PpuRenderState {
     PpuRenderState$(
         dot_in_line: 0u9,
         x_out: 0u8,
@@ -324,8 +324,12 @@ pub fn initial_ppu_render_state() -> PpuRenderState {
         fetcher: initial_fetcher_state(),
         bg_fifo: empty_bg_fifo(),
         obj_fifo: empty_obj_fifo(),
-        first_frame_blank: false,
+        first_frame_blank: first_frame_blank,
     )
+}
+
+pub fn initial_ppu_render_state() -> PpuRenderState {
+    ppu_render_state(false)
 }
 
 pub fn initial_ppu_status_state() -> PpuStatusState {
@@ -359,15 +363,13 @@ fn phase_mode(phase: PpuPhase) -> PpuMode {
 pub fn visible_mode(status: PpuStatusState) -> PpuMode {
     match status.run {
         LcdRunState::Disabled => PpuMode::LcdOff,
-        LcdRunState::WarmupBlankFrame => phase_mode(status.phase),
-        LcdRunState::Running => phase_mode(status.phase),
+        _ => phase_mode(status.phase),
     }
 }
 
 pub fn lcd_enabled(status: PpuStatusState, regs: PpuRegs) -> bool {
     match status.run {
         LcdRunState::Disabled => false,
-        LcdRunState::WarmupBlankFrame => regs.lcdc.lcd_enable,
-        LcdRunState::Running => regs.lcdc.lcd_enable,
+        _ => regs.lcdc.lcd_enable,
     }
 }

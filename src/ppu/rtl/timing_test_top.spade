@@ -1,4 +1,4 @@
-use lib::ppu::rtl::timing::{advance_run_state, advance_timing, handle_lcd_transition, lcd_enabled, visible_mode};
+use lib::ppu::rtl::timing::{advance_run_state, advance_timing, handle_lcd_transition};
 use lib::ppu::sem::events::idle_dot_input;
 use lib::ppu::sem::types::{
     LcdRunState,
@@ -10,8 +10,10 @@ use lib::ppu::sem::types::{
     PpuState,
     PpuStatusState,
     PpuVisibleState,
+    lcd_enabled,
     StatIrqState,
     StatSelect,
+    visible_mode,
 };
 use lib::sim::ppu_support::{decode_lcd_run, encode_lcd_run, encode_ppu_phase};
 

@@ -76,6 +76,7 @@ PRECOMMIT_SWIM_TESTS_EXTENDED=(
     "test/unit/test_joypad_interrupts.py"
     "test/unit/test_serial.py"
     "test/unit/test_timebase.py"
+    "test/unit/test_ppu_timing.py"
     "test/unit/test_video_backend_adapter.py"
     "test/lockstep/test_cpu_lockstep.py"
     "test/lockstep/test_ei_halt_corners.py"

@@ -20,6 +20,22 @@ fn replace_lcdc(regs: PpuRegs, lcdc: Lcdc) -> PpuRegs {
     )
 }
 
+pub fn set_lcd_enable(regs: PpuRegs, enabled: bool) -> PpuRegs {
+    replace_lcdc(
+        regs,
+        Lcdc$(
+            lcd_enable: enabled,
+            win_map_hi: regs.lcdc.win_map_hi,
+            win_enable: regs.lcdc.win_enable,
+            bgwin_data_hi: regs.lcdc.bgwin_data_hi,
+            bg_map_hi: regs.lcdc.bg_map_hi,
+            obj_size_8x16: regs.lcdc.obj_size_8x16,
+            obj_enable: regs.lcdc.obj_enable,
+            bg_enable: regs.lcdc.bg_enable,
+        ),
+    )
+}
+
 fn replace_stat_select(regs: PpuRegs, stat_sel: StatSelect) -> PpuRegs {
     PpuRegs$(
         lcdc: regs.lcdc,
