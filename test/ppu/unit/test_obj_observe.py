@@ -23,7 +23,9 @@ RUN_RUNNING = 2
 FETCHER_BG = 0
 FETCHER_GET_TILE = 0
 MEM_REGION_VRAM = 0
+MEM_REGION_OAM = 1
 MEM_CLIENT_CPU = 0
+MEM_CLIENT_OAM_SCANNER = 3
 
 LCDC_TARGET = 0
 LCDC_OFF = 0x11
@@ -58,6 +60,11 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "first_frame_blank": bool((value >> 93) & 0x1),
         "slot0_oam_index": (value >> 94) & 0x3F,
         "slot0_rank": (value >> 100) & 0xF,
+        "req_addr": (value >> 104) & 0xFFFF,
+        "req_region": (value >> 120) & 0x1,
+        "req_client": (value >> 121) & 0x7,
+        "req_id": (value >> 124) & 0xF,
+        "resp_valid": bool((value >> 128) & 0x1),
     }
 
 
@@ -189,3 +196,39 @@ async def test_obj_observe_live_oam_cadence_advances_index_every_two_dots(dut):
     assert fourth["phase"] == PHASE_OAM, fourth
     assert fourth["mem_req_count"] == 2, fourth
     assert fourth["oam_index"] == 2, fourth
+
+
+@cocotb.test()
+async def test_obj_observe_one_dot_responder_exposes_live_request_metadata_and_selection(dut):
+    await reset_dut(dut)
+
+    first = await step(dut)
+    second = await step(dut)
+    third = await step(dut)
+    fourth = await step(dut)
+
+    assert first["resp_valid"] is True, first
+
+    assert second["mem_req_count"] == 2, second
+    assert second["req_region"] == MEM_REGION_OAM, second
+    assert second["req_client"] == MEM_CLIENT_OAM_SCANNER, second
+    assert second["req_id"] == 0, second
+    assert second["req_addr"] == 0xFE04, second
+
+    assert third["resp_valid"] is True, third
+
+    assert fourth["mem_req_count"] == 2, fourth
+    assert fourth["req_region"] == MEM_REGION_OAM, fourth
+    assert fourth["req_client"] == MEM_CLIENT_OAM_SCANNER, fourth
+    assert fourth["req_id"] == 0, fourth
+    assert fourth["req_addr"] == 0xFE08, fourth
+
+    transfer = await advance_until_phase(dut, PHASE_TRANSFER)
+    saw_bg_fifo = transfer["bg_fifo_count"] > 0
+    saw_pending = transfer["fetcher_pending_valid"]
+    for _ in range(16):
+        snapshot = await step(dut)
+        saw_bg_fifo = saw_bg_fifo or snapshot["bg_fifo_count"] > 0
+        saw_pending = saw_pending or snapshot["fetcher_pending_valid"]
+    assert saw_bg_fifo, transfer
+    assert saw_pending, transfer
