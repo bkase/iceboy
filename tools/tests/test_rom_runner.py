@@ -431,6 +431,13 @@ class RomRunnerTest(unittest.TestCase):
         self.assertTrue(all(len(row) == 160 for row in image))
         self.assertEqual(set(pixel for row in image for pixel in row), {0, 1})
 
+    def test_decode_png_1bit_grayscale_accepts_multibit_mealybug_references(self) -> None:
+        for name in ("m3_bgp_change.png", "m3_scx_high_5_bits.png", "m3_lcdc_win_en_change_multiple_wx.png"):
+            image = _decode_png_1bit_grayscale(MEALYBUG_EXPECTED_ROOT / name)
+            self.assertEqual(len(image), 144, name)
+            self.assertTrue(all(len(row) == 160 for row in image), name)
+            self.assertEqual(set(pixel for row in image for pixel in row), {0, 1}, name)
+
     def test_blob_frame_helpers_report_binary_shades_and_first_mismatch(self) -> None:
         self.assertEqual(_scanout_blob_bit(0, light_shades=frozenset({0})), 1)
         self.assertEqual(_scanout_blob_bit(3, light_shades=frozenset({0})), 0)
@@ -438,6 +445,116 @@ class RomRunnerTest(unittest.TestCase):
         actual = ((1, 0), (0, 1))
         expected = ((1, 1), (0, 1))
         self.assertEqual(_blob_frame_mismatch(actual, expected), (1, (1, 0, 0, 1)))
+
+    def test_mealybug_blob_runner_accepts_first_matching_target_frame(self) -> None:
+        frame_start = SimpleNamespace(ppu_scanout_valid=True, ppu_scanout_kind=2)
+        lit_pixel = SimpleNamespace(
+            ppu_scanout_valid=True,
+            ppu_scanout_kind=0,
+            ppu_scanout_x=0,
+            ppu_scanout_y=0,
+            ppu_scanout_color=0,
+        )
+        idle_post = SimpleNamespace(pc=0x1234, bus_req_kind=0, bus_req_addr=0, bus_req_data=0, irq_ack_valid=False, irq_ack_bit=0)
+        steps = [
+            (idle_post, 0, 0, 0, None, None, [frame_start]),
+            (idle_post, 0, 0, 0, None, None, [lit_pixel]),
+            (idle_post, 0, 0, 0, None, None, [frame_start]),
+        ]
+
+        target = rom_runner._blob_frame_zero()
+        target[0][0] = 1
+        target_frame = tuple(tuple(row) for row in target)
+
+        with patch.object(
+            rom_runner,
+            "_soc_step_to_commit_with_observations",
+            AsyncMock(side_effect=steps),
+        ):
+            actual = asyncio.run(
+                rom_runner.run_soc_dut_to_mealybug_blob_frame(
+                    object(),
+                    rom_bytes=bytes(0x8000),
+                    max_mcycles=len(steps),
+                    target_frame=target_frame,
+                )
+            )
+
+        self.assertEqual(actual, target_frame)
+
+    def test_mealybug_blob_runner_times_out_without_target_on_unstable_frames(self) -> None:
+        frame_start = SimpleNamespace(ppu_scanout_valid=True, ppu_scanout_kind=2)
+        lit_pixel = SimpleNamespace(
+            ppu_scanout_valid=True,
+            ppu_scanout_kind=0,
+            ppu_scanout_x=0,
+            ppu_scanout_y=0,
+            ppu_scanout_color=0,
+        )
+        dark_pixel = SimpleNamespace(
+            ppu_scanout_valid=True,
+            ppu_scanout_kind=0,
+            ppu_scanout_x=0,
+            ppu_scanout_y=0,
+            ppu_scanout_color=3,
+        )
+        idle_post = SimpleNamespace(pc=0x4567, bus_req_kind=0, bus_req_addr=0, bus_req_data=0, irq_ack_valid=False, irq_ack_bit=0)
+        steps = [
+            (idle_post, 0, 0, 0, None, None, [frame_start]),
+            (idle_post, 0, 0, 0, None, None, [lit_pixel]),
+            (idle_post, 0, 0, 0, None, None, [frame_start]),
+            (idle_post, 0, 0, 0, None, None, [dark_pixel]),
+        ]
+
+        with patch.object(
+            rom_runner,
+            "_soc_step_to_commit_with_observations",
+            AsyncMock(side_effect=steps),
+        ):
+            with self.assertRaisesRegex(TimeoutError, "did not stabilize a mealybug frame"):
+                asyncio.run(
+                    rom_runner.run_soc_dut_to_mealybug_blob_frame(
+                        object(),
+                        rom_bytes=bytes(0x8000),
+                        max_mcycles=len(steps),
+                    )
+                )
+
+    def test_shaded_frame_runner_accepts_first_matching_target_frame(self) -> None:
+        frame_start = SimpleNamespace(ppu_scanout_valid=True, ppu_scanout_kind=2)
+        dark_pixel = SimpleNamespace(
+            ppu_scanout_valid=True,
+            ppu_scanout_kind=0,
+            ppu_scanout_x=0,
+            ppu_scanout_y=0,
+            ppu_scanout_shade=3,
+        )
+        idle_post = SimpleNamespace(pc=0x5678, bus_req_kind=0, bus_req_addr=0, bus_req_data=0, irq_ack_valid=False, irq_ack_bit=0)
+        steps = [
+            (idle_post, 0, 0, 0, None, None, [frame_start]),
+            (idle_post, 0, 0, 0, None, None, [dark_pixel]),
+            (idle_post, 0, 0, 0, None, None, [frame_start]),
+        ]
+
+        target = rom_runner._shade_frame_zero()
+        target[0][0] = 0x00
+        target_frame = tuple(tuple(row) for row in target)
+
+        with patch.object(
+            rom_runner,
+            "_soc_step_to_commit_with_observations",
+            AsyncMock(side_effect=steps),
+        ):
+            actual = asyncio.run(
+                rom_runner.run_soc_dut_to_shaded_frame(
+                    object(),
+                    rom_bytes=bytes(0x8000),
+                    max_mcycles=len(steps),
+                    target_frame=target_frame,
+                )
+            )
+
+        self.assertEqual(actual, target_frame)
 
     def test_decode_png_grayscale_reads_pinned_dmg_acid2_reference(self) -> None:
         image = _decode_png_grayscale(DMG_ACID2_EXPECTED)

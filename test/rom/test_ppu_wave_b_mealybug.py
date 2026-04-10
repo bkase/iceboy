@@ -21,9 +21,6 @@ from spec.profiles import CPU_BRING_UP_PROFILES
 MEALYBUG_ROM_ROOT = ROOT / "bench" / "external" / "mealybug-tearoom-tests" / "ppu"
 MEALYBUG_EXPECTED_ROOT = ROOT / "bench" / "expected" / "suite_owned" / "mealybug-tearoom-tests" / "DMG-blob"
 MEALYBUG_MAX_MCYCLES = 400_000
-MEALYBUG_LIGHT_SHADES = frozenset({0})
-
-
 def _max_mcycles_for_rom(rom_name: str) -> int:
     override_key = f"ICEBOY_MEALYBUG_MAX_MCYCLES_{rom_name.upper().replace('-', '_').replace('.', '_')}"
     override = os.environ.get(override_key, "").strip()
@@ -41,7 +38,6 @@ async def _run_mealybug_canary(dut, rom_name: str, expected_name: str | None = N
         rom_path=MEALYBUG_ROM_ROOT / rom_name,
         expected_path=MEALYBUG_EXPECTED_ROOT / expected,
         max_mcycles=_max_mcycles_for_rom(rom_name),
-        light_shades=MEALYBUG_LIGHT_SHADES,
     )
 
 

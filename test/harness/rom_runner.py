@@ -196,9 +196,10 @@ def _decode_png_1bit_grayscale(path: Path) -> tuple[tuple[int, ...], ...]:
             )
             if interlace != 0:
                 raise ValueError(f"{path} uses unsupported interlaced PNG encoding")
-            if bit_depth != 1 or color_type != 0:
+            if bit_depth not in {1, 2, 4, 8} or color_type != 0:
                 raise ValueError(
-                    f"{path} must be 1-bit grayscale PNG, got bit_depth={bit_depth} color_type={color_type}"
+                    f"{path} must be grayscale PNG with bit_depth 1, 2, 4, or 8; "
+                    f"got bit_depth={bit_depth} color_type={color_type}"
                 )
         elif chunk_type == b"IDAT":
             idat.extend(chunk_data)
@@ -243,7 +244,17 @@ def _decode_png_1bit_grayscale(path: Path) -> tuple[tuple[int, ...], ...]:
                 up = prev[index]
                 up_left = prev[index - 1] if index else 0
                 scan[index] = (scan[index] + paeth(left, up, up_left)) & 0xFF
-        rows.append(tuple((scan[x >> 3] >> (7 - (x & 7))) & 0x1 for x in range(width)))
+        white_sample = (1 << bit_depth) - 1
+        sample_mask = white_sample
+        rows.append(
+            tuple(
+                1
+                if ((scan[(x * bit_depth) >> 3] >> (8 - bit_depth - ((x * bit_depth) & 7))) & sample_mask)
+                == white_sample
+                else 0
+                for x in range(width)
+            )
+        )
         prev = scan
     return tuple(rows)
 
@@ -1720,6 +1731,7 @@ async def run_soc_dut_to_mealybug_blob_frame(
     max_mcycles: int,
     stable_frames: int = 2,
     light_shades: frozenset[int] = frozenset({0}),
+    target_frame: tuple[tuple[int, ...], ...] | None = None,
 ) -> tuple[tuple[int, ...], ...]:
     memory = ExternalMemoryBus(rom_bytes, use_integrated_ppu=True)
     current_frame = _blob_frame_zero()
@@ -1759,6 +1771,8 @@ async def run_soc_dut_to_mealybug_blob_frame(
             if int(getattr(observation, "ppu_scanout_kind", 0)) == 2:
                 if seen_frame_start:
                     frozen = _freeze_blob_frame(current_frame)
+                    if target_frame is not None and frozen == target_frame:
+                        return frozen
                     if frozen == last_completed_frame:
                         stable_completed_frames += 1
                     else:
@@ -1783,6 +1797,7 @@ async def run_soc_dut_to_shaded_frame(
     rom_bytes: bytes,
     max_mcycles: int,
     stable_frames: int = 2,
+    target_frame: tuple[tuple[int, ...], ...] | None = None,
 ) -> tuple[tuple[int, ...], ...]:
     memory = ExternalMemoryBus(rom_bytes, use_integrated_ppu=True)
     current_frame = _shade_frame_zero()
@@ -1822,6 +1837,8 @@ async def run_soc_dut_to_shaded_frame(
             if int(getattr(observation, "ppu_scanout_kind", 0)) == 2:
                 if seen_frame_start:
                     frozen = _freeze_shade_frame(current_frame)
+                    if target_frame is not None and frozen == target_frame:
+                        return frozen
                     if frozen == last_completed_frame:
                         stable_completed_frames += 1
                     else:
@@ -1846,27 +1863,26 @@ async def assert_mealybug_ppu_soc_rom_matches_reference(
     rom_path: Path,
     expected_path: Path,
     max_mcycles: int,
-    light_shades: frozenset[int] = frozenset({0}),
 ) -> None:
-    actual = await run_soc_dut_to_mealybug_blob_frame(
-        driver,
-        rom_bytes=rom_path.read_bytes(),
-        max_mcycles=max_mcycles,
-        light_shades=light_shades,
-    )
-    expected = _decode_png_1bit_grayscale(expected_path)
+    expected = _decode_png_grayscale(expected_path)
     if len(expected) != SCREEN_HEIGHT or any(len(row) != SCREEN_WIDTH for row in expected):
         raise AssertionError(
             f"{expected_path} must decode to {SCREEN_WIDTH}x{SCREEN_HEIGHT}, "
             f"got {len(expected[0]) if expected else 0}x{len(expected)}"
         )
-    mismatches, first = _blob_frame_mismatch(actual, expected)
+    actual = await run_soc_dut_to_shaded_frame(
+        driver,
+        rom_bytes=rom_path.read_bytes(),
+        max_mcycles=max_mcycles,
+        target_frame=expected,
+    )
+    mismatches, first = _shade_frame_mismatch(actual, expected)
     if mismatches == 0:
         return
     first_text = ""
     if first is not None:
-        x, y, actual_bit, expected_bit = first
-        first_text = f" first mismatch at ({x}, {y}): actual={actual_bit} expected={expected_bit}"
+        x, y, actual_shade, expected_shade = first
+        first_text = f" first mismatch at ({x}, {y}): actual=0x{actual_shade:02X} expected=0x{expected_shade:02X}"
     raise AssertionError(
         f"mealybug frame mismatch for {rom_path.name} vs {expected_path.name}: "
         f"{mismatches} pixels differ.{first_text}"
@@ -1880,17 +1896,18 @@ async def assert_ppu_soc_rom_matches_reference_grayscale(
     expected_path: Path,
     max_mcycles: int,
 ) -> None:
-    actual = await run_soc_dut_to_shaded_frame(
-        driver,
-        rom_bytes=rom_path.read_bytes(),
-        max_mcycles=max_mcycles,
-    )
     expected = _decode_png_grayscale(expected_path)
     if len(expected) != SCREEN_HEIGHT or any(len(row) != SCREEN_WIDTH for row in expected):
         raise AssertionError(
             f"{expected_path} must decode to {SCREEN_WIDTH}x{SCREEN_HEIGHT}, "
             f"got {len(expected[0]) if expected else 0}x{len(expected)}"
         )
+    actual = await run_soc_dut_to_shaded_frame(
+        driver,
+        rom_bytes=rom_path.read_bytes(),
+        max_mcycles=max_mcycles,
+        target_frame=expected,
+    )
     mismatches, first = _shade_frame_mismatch(actual, expected)
     if mismatches == 0:
         return
