@@ -91,6 +91,7 @@ class RunTestsTest(unittest.TestCase):
         self.assertIn("test_ppu_wave_a_mooneye.py", rom_labels)
         self.assertIn("test_ppu_wave_b.py", rom_labels)
         self.assertIn("test_ppu_wave_c.py", rom_labels)
+        self.assertIn("test_ppu_checker_ball.py", rom_labels)
         blargg_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_cpu_instrs_blargg.py")
         self.assertEqual(blargg_suite.runner, "shell")
         self.assertEqual(blargg_suite.target, "tools/run_cpu_instrs_blargg_verilator.sh")
@@ -100,6 +101,9 @@ class RunTestsTest(unittest.TestCase):
         wave_c_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_ppu_wave_c.py")
         self.assertEqual(wave_c_suite.runner, "shell")
         self.assertEqual(wave_c_suite.target, "tools/run_ppu_wave_c_verilator.sh")
+        checker_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_ppu_checker_ball.py")
+        self.assertEqual(checker_suite.runner, "shell")
+        self.assertEqual(checker_suite.target, "tools/run_ppu_checker_ball_verilator.sh")
 
     def test_nightly_meta_includes_backend_diff_smoke(self) -> None:
         meta_labels = [suite.label for suite in suites_for_tier("meta", nightly=False)]
@@ -120,6 +124,11 @@ class RunTestsTest(unittest.TestCase):
         self.assertTrue((ROOT / "tools" / "run_ppu_wave_c_verilator.sh").is_file())
         self.assertTrue((ROOT / "tools" / "write_checkpoint_shaded_frame.py").is_file())
         self.assertTrue((ROOT / "tools" / "verilator" / "dmg_acid2_main.cpp").is_file())
+
+    def test_ppu_checker_ball_native_runner_sources_exist(self) -> None:
+        self.assertTrue((ROOT / "tools" / "run_ppu_checker_ball_verilator.sh").is_file())
+        self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL.asm").is_file())
+        self.assertTrue((ROOT / "tools" / "write_checkpoint_shaded_frame.py").is_file())
 
     def test_power_tier_includes_ppu_quiescence_suite(self) -> None:
         power_labels = [suite.label for suite in suites_for_tier("power", nightly=False)]

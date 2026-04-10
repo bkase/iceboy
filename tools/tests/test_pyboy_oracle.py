@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import sys
 import unittest
 import warnings
 from pathlib import Path
@@ -20,9 +21,15 @@ from test.harness.rom_runner import _decode_png_grayscale
 
 HOOK_ADDRS = (0x0150, 0x0152, 0x0154, 0x0155, 0x0156)
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / "tools") not in sys.path:
+    sys.path.insert(0, str(ROOT / "tools"))
+
+from resolve_checkpoint_pc import resolve_checkpoint_pc
+
 DMG_ACID2_ROM = ROOT / "bench" / "external" / "dmg-acid2" / "dmg-acid2.gb"
 DMG_ACID2_EXPECTED = ROOT / "bench" / "expected" / "suite_owned" / "dmg-acid2" / "reference-dmg.png"
 OBJ_BASIC_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_BASIC.gb"
+CHECKER_BALL_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL.gb"
 OBJ_FETCH_CANCEL_LCDC1_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_FETCH_CANCEL_LCDC1.gb"
 
 
@@ -198,6 +205,34 @@ class PyBoyOracleTest(unittest.TestCase):
         self.assertEqual(actual[(41 * 160) + 136], 0x00)
         self.assertEqual(actual[(41 * 160) + 144], 0xFF)
         self.assertEqual(actual[(41 * 160) + 152], 0x00)
+
+    def test_checkpoint_frame_capture_tracks_checker_ball_motion(self) -> None:
+        frame1 = capture_checkpoint_frame_dmg_shades(
+            CHECKER_BALL_ROM,
+            sym_path=CHECKER_BALL_ROM.with_suffix(".sym"),
+            settle_rendered_frames=1,
+        )
+        frame2 = capture_checkpoint_frame_dmg_shades(
+            CHECKER_BALL_ROM,
+            sym_path=CHECKER_BALL_ROM.with_suffix(".sym"),
+            settle_rendered_frames=2,
+        )
+        frame3 = capture_checkpoint_frame_dmg_shades(
+            CHECKER_BALL_ROM,
+            sym_path=CHECKER_BALL_ROM.with_suffix(".sym"),
+            settle_rendered_frames=3,
+        )
+        self.assertNotEqual(frame1, frame2)
+        self.assertNotEqual(frame2, frame3)
+        self.assertEqual(frame1[(34 * 160) + 44], 0x00)
+        self.assertEqual(frame2[(42 * 160) + 60], 0x00)
+        self.assertEqual(frame3[(50 * 160) + 76], 0x00)
+
+    def test_resolve_checkpoint_pc_finds_wave_c_scene_ready_label(self) -> None:
+        self.assertEqual(
+            resolve_checkpoint_pc(OBJ_FETCH_CANCEL_LCDC1_ROM.with_suffix(".sym")),
+            0x01B9,
+        )
 
 
 if __name__ == "__main__":

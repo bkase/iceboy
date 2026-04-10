@@ -212,13 +212,31 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
         self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
         self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("[tool] python3:", completed.stdout)
         self.assertIn("tools/prepare_verilator_sv.py", completed.stdout)
         self.assertIn("build/spade.verilator.sv", completed.stdout)
         self.assertIn("soc_rom_top_verilator_wrapper.sv", completed.stdout)
         self.assertIn("tools/verilator/dmg_acid2_main.cpp", completed.stdout)
         self.assertIn("tools/write_checkpoint_shaded_frame.py", completed.stdout)
+        self.assertIn("tools/resolve_checkpoint_pc.py", completed.stdout)
         self.assertIn("tools/compare_shaded_frame.py", completed.stdout)
         self.assertIn("rom ids: OBJ_10_PER_LINE OBJ_X_HIDDEN_STILL_COUNTS", completed.stdout)
+        self.assertIn("--checkpoint-pc=0x", completed.stdout)
+        self.assertIn("--checkpoint-completed-frames=2", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+
+    def test_ppu_checker_ball_verilator_wrapper_dry_run_uses_multiframe_native_runner(self) -> None:
+        completed = self.run_script("run_ppu_checker_ball_verilator.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("rom id: CHECKER_BALL", completed.stdout)
+        self.assertIn("expected settles: 1 2 3", completed.stdout)
+        self.assertIn("checkpoint completed frames: 3 4 5", completed.stdout)
+        self.assertIn("--settle-rendered-frames=1", completed.stdout)
+        self.assertIn("--checkpoint-completed-frames=5", completed.stdout)
+        self.assertIn("--max-mcycles=160000", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
     def test_spram_synth_smoke_dry_run_targets_named_test_top(self) -> None:
@@ -288,6 +306,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_10_PER_LINE.asm").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_X_HIDDEN_STILL_COUNTS.asm").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_FETCH_CANCEL_LCDC1.asm").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL.asm").exists())
 
     def test_ppu_wave_c_live_suite_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
@@ -297,6 +316,15 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"tools/run_ppu_wave_c_verilator.sh"', hook_text)
         self.assertTrue((TOOLS / "run_ppu_wave_c_verilator.sh").exists())
         self.assertTrue((TOOLS / "write_checkpoint_shaded_frame.py").exists())
+
+    def test_ppu_checker_ball_live_suite_assets_exist(self) -> None:
+        run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
+        hook_text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
+        self.assertIn('"test_ppu_checker_ball.py"', run_tests_text)
+        self.assertIn('"tools/run_ppu_checker_ball_verilator.sh"', run_tests_text)
+        self.assertIn('"tools/run_ppu_checker_ball_verilator.sh"', hook_text)
+        self.assertTrue((TOOLS / "run_ppu_checker_ball_verilator.sh").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL.asm").exists())
 
     def test_obj_observe_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
