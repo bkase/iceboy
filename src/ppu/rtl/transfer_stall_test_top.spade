@@ -71,6 +71,7 @@ fn seeded_state(seed_stall_dots_i: uint<5>, start_x_out_i: uint<8>) -> PpuState 
             fetcher: ppu_render_state(false).fetcher,
             bg_fifo: seeded_bg_fifo(),
             obj_fifo: ppu_render_state(false).obj_fifo,
+            last_obj_penalty_tile: ppu_render_state(false).last_obj_penalty_tile,
             first_frame_blank: false,
         ),
     )

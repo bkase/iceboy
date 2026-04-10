@@ -57,6 +57,11 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "transfer_obj_fetch_count": (value >> 133) & 0xF,
         "transfer_window_restart_count": (value >> 137) & 0x3,
         "transfer_event_hash": (value >> 139) & 0xFFFFFFFFFFFFFFFF,
+        "stall_dots": (value >> 203) & 0x1F,
+        "last_obj_penalty_valid": bool((value >> 208) & 0x1),
+        "last_obj_penalty_source_window": bool((value >> 209) & 0x1),
+        "last_obj_penalty_tile_x": (value >> 210) & 0x1F,
+        "last_obj_penalty_tile_y": (value >> 215) & 0x1F,
     }
 
 
@@ -89,6 +94,10 @@ async def reset_dut(
     seed_fetcher_pending_client: int = 1,
     seed_fetcher_pending_id: int = 0,
     seed_bg_fifo_count: int = 0,
+    seed_last_obj_penalty_valid: bool = False,
+    seed_last_obj_penalty_source_window: bool = False,
+    seed_last_obj_penalty_tile_x: int = 0,
+    seed_last_obj_penalty_tile_y: int = 0,
     seed_pending_req_valid: bool = False,
     seed_pending_req_addr: int = 0,
     seed_pending_req_region: int = MEM_REGION_VRAM,
@@ -132,6 +141,10 @@ async def reset_dut(
     dut.seed_fetcher_pending_client_i.value = seed_fetcher_pending_client & 0x7
     dut.seed_fetcher_pending_id_i.value = seed_fetcher_pending_id & 0xF
     dut.seed_bg_fifo_count_i.value = seed_bg_fifo_count & 0x1F
+    dut.seed_last_obj_penalty_valid_i.value = int(seed_last_obj_penalty_valid)
+    dut.seed_last_obj_penalty_source_window_i.value = int(seed_last_obj_penalty_source_window)
+    dut.seed_last_obj_penalty_tile_x_i.value = seed_last_obj_penalty_tile_x & 0x1F
+    dut.seed_last_obj_penalty_tile_y_i.value = seed_last_obj_penalty_tile_y & 0x1F
     dut.seed_pending_req_valid_i.value = int(seed_pending_req_valid)
     dut.seed_pending_req_addr_i.value = seed_pending_req_addr & 0xFFFF
     dut.seed_pending_req_region_i.value = seed_pending_req_region & 0x1

@@ -1,12 +1,10 @@
-use lib::ppu::rtl::obj_penalty::{
-    obj_penalty_for_ticket,
-};
+use lib::ppu::rtl::obj_penalty::obj_penalty_for_ticket;
+use lib::ppu::sem::step::add_stall_dots;
 use lib::ppu::sem::types::{
     ObjPenaltyConsideredTile,
     ObjPenaltyTileSource,
-    zero_obj_penalty_considered_tile,
+    SelectedObjTicket,
 };
-use lib::ppu::sem::types::SelectedObjTicket;
 
 fn build_ticket(ticket_x_i: uint<8>) -> SelectedObjTicket {
     SelectedObjTicket$(oam_index: 0u6, x: ticket_x_i, y: 0u8, selection_rank: 0u4)
@@ -23,7 +21,8 @@ fn encode_source(source: ObjPenaltyTileSource) -> uint<1> {
     }
 }
 
-pub entity obj_penalty_test_top(
+pub entity transfer_penalty_test_top(
+    current_stall_dots_i: uint<5>,
     ticket_x_i: uint<8>,
     visible_ly_i: uint<8>,
     scx_i: uint<8>,
@@ -35,9 +34,7 @@ pub entity obj_penalty_test_top(
     considered_source_window_i: bool,
     considered_tile_x_i: uint<5>,
     considered_tile_y_i: uint<5>,
-) -> uint<43> {
-    let ticket = build_ticket(ticket_x_i);
-    let _ = zero_obj_penalty_considered_tile();
+) -> uint<59> {
     let considered = ObjPenaltyConsideredTile$(
         valid: considered_valid_i,
         source: decode_source(considered_source_window_i),
@@ -45,7 +42,7 @@ pub entity obj_penalty_test_top(
         tile_y: considered_tile_y_i,
     );
     let result = obj_penalty_for_ticket(
-        ticket,
+        build_ticket(ticket_x_i),
         visible_ly_i,
         scx_i,
         scy_i,
@@ -54,17 +51,22 @@ pub entity obj_penalty_test_top(
         window_line_i,
         considered,
     );
+    let next_stall_dots = add_stall_dots(current_stall_dots_i, zext(result.total_penalty));
 
-    zext(result.leftmost_x)
-        | (zext(encode_source(result.tile.source)) << 8)
-        | (zext(result.tile.tile_x) << 9)
-        | (zext(result.tile.tile_y) << 14)
-        | (zext(result.tile.pixel_offset) << 19)
-        | (zext(lib::util::bit(result.already_considered)) << 22)
-        | (zext(result.align_penalty) << 23)
-        | (zext(result.total_penalty) << 27)
-        | (zext(lib::util::bit(result.next_considered.valid)) << 31)
-        | (zext(encode_source(result.next_considered.source)) << 32)
-        | (zext(result.next_considered.tile_x) << 33)
-        | (zext(result.next_considered.tile_y) << 38)
+    zext(current_stall_dots_i)
+        | (zext(result.align_penalty) << 5)
+        | (zext(result.total_penalty) << 9)
+        | (zext(next_stall_dots) << 13)
+        | (zext(lib::util::bit(result.already_considered)) << 18)
+        | (zext(lib::util::bit(result.next_considered.valid)) << 19)
+        | (zext(encode_source(result.next_considered.source)) << 20)
+        | (zext(result.next_considered.tile_x) << 21)
+        | (zext(result.next_considered.tile_y) << 26)
+        | (zext(encode_source(result.tile.source)) << 31)
+        | (zext(result.tile.tile_x) << 32)
+        | (zext(result.tile.tile_y) << 37)
+        | (zext(result.tile.pixel_offset) << 42)
+        | (zext(result.leftmost_x) << 45)
+        | (zext(lib::util::bit(window_enabled_line_i)) << 53)
+        | (zext(window_line_i) << 54)
 }

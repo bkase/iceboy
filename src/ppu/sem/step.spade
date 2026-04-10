@@ -35,6 +35,7 @@ use lib::ppu::sem::types::{
     FetcherStep,
     LcdRunState,
     LineObjList,
+    ObjPenaltyConsideredTile,
     OamScanState,
     ObjFlags,
     PpuIrqReq,
@@ -49,6 +50,7 @@ use lib::ppu::sem::types::{
     empty_obj_fifo,
     idle_ppu_irq_req,
     visible_mode,
+    zero_obj_penalty_considered_tile,
     zero_obj_flags,
     zero_obj_pixel,
     zero_selected_obj_ticket,
@@ -63,6 +65,7 @@ use lib::ppu::rtl::fetcher::{
 };
 use lib::ppu::rtl::fifo::{advance_bg_pipe, bg_fifo_has_room_for_row, clear_bg_fifo, line_start_window_state, note_window_tile_push};
 use lib::ppu::rtl::irq::irq_req;
+use lib::ppu::rtl::obj_penalty::{ObjPenaltyResult, obj_penalty_for_ticket};
 use lib::ppu::rtl::obj_fetch::{
     decode_obj_flags,
     decode_obj_row,
@@ -212,6 +215,12 @@ fn update_render_state(
         fetcher: if line_start || !next_is_transfer { initial_bg_fetcher_state() } else { render.fetcher },
         bg_fifo: if line_start || !next_is_transfer { clear_bg_fifo() } else { render.bg_fifo },
         obj_fifo: if line_start || !next_is_transfer { empty_obj_fifo() } else { render.obj_fifo },
+        last_obj_penalty_tile:
+            if line_start || !next_is_transfer {
+                zero_obj_penalty_considered_tile()
+            } else {
+                render.last_obj_penalty_tile
+            },
         first_frame_blank: next_first_frame_blank(next_run),
     )
 }
@@ -579,6 +588,37 @@ fn should_start_live_obj_fetch(render: PpuRenderState, regs: PpuRegs, x_out: uin
         }
 }
 
+fn window_enabled_for_obj_penalty(window_state: WindowState) -> bool {
+    match window_state {
+        WindowState::Inactive => false,
+        _ => true,
+    }
+}
+
+fn due_obj_penalty_result(
+    render: PpuRenderState,
+    regs: PpuRegs,
+    visible_ly: uint<8>,
+    x_out: uint<8>,
+) -> Option<ObjPenaltyResult> {
+    match next_due_line_obj_ticket(render, x_out) {
+        Option::Some(ticket) =>
+            Option::Some(
+                obj_penalty_for_ticket(
+                    ticket,
+                    visible_ly,
+                    regs.scx,
+                    regs.scy,
+                    regs.wx,
+                    window_enabled_for_obj_penalty(render.window_state),
+                    render.window_line,
+                    render.last_obj_penalty_tile,
+                )
+            ),
+        Option::None => Option::None,
+    }
+}
+
 fn with_transfer_digest(render: PpuRenderState, digest: lib::ppu::sem::observe::TransferDigest) -> PpuRenderState {
     PpuRenderState$(
         dot_in_line: render.dot_in_line,
@@ -600,6 +640,7 @@ fn with_transfer_digest(render: PpuRenderState, digest: lib::ppu::sem::observe::
         fetcher: render.fetcher,
         bg_fifo: render.bg_fifo,
         obj_fifo: render.obj_fifo,
+        last_obj_penalty_tile: render.last_obj_penalty_tile,
         first_frame_blank: render.first_frame_blank,
     )
 }
@@ -663,6 +704,7 @@ fn obj_fetch_with_req(render: PpuRenderState, step: FetcherStep, req: PpuMemReq)
             fetcher: next_fetcher,
             bg_fifo: render.bg_fifo,
             obj_fifo: render.obj_fifo,
+            last_obj_penalty_tile: render.last_obj_penalty_tile,
             first_frame_blank: render.first_frame_blank,
         ),
         fetcher_mem_reqs(true, req),
@@ -710,6 +752,7 @@ fn start_live_obj_fetch(render: PpuRenderState, mem_resp: PpuMemResp) -> PpuRend
         ),
         bg_fifo: render.bg_fifo,
         obj_fifo: render.obj_fifo,
+        last_obj_penalty_tile: render.last_obj_penalty_tile,
         first_frame_blank: render.first_frame_blank,
     ),
         TransferEvent::ObjFetchStart$(oam_index: ticket.oam_index),
@@ -779,6 +822,7 @@ fn complete_live_obj_fetch(
         fetcher: resume_bg_fetcher(render, render_inputs, visible_ly, x_out),
         bg_fifo: render.bg_fifo,
         obj_fifo: obj_fifo_overlay_row_clipped(render.obj_fifo, row, offset, left_clip),
+        last_obj_penalty_tile: render.last_obj_penalty_tile,
         first_frame_blank: render.first_frame_blank,
     )
 }
@@ -810,6 +854,7 @@ fn cancel_live_obj_fetch(
         fetcher: restart_bg_fetcher_after_cancel(render, render_inputs, visible_ly, x_out),
         bg_fifo: render.bg_fifo,
         obj_fifo: empty_obj_fifo(),
+        last_obj_penalty_tile: render.last_obj_penalty_tile,
         first_frame_blank: render.first_frame_blank,
     ),
         TransferEvent::ObjFetchCancel,
@@ -854,6 +899,7 @@ fn advance_live_obj_fetch(
                     fetcher: resume_bg_fetcher(render, render_inputs, visible_ly, x_out),
                     bg_fifo: render.bg_fifo,
                     obj_fifo: render.obj_fifo,
+                    last_obj_penalty_tile: render.last_obj_penalty_tile,
                     first_frame_blank: render.first_frame_blank,
                 ),
                 idle_ppu_mem_reqs(),
@@ -895,6 +941,7 @@ fn advance_live_obj_fetch(
                         ),
                         bg_fifo: render.bg_fifo,
                         obj_fifo: render.obj_fifo,
+                        last_obj_penalty_tile: render.last_obj_penalty_tile,
                         first_frame_blank: render.first_frame_blank,
                     ),
                     idle_ppu_mem_reqs(),
@@ -934,6 +981,7 @@ fn advance_live_obj_fetch(
                         ),
                         bg_fifo: render.bg_fifo,
                         obj_fifo: render.obj_fifo,
+                        last_obj_penalty_tile: render.last_obj_penalty_tile,
                         first_frame_blank: render.first_frame_blank,
                     ),
                     idle_ppu_mem_reqs(),
@@ -973,6 +1021,7 @@ fn advance_live_obj_fetch(
                         ),
                         bg_fifo: render.bg_fifo,
                         obj_fifo: render.obj_fifo,
+                        last_obj_penalty_tile: render.last_obj_penalty_tile,
                         first_frame_blank: render.first_frame_blank,
                     ),
                     idle_ppu_mem_reqs(),
@@ -1012,6 +1061,7 @@ fn advance_live_obj_fetch(
                         ),
                         bg_fifo: render.bg_fifo,
                         obj_fifo: render.obj_fifo,
+                        last_obj_penalty_tile: render.last_obj_penalty_tile,
                         first_frame_blank: render.first_frame_blank,
                     ),
                     idle_ppu_mem_reqs(),
@@ -1053,6 +1103,7 @@ fn advance_live_obj_fetch(
                                 ),
                                 bg_fifo: render.bg_fifo,
                                 obj_fifo: render.obj_fifo,
+                                last_obj_penalty_tile: render.last_obj_penalty_tile,
                                 first_frame_blank: render.first_frame_blank,
                             ),
                             idle_ppu_mem_reqs(),
@@ -1113,6 +1164,7 @@ fn advance_live_obj_fetch(
                             ),
                             bg_fifo: render.bg_fifo,
                             obj_fifo: render.obj_fifo,
+                            last_obj_penalty_tile: render.last_obj_penalty_tile,
                             first_frame_blank: render.first_frame_blank,
                         ),
                         idle_ppu_mem_reqs(),
@@ -1203,6 +1255,7 @@ fn apply_live_transfer(
                         fetcher: transfer_render.fetcher,
                         bg_fifo: transfer_render.bg_fifo,
                         obj_fifo: transfer_render.obj_fifo,
+                        last_obj_penalty_tile: transfer_render.last_obj_penalty_tile,
                         first_frame_blank: candidate_state.render.first_frame_blank,
                     )
                 } else {
@@ -1226,6 +1279,7 @@ fn apply_live_transfer(
                         fetcher: initial_bg_fetcher_state(),
                         bg_fifo: clear_bg_fifo(),
                         obj_fifo: empty_obj_fifo(),
+                        last_obj_penalty_tile: zero_obj_penalty_considered_tile(),
                         first_frame_blank: candidate_state.render.first_frame_blank,
                     )
                 };
@@ -1284,6 +1338,7 @@ fn apply_live_transfer(
                         fetcher: next_obj_render.fetcher,
                         bg_fifo: next_obj_render.bg_fifo,
                         obj_fifo: next_obj_render.obj_fifo,
+                        last_obj_penalty_tile: next_obj_render.last_obj_penalty_tile,
                         first_frame_blank: candidate_state.render.first_frame_blank,
                     )
                 } else {
@@ -1307,6 +1362,7 @@ fn apply_live_transfer(
                         fetcher: initial_bg_fetcher_state(),
                         bg_fifo: clear_bg_fifo(),
                         obj_fifo: empty_obj_fifo(),
+                        last_obj_penalty_tile: zero_obj_penalty_considered_tile(),
                         first_frame_blank: candidate_state.render.first_frame_blank,
                     )
                 };
@@ -1446,6 +1502,12 @@ fn apply_live_transfer(
                     fetcher: if next_is_transfer { next_fetcher } else { initial_bg_fetcher_state() },
                     bg_fifo: if next_is_transfer { pipe_output.next_fifo } else { clear_bg_fifo() },
                     obj_fifo: if next_is_transfer { obj_popped.next_fifo } else { empty_obj_fifo() },
+                    last_obj_penalty_tile:
+                        if next_is_transfer {
+                            transfer_after_pixel.last_obj_penalty_tile
+                        } else {
+                            zero_obj_penalty_considered_tile()
+                        },
                     first_frame_blank: candidate_state.render.first_frame_blank,
                 ),
             ),

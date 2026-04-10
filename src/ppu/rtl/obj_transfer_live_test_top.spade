@@ -155,7 +155,11 @@ fn seeded_state(
     seed_fetcher_pending_client_i: uint<3>,
     seed_fetcher_pending_id_i: uint<4>,
     seed_bg_fifo_count_i: uint<5>,
-        start_in_oam_scan_i: bool,
+    seed_last_obj_penalty_valid_i: bool,
+    seed_last_obj_penalty_source_window_i: bool,
+    seed_last_obj_penalty_tile_x_i: uint<5>,
+    seed_last_obj_penalty_tile_y_i: uint<5>,
+    start_in_oam_scan_i: bool,
 ) -> PpuState {
     let base_fetcher_state = seeded_fetcher(seed_fetcher_valid_i, seed_fetcher_source_i, seed_fetcher_step_i);
     let seeded_fetcher_state =
@@ -224,6 +228,17 @@ fn seeded_state(
             fetcher: seeded_fetcher_state,
             bg_fifo: seeded_bg_fifo_state,
             obj_fifo: empty_obj_fifo(),
+            last_obj_penalty_tile: lib::ppu::sem::types::ObjPenaltyConsideredTile$(
+                valid: seed_last_obj_penalty_valid_i,
+                source:
+                    if seed_last_obj_penalty_source_window_i {
+                        lib::ppu::sem::types::ObjPenaltyTileSource::Window
+                    } else {
+                        lib::ppu::sem::types::ObjPenaltyTileSource::Background
+                    },
+                tile_x: seed_last_obj_penalty_tile_x_i,
+                tile_y: seed_last_obj_penalty_tile_y_i,
+            ),
             first_frame_blank: false,
         ),
     )
@@ -423,6 +438,10 @@ pub entity obj_transfer_live_test_top(
     seed_fetcher_pending_client_i: uint<3>,
     seed_fetcher_pending_id_i: uint<4>,
     seed_bg_fifo_count_i: uint<5>,
+    seed_last_obj_penalty_valid_i: bool,
+    seed_last_obj_penalty_source_window_i: bool,
+    seed_last_obj_penalty_tile_x_i: uint<5>,
+    seed_last_obj_penalty_tile_y_i: uint<5>,
     seed_pending_req_valid_i: bool,
     seed_pending_req_addr_i: uint<16>,
     seed_pending_req_region_i: uint<1>,
@@ -441,7 +460,7 @@ pub entity obj_transfer_live_test_top(
     req_addr_i: uint<16>,
     req_data_i: uint<8>,
     start_in_oam_scan_i: bool,
-) -> uint<203> {
+) -> uint<220> {
     decl state_reg;
     decl pending_req_reg;
     decl pending_resp_valid_reg;
@@ -528,6 +547,10 @@ pub entity obj_transfer_live_test_top(
         seed_fetcher_pending_client_i,
         seed_fetcher_pending_id_i,
         seed_bg_fifo_count_i,
+        seed_last_obj_penalty_valid_i,
+        seed_last_obj_penalty_source_window_i,
+        seed_last_obj_penalty_tile_x_i,
+        seed_last_obj_penalty_tile_y_i,
         start_in_oam_scan_i,
     )) =
         if dot_ce_i { visible.next_state } else { state_reg };
@@ -571,4 +594,12 @@ pub entity obj_transfer_live_test_top(
         | (zext(visible.next_state.render.transfer_obj_fetch_count) << 133)
         | (zext(visible.next_state.render.transfer_window_restart_count) << 137)
         | (zext(visible.next_state.render.transfer_event_hash) << 139)
+        | (zext(visible.next_state.render.stall_dots) << 203)
+        | (zext(lib::util::bit(visible.next_state.render.last_obj_penalty_tile.valid)) << 208)
+        | (zext(match visible.next_state.render.last_obj_penalty_tile.source {
+            lib::ppu::sem::types::ObjPenaltyTileSource::Background => 0u1,
+            lib::ppu::sem::types::ObjPenaltyTileSource::Window => 1u1,
+        }) << 209)
+        | (zext(visible.next_state.render.last_obj_penalty_tile.tile_x) << 210)
+        | (zext(visible.next_state.render.last_obj_penalty_tile.tile_y) << 215)
 }

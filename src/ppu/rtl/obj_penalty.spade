@@ -1,23 +1,15 @@
 use lib::ppu::rtl::fifo::window_triggered;
-use lib::ppu::sem::types::SelectedObjTicket;
-
-pub enum ObjPenaltyTileSource {
-    Background,
-    Window,
-}
+use lib::ppu::sem::types::{
+    ObjPenaltyConsideredTile,
+    ObjPenaltyTileSource,
+    SelectedObjTicket,
+};
 
 pub struct ObjPenaltyTile {
     source: ObjPenaltyTileSource,
     tile_x: uint<5>,
     tile_y: uint<5>,
     pixel_offset: uint<3>,
-}
-
-pub struct ObjPenaltyConsideredTile {
-    valid: bool,
-    source: ObjPenaltyTileSource,
-    tile_x: uint<5>,
-    tile_y: uint<5>,
 }
 
 pub struct ObjPenaltyResult {
@@ -27,15 +19,6 @@ pub struct ObjPenaltyResult {
     align_penalty: uint<4>,
     total_penalty: uint<4>,
     next_considered: ObjPenaltyConsideredTile,
-}
-
-pub fn zero_obj_penalty_considered_tile() -> ObjPenaltyConsideredTile {
-    ObjPenaltyConsideredTile$(
-        valid: false,
-        source: ObjPenaltyTileSource::Background,
-        tile_x: 0u5,
-        tile_y: 0u5,
-    )
 }
 
 pub fn obj_leftmost_pixel_x(ticket: SelectedObjTicket) -> uint<8> {

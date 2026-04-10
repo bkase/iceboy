@@ -144,6 +144,7 @@ pub entity timing_test_top(
             fetcher: lib::ppu::sem::types::initial_fetcher_state(),
             bg_fifo: lib::ppu::sem::types::empty_bg_fifo(),
             obj_fifo: lib::ppu::sem::types::empty_obj_fifo(),
+            last_obj_penalty_tile: lib::ppu::sem::types::zero_obj_penalty_considered_tile(),
             first_frame_blank: false,
         ),
     );

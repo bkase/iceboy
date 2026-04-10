@@ -127,6 +127,7 @@ fn build_render_state(
         fetcher: base.fetcher,
         bg_fifo: base.bg_fifo,
         obj_fifo: base.obj_fifo,
+        last_obj_penalty_tile: base.last_obj_penalty_tile,
         first_frame_blank: first_frame_blank_i,
     )
 }

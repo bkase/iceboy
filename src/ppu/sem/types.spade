@@ -87,6 +87,18 @@ pub struct SelectedObjTicket {
     selection_rank: uint<4>,
 }
 
+pub enum ObjPenaltyTileSource {
+    Background,
+    Window,
+}
+
+pub struct ObjPenaltyConsideredTile {
+    valid: bool,
+    source: ObjPenaltyTileSource,
+    tile_x: uint<5>,
+    tile_y: uint<5>,
+}
+
 pub enum ObjPaletteSel {
     Obp0,
     Obp1,
@@ -202,6 +214,7 @@ pub struct PpuRenderState {
     fetcher: FetcherState,
     bg_fifo: BgFifo,
     obj_fifo: ObjFifo,
+    last_obj_penalty_tile: ObjPenaltyConsideredTile,
     first_frame_blank: bool,
 }
 
@@ -258,6 +271,15 @@ pub fn idle_ppu_irq_req() -> PpuIrqReq {
 
 pub fn zero_selected_obj_ticket() -> SelectedObjTicket {
     SelectedObjTicket$(oam_index: 0u6, x: 0u8, y: 0u8, selection_rank: 0u4)
+}
+
+pub fn zero_obj_penalty_considered_tile() -> ObjPenaltyConsideredTile {
+    ObjPenaltyConsideredTile$(
+        valid: false,
+        source: ObjPenaltyTileSource::Background,
+        tile_x: 0u5,
+        tile_y: 0u5,
+    )
 }
 
 pub fn zero_obj_flags() -> ObjFlags {
@@ -348,6 +370,7 @@ pub fn ppu_render_state(first_frame_blank: bool) -> PpuRenderState {
         fetcher: initial_fetcher_state(),
         bg_fifo: empty_bg_fifo(),
         obj_fifo: empty_obj_fifo(),
+        last_obj_penalty_tile: zero_obj_penalty_considered_tile(),
         first_frame_blank: first_frame_blank,
     )
 }
