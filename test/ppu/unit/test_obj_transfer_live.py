@@ -17,6 +17,7 @@ FETCHER_PUSH = 4
 MEM_REGION_VRAM = 0
 MEM_REGION_OAM = 1
 
+MEM_CLIENT_BG_FETCHER = 1
 MEM_CLIENT_OBJ_FETCHER = 2
 
 PHASE_TRANSFER = 2
@@ -49,6 +50,8 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "phase_x_out": (value >> 89) & 0xFF,
         "active_obj_oam_index": (value >> 97) & 0x3F,
         "active_obj_x": (value >> 103) & 0xFF,
+        "bg_fifo_count": (value >> 111) & 0x1F,
+        "fetcher_pending_valid": bool((value >> 116) & 0x1),
     }
 
 
@@ -72,6 +75,16 @@ async def reset_dut(
     seed_fetcher_valid: bool = False,
     seed_fetcher_source: int = FETCHER_BG,
     seed_fetcher_step: int = 0,
+    seed_fetcher_pending_valid: bool = False,
+    seed_fetcher_pending_region: int = MEM_REGION_VRAM,
+    seed_fetcher_pending_client: int = 1,
+    seed_fetcher_pending_id: int = 0,
+    seed_bg_fifo_count: int = 0,
+    seed_pending_req_valid: bool = False,
+    seed_pending_req_addr: int = 0,
+    seed_pending_req_region: int = MEM_REGION_VRAM,
+    seed_pending_req_client: int = 1,
+    seed_pending_req_id: int = 0,
     tile_id: int = 0x01,
     flags: int = 0x00,
     tile_lo: int = 0x50,
@@ -101,6 +114,16 @@ async def reset_dut(
     dut.seed_fetcher_valid_i.value = int(seed_fetcher_valid)
     dut.seed_fetcher_source_i.value = seed_fetcher_source & 0x3
     dut.seed_fetcher_step_i.value = seed_fetcher_step & 0x7
+    dut.seed_fetcher_pending_valid_i.value = int(seed_fetcher_pending_valid)
+    dut.seed_fetcher_pending_region_i.value = seed_fetcher_pending_region & 0x1
+    dut.seed_fetcher_pending_client_i.value = seed_fetcher_pending_client & 0x7
+    dut.seed_fetcher_pending_id_i.value = seed_fetcher_pending_id & 0xF
+    dut.seed_bg_fifo_count_i.value = seed_bg_fifo_count & 0x1F
+    dut.seed_pending_req_valid_i.value = int(seed_pending_req_valid)
+    dut.seed_pending_req_addr_i.value = seed_pending_req_addr & 0xFFFF
+    dut.seed_pending_req_region_i.value = seed_pending_req_region & 0x1
+    dut.seed_pending_req_client_i.value = seed_pending_req_client & 0x7
+    dut.seed_pending_req_id_i.value = seed_pending_req_id & 0xF
     dut.tile_id_i.value = tile_id & 0xFF
     dut.flags_i.value = flags & 0xFF
     dut.tile_lo_i.value = tile_lo & 0xFF

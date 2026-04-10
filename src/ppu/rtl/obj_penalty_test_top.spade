@@ -1,0 +1,68 @@
+use lib::ppu::rtl::obj_penalty::{
+    ObjPenaltyConsideredTile,
+    ObjPenaltyTileSource,
+    obj_penalty_for_ticket,
+    zero_obj_penalty_considered_tile,
+};
+use lib::ppu::sem::types::SelectedObjTicket;
+
+fn build_ticket(ticket_x_i: uint<8>) -> SelectedObjTicket {
+    SelectedObjTicket$(oam_index: 0u6, x: ticket_x_i, y: 0u8, selection_rank: 0u4)
+}
+
+fn decode_source(source_window_i: bool) -> ObjPenaltyTileSource {
+    if source_window_i { ObjPenaltyTileSource::Window } else { ObjPenaltyTileSource::Background }
+}
+
+fn encode_source(source: ObjPenaltyTileSource) -> uint<1> {
+    match source {
+        ObjPenaltyTileSource::Background => 0u1,
+        ObjPenaltyTileSource::Window => 1u1,
+    }
+}
+
+pub entity obj_penalty_test_top(
+    ticket_x_i: uint<8>,
+    visible_ly_i: uint<8>,
+    scx_i: uint<8>,
+    scy_i: uint<8>,
+    wx_i: uint<8>,
+    window_enabled_line_i: bool,
+    window_line_i: uint<8>,
+    considered_valid_i: bool,
+    considered_source_window_i: bool,
+    considered_tile_x_i: uint<5>,
+    considered_tile_y_i: uint<5>,
+) -> uint<43> {
+    let ticket = build_ticket(ticket_x_i);
+    let _ = zero_obj_penalty_considered_tile();
+    let considered = ObjPenaltyConsideredTile$(
+        valid: considered_valid_i,
+        source: decode_source(considered_source_window_i),
+        tile_x: considered_tile_x_i,
+        tile_y: considered_tile_y_i,
+    );
+    let result = obj_penalty_for_ticket(
+        ticket,
+        visible_ly_i,
+        scx_i,
+        scy_i,
+        wx_i,
+        window_enabled_line_i,
+        window_line_i,
+        considered,
+    );
+
+    zext(result.leftmost_x)
+        | (zext(encode_source(result.tile.source)) << 8)
+        | (zext(result.tile.tile_x) << 9)
+        | (zext(result.tile.tile_y) << 14)
+        | (zext(result.tile.pixel_offset) << 19)
+        | (zext(lib::util::bit(result.already_considered)) << 22)
+        | (zext(result.align_penalty) << 23)
+        | (zext(result.total_penalty) << 27)
+        | (zext(lib::util::bit(result.next_considered.valid)) << 31)
+        | (zext(encode_source(result.next_considered.source)) << 32)
+        | (zext(result.next_considered.tile_x) << 33)
+        | (zext(result.next_considered.tile_y) << 38)
+}

@@ -27,6 +27,7 @@ if str(ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(ROOT / "tools"))
 
 from resolve_checkpoint_pc import resolve_checkpoint_pc
+from test.harness.obj_penalty_reference import PYBOY_OBJ_PENALTY_REFERENCE_CASES
 
 DMG_ACID2_ROM = ROOT / "bench" / "external" / "dmg-acid2" / "dmg-acid2.gb"
 DMG_ACID2_EXPECTED = ROOT / "bench" / "expected" / "suite_owned" / "dmg-acid2" / "reference-dmg.png"
@@ -290,6 +291,32 @@ class PyBoyOracleTest(unittest.TestCase):
         self.assertEqual(timing.mode2_len_dots, 80)
         self.assertEqual(timing.mode3_len_dots, 170)
         self.assertEqual(timing.hblank_len_dots, 206)
+
+    def test_obj_penalty_reference_cases_match_pyboy_frame_semantics(self) -> None:
+        for case in PYBOY_OBJ_PENALTY_REFERENCE_CASES:
+            with self.subTest(case=case.name):
+                with PyBoyOracle(
+                    case.rom_path,
+                    sym_path=case.sym_path,
+                    commit_points=(CommitPoint(bank=None, addr="__checkpoint_scene_ready"),),
+                ) as oracle:
+                    oracle.reset(ModelProfile.DMG, ResetProfile.SkipBoot)
+                    oracle.step_commit()
+                    oracle._require_pyboy().tick(2, True, False)
+                    semantics = oracle.frame_semantics()
+                    line_scroll = semantics.line_scroll[case.target_line]
+
+                self.assertEqual(line_scroll.scx, case.scx)
+                self.assertEqual(line_scroll.scy, case.scy)
+                self.assertEqual(line_scroll.wx, case.wx)
+                self.assertEqual(line_scroll.wy, case.wy)
+
+                if case.expected_source_window:
+                    tile_id = semantics.window_tilemap.tile_id(case.expected_tile_x, case.expected_tile_y)
+                else:
+                    tile_id = semantics.bg_tilemap.tile_id(case.expected_tile_x, case.expected_tile_y)
+
+                self.assertEqual(tile_id, case.expected_tile_id)
 
     def test_resolve_checkpoint_pc_finds_wave_c_scene_ready_label(self) -> None:
         self.assertEqual(

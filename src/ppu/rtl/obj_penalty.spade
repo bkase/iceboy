@@ -1,0 +1,185 @@
+use lib::ppu::rtl::fifo::window_triggered;
+use lib::ppu::sem::types::SelectedObjTicket;
+
+pub enum ObjPenaltyTileSource {
+    Background,
+    Window,
+}
+
+pub struct ObjPenaltyTile {
+    source: ObjPenaltyTileSource,
+    tile_x: uint<5>,
+    tile_y: uint<5>,
+    pixel_offset: uint<3>,
+}
+
+pub struct ObjPenaltyConsideredTile {
+    valid: bool,
+    source: ObjPenaltyTileSource,
+    tile_x: uint<5>,
+    tile_y: uint<5>,
+}
+
+pub struct ObjPenaltyResult {
+    leftmost_x: uint<8>,
+    tile: ObjPenaltyTile,
+    already_considered: bool,
+    align_penalty: uint<4>,
+    total_penalty: uint<4>,
+    next_considered: ObjPenaltyConsideredTile,
+}
+
+pub fn zero_obj_penalty_considered_tile() -> ObjPenaltyConsideredTile {
+    ObjPenaltyConsideredTile$(
+        valid: false,
+        source: ObjPenaltyTileSource::Background,
+        tile_x: 0u5,
+        tile_y: 0u5,
+    )
+}
+
+pub fn obj_leftmost_pixel_x(ticket: SelectedObjTicket) -> uint<8> {
+    if ticket.x > 8u8 { trunc(ticket.x - 8u8) } else { 0u8 }
+}
+
+fn bg_tile_y(visible_ly: uint<8>, scy: uint<8>) -> uint<5> {
+    let visible_ly_u9: uint<9> = zext(visible_ly);
+    let scy_u9: uint<9> = zext(scy);
+    trunc((visible_ly_u9 + scy_u9) >> 3)
+}
+
+fn bg_tile_x(leftmost_x: uint<8>, scx: uint<8>) -> uint<5> {
+    let leftmost_x_u9: uint<9> = zext(leftmost_x);
+    let scx_u9: uint<9> = zext(scx);
+    trunc((leftmost_x_u9 + scx_u9) >> 3)
+}
+
+fn bg_pixel_offset(leftmost_x: uint<8>, scx: uint<8>) -> uint<3> {
+    let leftmost_x_u9: uint<9> = zext(leftmost_x);
+    let scx_u9: uint<9> = zext(scx);
+    let scrolled_x_u10: uint<10> = leftmost_x_u9 + scx_u9;
+    trunc(scrolled_x_u10 & 0x007u10)
+}
+
+fn window_pixel_x(leftmost_x: uint<8>, wx: uint<8>) -> uint<8> {
+    let leftmost_x_u10: uint<10> = zext(leftmost_x);
+    let wx_u10: uint<10> = zext(wx);
+    let pixel_x_u10: uint<10> = trunc(leftmost_x_u10 + 7u10);
+    trunc(pixel_x_u10 - wx_u10)
+}
+
+fn window_tile_y(window_line: uint<8>) -> uint<5> {
+    let window_line_u8: uint<8> = zext(window_line);
+    trunc(window_line_u8 >> 3)
+}
+
+fn window_tile_x(leftmost_x: uint<8>, wx: uint<8>) -> uint<5> {
+    let pixel_x_u8: uint<8> = zext(window_pixel_x(leftmost_x, wx));
+    trunc(pixel_x_u8 >> 3)
+}
+
+fn window_pixel_offset(leftmost_x: uint<8>, wx: uint<8>) -> uint<3> {
+    let pixel_x_u8: uint<8> = zext(window_pixel_x(leftmost_x, wx));
+    trunc(pixel_x_u8 & 0x07u8)
+}
+
+pub fn obj_penalty_tile(
+    ticket: SelectedObjTicket,
+    visible_ly: uint<8>,
+    scx: uint<8>,
+    scy: uint<8>,
+    wx: uint<8>,
+    window_enabled_line: bool,
+    window_line: uint<8>,
+) -> ObjPenaltyTile {
+    let leftmost_x = obj_leftmost_pixel_x(ticket);
+    let from_window = window_enabled_line && window_triggered(wx, leftmost_x);
+    if from_window {
+        ObjPenaltyTile$(
+            source: ObjPenaltyTileSource::Window,
+            tile_x: window_tile_x(leftmost_x, wx),
+            tile_y: window_tile_y(window_line),
+            pixel_offset: window_pixel_offset(leftmost_x, wx),
+        )
+    } else {
+        ObjPenaltyTile$(
+            source: ObjPenaltyTileSource::Background,
+            tile_x: bg_tile_x(leftmost_x, scx),
+            tile_y: bg_tile_y(visible_ly, scy),
+            pixel_offset: bg_pixel_offset(leftmost_x, scx),
+        )
+    }
+}
+
+fn same_tile_source(lhs: ObjPenaltyTileSource, rhs: ObjPenaltyTileSource) -> bool {
+    match lhs {
+        ObjPenaltyTileSource::Background =>
+            match rhs {
+                ObjPenaltyTileSource::Background => true,
+                ObjPenaltyTileSource::Window => false,
+            },
+        ObjPenaltyTileSource::Window =>
+            match rhs {
+                ObjPenaltyTileSource::Background => false,
+                ObjPenaltyTileSource::Window => true,
+            },
+    }
+}
+
+fn tile_matches(considered: ObjPenaltyConsideredTile, tile: ObjPenaltyTile) -> bool {
+    considered.valid
+        && same_tile_source(considered.source, tile.source)
+        && considered.tile_x == tile.tile_x
+        && considered.tile_y == tile.tile_y
+}
+
+fn align_penalty_from_offset(pixel_offset: uint<3>) -> uint<4> {
+    match pixel_offset {
+        0u3 => 5u4,
+        1u3 => 4u4,
+        2u3 => 3u4,
+        3u3 => 2u4,
+        4u3 => 1u4,
+        _ => 0u4,
+    }
+}
+
+pub fn obj_penalty_for_ticket(
+    ticket: SelectedObjTicket,
+    visible_ly: uint<8>,
+    scx: uint<8>,
+    scy: uint<8>,
+    wx: uint<8>,
+    window_enabled_line: bool,
+    window_line: uint<8>,
+    considered: ObjPenaltyConsideredTile,
+) -> ObjPenaltyResult {
+    let leftmost_x = obj_leftmost_pixel_x(ticket);
+    let tile = obj_penalty_tile(ticket, visible_ly, scx, scy, wx, window_enabled_line, window_line);
+    if ticket.x == 0u8 {
+        ObjPenaltyResult$(
+            leftmost_x: leftmost_x,
+            tile: tile,
+            already_considered: false,
+            align_penalty: 5u4,
+            total_penalty: 11u4,
+            next_considered: considered,
+        )
+    } else {
+        let already_considered = tile_matches(considered, tile);
+        let align_penalty = if already_considered { 0u4 } else { align_penalty_from_offset(tile.pixel_offset) };
+        ObjPenaltyResult$(
+            leftmost_x: leftmost_x,
+            tile: tile,
+            already_considered: already_considered,
+            align_penalty: align_penalty,
+            total_penalty: trunc(align_penalty + 6u4),
+            next_considered: ObjPenaltyConsideredTile$(
+                valid: true,
+                source: tile.source,
+                tile_x: tile.tile_x,
+                tile_y: tile.tile_y,
+            ),
+        )
+    }
+}
