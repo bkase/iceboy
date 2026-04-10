@@ -25,7 +25,7 @@ from bench.ref.ppu_ref import (
     visible_mode as ppu_visible_mode,
 )
 from bench.pyboy.hooks import HookManifest, build_hook_manifest
-from bench.pyboy.oracle import PyBoyOracle
+from bench.pyboy.oracle import PyBoyOracle, capture_rendered_frame_dmg_shades
 from bench.pyboy.symbols import SymbolTable
 try:
     from dut_driver import SimStimulus
@@ -364,6 +364,17 @@ def _shade_frame_zero() -> list[list[int]]:
 
 def _freeze_shade_frame(frame: list[list[int]]) -> tuple[tuple[int, ...], ...]:
     return tuple(tuple(row) for row in frame)
+
+
+def _shade_bytes_to_frame(shades: bytes) -> tuple[tuple[int, ...], ...]:
+    if len(shades) != SCREEN_WIDTH * SCREEN_HEIGHT:
+        raise ValueError(
+            f"expected {SCREEN_WIDTH * SCREEN_HEIGHT} shade bytes, got {len(shades)}"
+        )
+    return tuple(
+        tuple(shades[(y * SCREEN_WIDTH) : ((y + 1) * SCREEN_WIDTH)])
+        for y in range(SCREEN_HEIGHT)
+    )
 
 
 def _scanout_blob_bit(shade: int, *, light_shades: frozenset[int]) -> int:
@@ -1885,6 +1896,37 @@ async def assert_mealybug_ppu_soc_rom_matches_reference(
         first_text = f" first mismatch at ({x}, {y}): actual=0x{actual_shade:02X} expected=0x{expected_shade:02X}"
     raise AssertionError(
         f"mealybug frame mismatch for {rom_path.name} vs {expected_path.name}: "
+        f"{mismatches} pixels differ.{first_text}"
+    )
+
+
+async def assert_mealybug_ppu_soc_rom_matches_pyboy(
+    driver: Any,
+    *,
+    rom_path: Path,
+    max_mcycles: int,
+    pyboy_frame_batches: tuple[int, ...] = (84,),
+) -> None:
+    expected = _shade_bytes_to_frame(
+        capture_rendered_frame_dmg_shades(rom_path, frame_batches=pyboy_frame_batches)
+    )
+    actual = await run_soc_dut_to_shaded_frame(
+        driver,
+        rom_bytes=rom_path.read_bytes(),
+        max_mcycles=max_mcycles,
+        target_frame=expected,
+    )
+    mismatches, first = _shade_frame_mismatch(actual, expected)
+    if mismatches == 0:
+        return
+    first_text = ""
+    if first is not None:
+        x, y, actual_px, expected_px = first
+        first_text = (
+            f" first mismatch at ({x}, {y}): actual=0x{actual_px:02X} expected=0x{expected_px:02X}"
+        )
+    raise AssertionError(
+        f"mealybug frame mismatch for {rom_path.name} vs PyBoy rendered frame: "
         f"{mismatches} pixels differ.{first_text}"
     )
 

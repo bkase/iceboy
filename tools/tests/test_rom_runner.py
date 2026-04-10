@@ -572,6 +572,46 @@ class RomRunnerTest(unittest.TestCase):
         expected = ((0xFF, 0xAA), (0xAA, 0x00))
         self.assertEqual(_shade_frame_mismatch(actual, expected), (1, (1, 0, 0x55, 0xAA)))
 
+    def test_shade_bytes_to_frame_reshapes_flat_pyboy_frame(self) -> None:
+        shades = bytes([0xFF] * (160 * 144))
+        frame = rom_runner._shade_bytes_to_frame(shades)
+
+        self.assertEqual(len(frame), 144)
+        self.assertTrue(all(len(row) == 160 for row in frame))
+        self.assertEqual(frame[0][0], 0xFF)
+        self.assertEqual(frame[143][159], 0xFF)
+
+    def test_assert_mealybug_matches_pyboy_uses_rendered_frame_oracle(self) -> None:
+        rom_path = Path("/tmp/test.gb")
+        driver = object()
+        target = tuple(tuple(0xAA for _ in range(160)) for _ in range(144))
+        flat = bytes(value for row in target for value in row)
+
+        with (
+            patch.object(rom_runner, "capture_rendered_frame_dmg_shades", return_value=flat) as capture_pyboy,
+            patch.object(rom_runner, "run_soc_dut_to_shaded_frame", AsyncMock(return_value=target)) as run_dut,
+            patch.object(Path, "read_bytes", return_value=bytes([0x00, 0x01])),
+        ):
+            asyncio.run(
+                rom_runner.assert_mealybug_ppu_soc_rom_matches_pyboy(
+                    driver,
+                    rom_path=rom_path,
+                    max_mcycles=1234,
+                    pyboy_frame_batches=(12, 34),
+                )
+            )
+
+        capture_pyboy.assert_called_once_with(
+            rom_path,
+            frame_batches=(12, 34),
+        )
+        run_dut.assert_awaited_once_with(
+            driver,
+            rom_bytes=bytes([0x00, 0x01]),
+            max_mcycles=1234,
+            target_frame=target,
+        )
+
     def test_external_memory_bus_models_joyp_selection_and_press_edges(self) -> None:
         bus = ExternalMemoryBus(bytes(0x8000))
         self.assertEqual(bus.read(0xFF00), 0xFF)

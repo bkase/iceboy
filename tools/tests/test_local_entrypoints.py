@@ -186,9 +186,15 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
         self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
         self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("[tool] python3:", completed.stdout)
         self.assertIn("tools/prepare_verilator_sv.py", completed.stdout)
         self.assertIn("build/spade.verilator.sv", completed.stdout)
         self.assertIn("soc_rom_top_verilator_wrapper.sv", completed.stdout)
+        self.assertIn("tools/verilator/dmg_acid2_main.cpp", completed.stdout)
+        self.assertIn("tools/write_rendered_shaded_frame.py", completed.stdout)
+        self.assertIn("tools/compare_shaded_frame.py", completed.stdout)
+        self.assertIn("rom ids: m3_scx_low_3_bits", completed.stdout)
+        self.assertIn("--completed-frames=0", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
     def test_dmg_acid2_verilator_wrapper_dry_run_uses_sanitized_verilog_path(self) -> None:

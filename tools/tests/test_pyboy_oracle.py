@@ -43,6 +43,8 @@ CHECKER_BALL_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL.gb"
 CHECKER_BALL_CANCEL_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL_CANCEL.gb"
 CHECKER_BALL_CANCEL_OVERLAP_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL_CANCEL_OVERLAP.gb"
 OBJ_FETCH_CANCEL_LCDC1_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_FETCH_CANCEL_LCDC1.gb"
+MEALYBUG_PPU_ROOT = ROOT / "bench" / "external" / "mealybug-tearoom-tests" / "ppu"
+MEALYBUG_EXPECTED_ROOT = ROOT / "bench" / "expected" / "suite_owned" / "mealybug-tearoom-tests" / "DMG-blob"
 
 
 class PyBoyOracleTest(unittest.TestCase):
@@ -195,6 +197,27 @@ class PyBoyOracleTest(unittest.TestCase):
         actual = capture_rendered_frame_dmg_shades(DMG_ACID2_ROM, frame_batches=(59, 25))
         expected = bytes(value for row in _decode_png_grayscale(DMG_ACID2_EXPECTED) for value in row)
         self.assertEqual(actual, expected)
+
+    def test_mealybug_scx_low_3_rendered_frame_characterization_differs_from_pinned_png(self) -> None:
+        actual = capture_rendered_frame_dmg_shades(MEALYBUG_PPU_ROOT / "m3_scx_low_3_bits.gb")
+        expected = bytes(
+            value
+            for row in _decode_png_grayscale(MEALYBUG_EXPECTED_ROOT / "m3_scx_low_3_bits.png")
+            for value in row
+        )
+
+        mismatches = sum(1 for actual_px, expected_px in zip(actual, expected) if actual_px != expected_px)
+        first = next(
+            (
+                (index % 160, index // 160, actual_px, expected_px)
+                for index, (actual_px, expected_px) in enumerate(zip(actual, expected))
+                if actual_px != expected_px
+            ),
+            None,
+        )
+
+        self.assertEqual(mismatches, 540)
+        self.assertEqual(first, (154, 0, 0xFF, 0x00))
 
     def test_checkpoint_frame_capture_returns_canonical_dmg_shades(self) -> None:
         actual = capture_checkpoint_frame_dmg_shades(

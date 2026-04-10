@@ -53,6 +53,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/ppu/unit/test_scanout_blank.py"
     "test/ppu/unit/test_transfer_penalty.py"
     "test/ppu/unit/test_obj_transfer_live.py"
+    "tools/run_ppu_wave_b_mealybug_verilator.sh"
     "tools/run_ppu_checker_ball_verilator.sh"
     "tools/run_dma_mode2_hide_verilator.sh"
     "tools/run_obj_dma_metadata_corrupt_verilator.sh"
