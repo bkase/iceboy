@@ -1,0 +1,15 @@
+fps: 60
+duration_frames: 600
+sequence:
+  - frames: 0..60
+    buttons: []
+  - frames: 60..180
+    buttons: [down]
+  - frames: 180..300
+    buttons: [right]
+  - frames: 300..420
+    buttons: [up]
+  - frames: 420..540
+    buttons: [left]
+  - frames: 540..600
+    buttons: []

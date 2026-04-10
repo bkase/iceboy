@@ -151,6 +151,13 @@ class RunTestsTest(unittest.TestCase):
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_DMA_METADATA_CORRUPT.asm").is_file())
         self.assertTrue((ROOT / "tools" / "run_ppu_wave_c_verilator.sh").is_file())
 
+    def test_pokered_playback_native_runner_sources_exist(self) -> None:
+        self.assertTrue((ROOT / "tools" / "run_pokered_playback_verilator.sh").is_file())
+        self.assertTrue((ROOT / "tools" / "verilator" / "pokered_playback_main.cpp").is_file())
+        self.assertTrue((ROOT / "tools" / "export_pokered_restore.py").is_file())
+        self.assertTrue((ROOT / "tools" / "export_pokered_walk_script.py").is_file())
+        self.assertTrue((ROOT / "tools" / "pokered_walk_script.yaml").is_file())
+
     def test_power_tier_includes_ppu_quiescence_suite(self) -> None:
         power_labels = [suite.label for suite in suites_for_tier("power", nightly=False)]
         self.assertIn("test_duty_cycle_metrics.py", power_labels)

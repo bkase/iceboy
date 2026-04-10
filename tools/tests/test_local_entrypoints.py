@@ -280,6 +280,21 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("--checkpoint-completed-frames=3", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
+    def test_pokered_playback_verilator_wrapper_dry_run_uses_native_restore_runner(self) -> None:
+        completed = self.run_script("run_pokered_playback_verilator.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("tools/verilator/pokered_playback_main.cpp", completed.stdout)
+        self.assertIn("tools/export_pokered_restore.py", completed.stdout)
+        self.assertIn("tools/export_pokered_walk_script.py", completed.stdout)
+        self.assertIn("../gbxcule/Bulbasaur.state", completed.stdout)
+        self.assertIn("../gbxcule/red.gb", completed.stdout)
+        self.assertIn("build/pokered_playback/pokered_walk.mp4", completed.stdout)
+        self.assertIn("--target-frames=600", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+
     def test_ppu_checker_ball_verilator_wrapper_can_include_overlap_reducer(self) -> None:
         env = dict(self.env)
         env["ICEBOY_PPU_CHECKER_BALL_INCLUDE_RED"] = "1"
@@ -403,6 +418,13 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"tools/run_obj_dma_metadata_corrupt_verilator.sh"', hook_text)
         self.assertTrue((TOOLS / "run_obj_dma_metadata_corrupt_verilator.sh").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_DMA_METADATA_CORRUPT.asm").exists())
+
+    def test_pokered_playback_assets_exist(self) -> None:
+        self.assertTrue((TOOLS / "run_pokered_playback_verilator.sh").exists())
+        self.assertTrue((TOOLS / "verilator" / "pokered_playback_main.cpp").exists())
+        self.assertTrue((TOOLS / "export_pokered_restore.py").exists())
+        self.assertTrue((TOOLS / "export_pokered_walk_script.py").exists())
+        self.assertTrue((TOOLS / "pokered_walk_script.yaml").exists())
 
     def test_obj_observe_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
