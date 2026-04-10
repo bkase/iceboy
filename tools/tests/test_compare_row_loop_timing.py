@@ -62,12 +62,15 @@ class CompareRowLoopTimingTest(unittest.TestCase):
                 line_timing.return_value = LineModeTimingCapture(
                     line=80,
                     mode2_len_dots=80,
-                    mode3_len_dots=170,
-                    hblank_len_dots=206,
+                    mode3_len_dots=172,
+                    hblank_len_dots=204,
                 )
                 summarize.return_value = {
                     "label_stats": {"WaitForMode3": {"count": 2}},
-                    "milestones": {"first_lcdc_write": {"scanout_x": 106}},
+                    "milestones": {
+                        "first_lcdc_write": {"scanout_x": 106},
+                        "line_summary": {"line_summary_mode3_len": 184},
+                    },
                     "spans": {
                         "mode3": {"scanout_width": 57, "cycle_width": 61},
                         "object_scanout": {"scanout_width": 8, "cycle_width": 11},
@@ -87,11 +90,15 @@ class CompareRowLoopTimingTest(unittest.TestCase):
         self.assertEqual(summary["write_pc"], "0x01d5")
         self.assertEqual(summary["labels"], ["WaitForMode3", "DelayCancel"])
         self.assertEqual(summary["pyboy"][0]["label"], "WaitForMode3")
-        self.assertEqual(summary["pyboy_line_timing"]["mode3_len_dots"], 170)
+        self.assertEqual(summary["pyboy_line_timing"]["mode3_len_dots"], 172)
+        self.assertEqual(summary["pyboy_mode3_penalty_dots"], 0)
         self.assertEqual(summary["pyboy_label_stats"]["WaitForMode3"]["count"], 1)
         self.assertEqual(summary["pyboy_label_stats"]["WriteObjOff"]["first"]["pc"], 0x01D5)
         self.assertEqual(summary["native"]["label_stats"]["WaitForMode3"]["count"], 2)
         self.assertEqual(summary["native"]["milestones"]["first_lcdc_write"]["scanout_x"], 106)
+        self.assertEqual(summary["native_gap_analysis"]["documented_mode3_baseline_dots"], 172)
+        self.assertEqual(summary["native_gap_analysis"]["line_summary_mode3_len"], 184)
+        self.assertEqual(summary["native_gap_analysis"]["line_summary_penalty_dots"], 12)
         self.assertEqual(summary["native_gap_analysis"]["mode3_scanout_width"], 57)
         self.assertEqual(summary["native_gap_analysis"]["mode3_cycle_width"], 61)
         self.assertEqual(summary["native_gap_analysis"]["object_scanout_width"], 8)

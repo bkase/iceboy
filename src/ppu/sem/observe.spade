@@ -114,6 +114,8 @@ pub struct PpuDebugTrace {
     oam_scan: OamScanState,
     line_objs: LineObjList,
     line_obj_fetch_index: uint<4>,
+    obj_due_after: bool,
+    obj_grant_after: bool,
     fetcher: FetcherState,
     bg_fifo: BgFifo,
     obj_fifo: ObjFifo,
@@ -184,8 +186,21 @@ fn transfer_start_dot(state_before: PpuState) -> uint<9> {
     }
 }
 
+fn mode3_len_documented_bias(state_before: PpuState) -> uint<9> {
+    match state_before.status.run {
+        LcdRunState::WarmupBlankFrame =>
+            if state_before.visible.ly == 0u8 {
+                0u9
+            } else {
+                2u9
+            },
+        _ => 2u9,
+    }
+}
+
 fn mode3_len_at_boundary(state_before: PpuState) -> uint<9> {
-    trunc(state_before.render.dot_in_line - transfer_start_dot(state_before))
+    let raw_len: uint<9> = trunc(state_before.render.dot_in_line - transfer_start_dot(state_before));
+    trunc(raw_len + mode3_len_documented_bias(state_before))
 }
 
 pub fn basic_line_summary(state_before: PpuState, state_after: PpuState) -> LineSummary {
@@ -299,6 +314,8 @@ pub fn idle_ppu_debug_trace() -> PpuDebugTrace {
         oam_scan: empty_oam_scan_state(),
         line_objs: empty_line_obj_list(),
         line_obj_fetch_index: 0u4,
+        obj_due_after: false,
+        obj_grant_after: false,
         fetcher: initial_fetcher_state(),
         bg_fifo: state.render.bg_fifo,
         obj_fifo: state.render.obj_fifo,

@@ -59,6 +59,7 @@ class RomTraceSummaryTest(unittest.TestCase):
                                 "scanout_x": 120,
                                 "scanout_source": 2,
                                 "scanout_shade": 3,
+                                "line_summary_mode3_len": 184,
                                 "bus_req_addr": 0,
                                 "preview_bus_req_addr": 0xFF40,
                                 "preview_bus_req_data": 0x91,
@@ -106,6 +107,7 @@ class RomTraceSummaryTest(unittest.TestCase):
             self.assertEqual(summary["milestones"]["first_object_scanout"]["scanout_x"], 120)
             self.assertEqual(summary["milestones"]["first_lcdc_write"]["bus_req_addr"], "0xff40")
             self.assertEqual(summary["milestones"]["first_lcdc_preview_write"]["preview_bus_req_data"], "0x91")
+            self.assertEqual(summary["milestones"]["line_summary"]["line_summary_mode3_len"], 184)
             self.assertEqual(summary["spans"]["mode3"]["scanout_width"], 5)
             self.assertEqual(summary["spans"]["mode3"]["min_scanout_x"], 120)
             self.assertEqual(summary["spans"]["mode3"]["max_scanout_x"], 124)
@@ -129,6 +131,7 @@ class RomTraceSummaryTest(unittest.TestCase):
                         "scanout_y": 40,
                         "scanout_x": 120,
                         "scanout_source": 2,
+                        "line_summary_mode3_len": 176,
                         "bus_req_addr": 0xFF40,
                         "bus_req_data": 0x91,
                         "preview_bus_req_addr": 0xFF40,
@@ -156,6 +159,7 @@ class RomTraceSummaryTest(unittest.TestCase):
             self.assertEqual(parsed["labels"]["WaitForMode3"]["pc"], "0x0246")
             self.assertEqual(parsed["label_stats"]["WaitForMode3"]["count"], 1)
             self.assertEqual(parsed["milestones"]["first_lcdc_write"]["bus_req_data"], "0x91")
+            self.assertEqual(parsed["milestones"]["line_summary"]["line_summary_mode3_len"], 176)
             self.assertEqual(parsed["spans"]["mode3"]["scanout_width"], 1)
             self.assertEqual(parsed["spans"]["mode3"]["cycle_width"], 1)
 

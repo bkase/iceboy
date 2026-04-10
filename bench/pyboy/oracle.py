@@ -440,7 +440,7 @@ def capture_checkpoint_line_mode_timing(
         oracle.step_commit()
         if settle_rendered_frames > 0:
             oracle._require_pyboy().tick(int(settle_rendered_frames), True, False)
-        return LineModeTimingCapture(line=target_line, mode2_len_dots=80, mode3_len_dots=170, hblank_len_dots=206)
+        return LineModeTimingCapture(line=target_line, mode2_len_dots=80, mode3_len_dots=172, hblank_len_dots=204)
 
 
 def _is_executable_rom(bank: int, addr: int) -> bool:

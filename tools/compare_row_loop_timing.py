@@ -13,6 +13,8 @@ if str(ROOT) not in sys.path:
 from bench.pyboy.oracle import CommitPoint, capture_checkpoint_hook_timings, capture_checkpoint_line_mode_timing
 from tools.rom_trace_summary import summarize_rom_trace
 
+DOCUMENTED_MODE3_BASELINE_DOTS = 172
+
 
 def _hook_stats(captures: list[dict[str, object]], labels: tuple[str, ...]) -> dict[str, dict[str, object]]:
     stats: dict[str, dict[str, object]] = {}
@@ -32,6 +34,7 @@ def _native_gap_analysis(native: dict[str, object]) -> dict[str, object]:
     first_object = milestones.get("first_object_scanout") if isinstance(milestones, dict) else None
     first_preview = milestones.get("first_lcdc_preview_write") if isinstance(milestones, dict) else None
     first_write = milestones.get("first_lcdc_write") if isinstance(milestones, dict) else None
+    line_summary = milestones.get("line_summary") if isinstance(milestones, dict) else None
     mode3_span = spans.get("mode3") if isinstance(spans, dict) else None
     object_span = spans.get("object_scanout") if isinstance(spans, dict) else None
 
@@ -45,6 +48,13 @@ def _native_gap_analysis(native: dict[str, object]) -> dict[str, object]:
         return int(rhs_x) - int(lhs_x)
 
     return {
+        "documented_mode3_baseline_dots": DOCUMENTED_MODE3_BASELINE_DOTS,
+        "line_summary_mode3_len": line_summary.get("line_summary_mode3_len") if isinstance(line_summary, dict) else None,
+        "line_summary_penalty_dots": (
+            int(line_summary.get("line_summary_mode3_len")) - DOCUMENTED_MODE3_BASELINE_DOTS
+            if isinstance(line_summary, dict) and line_summary.get("line_summary_mode3_len") is not None
+            else None
+        ),
         "mode3_scanout_width": mode3_span.get("scanout_width") if isinstance(mode3_span, dict) else None,
         "mode3_cycle_width": mode3_span.get("cycle_width") if isinstance(mode3_span, dict) else None,
         "object_scanout_width": object_span.get("scanout_width") if isinstance(object_span, dict) else None,
@@ -96,6 +106,7 @@ def compare_row_loop_timing(
         "write_pc": f"0x{write_pc:04x}",
         "pyboy": pyboy_records,
         "pyboy_line_timing": asdict(pyboy_line_timing),
+        "pyboy_mode3_penalty_dots": pyboy_line_timing.mode3_len_dots - DOCUMENTED_MODE3_BASELINE_DOTS,
         "pyboy_label_stats": _hook_stats(pyboy_records, tuple(label for label in labels) + ("WriteObjOff",)),
         "native": native,
         "native_gap_analysis": _native_gap_analysis(native),

@@ -57,6 +57,7 @@ def _record_summary(record: dict[str, Any], labels: Iterable[str] = ()) -> dict[
         "line_obj_fetch_index": record.get("line_obj_fetch_index"),
         "obj_fifo_count": record.get("obj_fifo_count"),
         "bg_fifo_count": record.get("bg_fifo_count"),
+        "line_summary_mode3_len": record.get("line_summary_mode3_len"),
         "bus_req_addr": _hex_or_none(record.get("bus_req_addr")),
         "bus_req_data": _hex_or_none(record.get("bus_req_data"), width=2),
         "preview_bus_req_addr": _hex_or_none(record.get("preview_bus_req_addr")),
@@ -182,6 +183,11 @@ def summarize_rom_trace(
         "first_lcdc_preview_write": _first_record(
             records,
             lambda record: line_filter(record) and int(record.get("preview_bus_req_addr", -1)) == 0xFF40,
+            labels_by_addr,
+        ),
+        "line_summary": _first_record(
+            records,
+            lambda record: line_filter(record) and int(record.get("line_summary_mode3_len", 0)) > 0,
             labels_by_addr,
         ),
     }

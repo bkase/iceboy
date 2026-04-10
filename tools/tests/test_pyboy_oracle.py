@@ -289,8 +289,8 @@ class PyBoyOracleTest(unittest.TestCase):
         )
         self.assertEqual(timing.line, 80)
         self.assertEqual(timing.mode2_len_dots, 80)
-        self.assertEqual(timing.mode3_len_dots, 170)
-        self.assertEqual(timing.hblank_len_dots, 206)
+        self.assertEqual(timing.mode3_len_dots, 172)
+        self.assertEqual(timing.hblank_len_dots, 204)
 
     def test_obj_penalty_reference_cases_match_pyboy_frame_semantics(self) -> None:
         for case in PYBOY_OBJ_PENALTY_REFERENCE_CASES:

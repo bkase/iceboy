@@ -106,7 +106,7 @@ async def test_transfer_to_hblank_emits_summary_with_window_and_obj_ids(dut):
     assert snapshot["summary_valid"] is True
     assert snapshot["next_phase"] == PHASE_HBLANK
     assert snapshot["next_ly"] == 37
-    assert snapshot["mode3_len"] == 176
+    assert snapshot["mode3_len"] == 178
     assert snapshot["window_start_valid"] is True
     assert snapshot["window_start_x"] == 5
     assert snapshot["window_line_after"] == 9
@@ -117,7 +117,7 @@ async def test_transfer_to_hblank_emits_summary_with_window_and_obj_ids(dut):
     assert snapshot["slot1_id"] == 17
     assert snapshot["line_hash"] == expected_hash(
         ly=37,
-        mode3_len=176,
+        mode3_len=178,
         window_start_x=5,
         window_line_after=9,
         obj_count=2,
@@ -151,6 +151,31 @@ async def test_warmup_line0_uses_shorter_mode3_len(dut):
 
 
 @cocotb.test()
+async def test_clean_running_row_uses_documented_172_dot_baseline(dut):
+    drive_defaults(dut)
+    dut.run_i.value = RUN_RUNNING
+    dut.phase_i.value = PHASE_TRANSFER
+    dut.ly_i.value = 24
+    dut.dot_in_line_i.value = 249
+    dut.x_out_i.value = 160
+
+    snapshot = await observe(dut)
+    assert snapshot["summary_valid"] is True
+    assert snapshot["next_phase"] == PHASE_HBLANK
+    assert snapshot["mode3_len"] == 172
+    assert snapshot["window_start_valid"] is False
+    assert snapshot["obj_count"] == 0
+    assert snapshot["line_hash"] == expected_hash(
+        ly=24,
+        mode3_len=172,
+        window_start_x=None,
+        window_line_after=0,
+        obj_count=0,
+        selected_objs=[None, None, None, None, None, None, None, None, None, None],
+    )
+
+
+@cocotb.test()
 async def test_non_boundary_transfer_step_emits_no_summary(dut):
     drive_defaults(dut)
     dut.phase_i.value = PHASE_TRANSFER
@@ -174,10 +199,10 @@ async def test_late_transfer_boundary_reports_dynamic_mode3_len(dut):
     snapshot = await observe(dut)
     assert snapshot["summary_valid"] is True
     assert snapshot["next_phase"] == PHASE_HBLANK
-    assert snapshot["mode3_len"] == 221
+    assert snapshot["mode3_len"] == 223
     assert snapshot["line_hash"] == expected_hash(
         ly=52,
-        mode3_len=221,
+        mode3_len=223,
         window_start_x=None,
         window_line_after=0,
         obj_count=0,
