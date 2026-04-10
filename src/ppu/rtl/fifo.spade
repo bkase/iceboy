@@ -105,7 +105,7 @@ pub fn bg_fifo_is_empty(fifo: BgFifo) -> bool {
 }
 
 pub fn bg_fifo_has_room_for_row(fifo: BgFifo) -> bool {
-    fifo.count <= 8u5
+    fifo.count == 0u5
 }
 
 pub fn clear_bg_fifo() -> BgFifo {

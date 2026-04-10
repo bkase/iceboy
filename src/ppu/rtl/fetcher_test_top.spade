@@ -47,6 +47,7 @@ fn build_state(
     epoch_i: uint<4>,
     source_i: uint<2>,
     step_i: uint<3>,
+    step_phase_i: bool,
     tile_id_i: uint<8>,
     tile_lo_i: uint<8>,
     tile_hi_i: uint<8>,
@@ -62,6 +63,7 @@ fn build_state(
         epoch: epoch_i,
         source: decode_source(source_i),
         step: decode_step(step_i),
+        step_phase: step_phase_i,
         tile_id: tile_id_i,
         tile_lo: tile_lo_i,
         tile_hi: tile_hi_i,
@@ -113,6 +115,7 @@ pub entity fetcher_test_top(
     epoch_i: uint<4>,
     source_i: uint<2>,
     step_i: uint<3>,
+    step_phase_i: bool,
     tile_id_i: uint<8>,
     tile_lo_i: uint<8>,
     tile_hi_i: uint<8>,
@@ -131,12 +134,13 @@ pub entity fetcher_test_top(
     window_restart_i: bool,
     fetch_cancel_i: bool,
     lcd_disable_i: bool,
-) -> uint<95> {
+) -> uint<96> {
     let render = build_render_inputs(bg_map_hi_i, win_map_hi_i, bgwin_data_hi_i, scx_fetch_i, scy_fetch_i);
     let state = build_state(
         epoch_i,
         source_i,
         step_i,
+        step_phase_i,
         tile_id_i,
         tile_lo_i,
         tile_hi_i,
@@ -175,17 +179,18 @@ pub entity fetcher_test_top(
         | (zext(output.next_state.epoch) << 21)
         | (zext(pack_source(output.next_state.source)) << 25)
         | (zext(pack_step(output.next_state.step)) << 27)
-        | (zext(output.next_state.tile_id) << 30)
-        | (zext(output.next_state.tile_lo) << 38)
-        | (zext(output.next_state.tile_hi) << 46)
-        | (zext(output.next_state.map_x) << 54)
-        | (zext(output.next_state.map_y) << 59)
-        | (zext(output.next_state.row) << 64)
-        | (zext(lib::util::bit(output.next_state.pending_push)) << 67)
-        | (zext(lib::util::bit(output.next_state.pending_valid)) << 68)
-        | (zext(output.next_state.pending_read.tag.id) << 69)
-        | (zext(output.next_state.pending_read.epoch) << 73)
-        | (zext(lib::util::bit(output.push_valid)) << 77)
-        | (zext(lib::util::bit(output.stale_resp)) << 78)
-        | (zext(pack_u2_row(output.push_row)) << 79)
+        | (zext(lib::util::bit(output.next_state.step_phase)) << 30)
+        | (zext(output.next_state.tile_id) << 31)
+        | (zext(output.next_state.tile_lo) << 39)
+        | (zext(output.next_state.tile_hi) << 47)
+        | (zext(output.next_state.map_x) << 55)
+        | (zext(output.next_state.map_y) << 60)
+        | (zext(output.next_state.row) << 65)
+        | (zext(lib::util::bit(output.next_state.pending_push)) << 68)
+        | (zext(lib::util::bit(output.next_state.pending_valid)) << 69)
+        | (zext(output.next_state.pending_read.tag.id) << 70)
+        | (zext(output.next_state.pending_read.epoch) << 74)
+        | (zext(lib::util::bit(output.push_valid)) << 78)
+        | (zext(lib::util::bit(output.stale_resp)) << 79)
+        | (zext(pack_u2_row(output.push_row)) << 80)
 }

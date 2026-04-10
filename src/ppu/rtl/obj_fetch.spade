@@ -269,6 +269,7 @@ pub fn cancel_obj_fetch(state: FetcherState) -> FetcherState {
         epoch: next_fetcher_epoch(state.epoch),
         source: FetcherSource::Object,
         step: FetcherStep::GetTile,
+        step_phase: false,
         tile_id: state.tile_id,
         tile_lo: state.tile_lo,
         tile_hi: state.tile_hi,

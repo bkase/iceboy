@@ -1,4 +1,4 @@
-use lib::ppu::rtl::fifo::{advance_bg_pipe, note_window_tile_push};
+use lib::ppu::rtl::fifo::{advance_bg_pipe, bg_fifo_has_room_for_row, note_window_tile_push};
 use lib::ppu::sem::sample::PpuRenderInputs;
 use lib::ppu::sem::types::{BgFifo, BgPixel, PpuSamplingState, WindowState, zero_bg_pixel};
 use lib::sim::ppu_support::build_test_lcdc;
@@ -154,7 +154,7 @@ pub entity fifo_test_top(
     line_start_i: bool,
     note_window_tile_push_i: bool,
     win_enable_i: bool,
-) -> uint<81> {
+) -> uint<82> {
     let output = advance_bg_pipe(
         decode_fifo(fifo_count_i, fifo_shades_i, fifo_palette_i),
         decode_window_state(window_state_i, active_win_x_i, active_win_line_i),
@@ -186,4 +186,5 @@ pub entity fifo_test_top(
         | (zext(output.next_window_line) << 67)
         | (zext(lib::util::bit(output.restart_fetcher)) << 75)
         | (zext(output.stall_dots_added) << 76)
+        | (zext(lib::util::bit(bg_fifo_has_room_for_row(decode_fifo(fifo_count_i, fifo_shades_i, fifo_palette_i)))) << 81)
 }

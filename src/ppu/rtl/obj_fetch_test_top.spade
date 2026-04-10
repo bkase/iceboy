@@ -30,6 +30,7 @@ fn build_fetcher_state(epoch_i: uint<4>, pending_valid_i: bool, pending_id_i: ui
         epoch: epoch_i,
         source: FetcherSource::Object,
         step: FetcherStep::GetHi,
+        step_phase: false,
         tile_id: 0u8,
         tile_lo: 0u8,
         tile_hi: 0u8,

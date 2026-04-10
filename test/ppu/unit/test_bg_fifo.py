@@ -55,6 +55,7 @@ def decode_output(value: int) -> dict[str, int | bool | list[int]]:
         "window_win_line": (value >> 59) & 0xFF,
         "next_window_line": (value >> 67) & 0xFF,
         "restart_fetcher": bool((value >> 75) & 0x1),
+        "has_room_for_row": bool((value >> 81) & 0x1),
     }
 
 
@@ -223,6 +224,29 @@ async def test_fifo_empty_and_full_stall_cases(dut):
             "next_fifo_shades": [1, 2, 3] + [0, 1, 2, 3] * 3 + [0] * 1,
         },
     )
+
+
+@cocotb.test()
+async def test_push_requires_empty_fifo(dut):
+    logger = case_logger("test_push_requires_empty_fifo")
+
+    logger.step("Only an empty FIFO has room for a full eight-pixel BG push")
+    for count in [0, 1, 4, 7, 8, 16]:
+        snapshot = await sample(
+            dut,
+            fifo_count=count,
+            fifo_shades=[0, 1, 2, 3] * 4,
+            push_valid=True,
+            push_row=[3, 2, 1, 0, 3, 2, 1, 0],
+        )
+        require(
+            logger,
+            snapshot,
+            expected={
+                "has_room_for_row": count == 0,
+                "next_fifo_count": 7 if count == 0 else max(count - 1, 0),
+            },
+        )
 
 
 @cocotb.test()

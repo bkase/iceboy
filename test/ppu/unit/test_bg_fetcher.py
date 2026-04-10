@@ -45,19 +45,20 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "epoch": (value >> 21) & 0xF,
         "source": (value >> 25) & 0x3,
         "step": (value >> 27) & 0x7,
-        "tile_id": (value >> 30) & 0xFF,
-        "tile_lo": (value >> 38) & 0xFF,
-        "tile_hi": (value >> 46) & 0xFF,
-        "map_x": (value >> 54) & 0x1F,
-        "map_y": (value >> 59) & 0x1F,
-        "row": (value >> 64) & 0x7,
-        "pending_push": bool((value >> 67) & 0x1),
-        "pending_valid": bool((value >> 68) & 0x1),
-        "pending_id": (value >> 69) & 0xF,
-        "pending_epoch": (value >> 73) & 0xF,
-        "push_valid": bool((value >> 77) & 0x1),
-        "stale_resp": bool((value >> 78) & 0x1),
-        "push_row": (value >> 79) & 0xFFFF,
+        "step_phase": bool((value >> 30) & 0x1),
+        "tile_id": (value >> 31) & 0xFF,
+        "tile_lo": (value >> 39) & 0xFF,
+        "tile_hi": (value >> 47) & 0xFF,
+        "map_x": (value >> 55) & 0x1F,
+        "map_y": (value >> 60) & 0x1F,
+        "row": (value >> 65) & 0x7,
+        "pending_push": bool((value >> 68) & 0x1),
+        "pending_valid": bool((value >> 69) & 0x1),
+        "pending_id": (value >> 70) & 0xF,
+        "pending_epoch": (value >> 74) & 0xF,
+        "push_valid": bool((value >> 78) & 0x1),
+        "stale_resp": bool((value >> 79) & 0x1),
+        "push_row": (value >> 80) & 0xFFFF,
     }
 
 
@@ -83,6 +84,7 @@ async def sample(
     epoch: int = 0,
     source: int = SOURCE_BG,
     step: int = STEP_GET_TILE,
+    step_phase: bool = False,
     tile_id: int = 0,
     tile_lo: int = 0,
     tile_hi: int = 0,
@@ -114,6 +116,7 @@ async def sample(
     dut.epoch_i.value = epoch & 0xF
     dut.source_i.value = source & 0x3
     dut.step_i.value = step & 0x7
+    dut.step_phase_i.value = int(step_phase)
     dut.tile_id_i.value = tile_id & 0xFF
     dut.tile_lo_i.value = tile_lo & 0xFF
     dut.tile_hi_i.value = tile_hi & 0xFF
@@ -242,7 +245,7 @@ async def test_fetch_sequence_progresses_through_sleep_and_push_stall(dut):
     )
     require(logger, sleep_state, expected={"step": STEP_SLEEP, "tile_hi": 0x33, "pending_push": True})
 
-    push_state = await sample(
+    sleep_wait = await sample(
         dut,
         epoch=2,
         step=STEP_SLEEP,
@@ -252,7 +255,20 @@ async def test_fetch_sequence_progresses_through_sleep_and_push_stall(dut):
         row=0x03,
         pending_push=True,
     )
-    require(logger, push_state, expected={"step": STEP_PUSH, "pending_push": True, "push_valid": False})
+    require(logger, sleep_wait, expected={"step": STEP_SLEEP, "step_phase": True, "pending_push": True, "push_valid": False})
+
+    push_state = await sample(
+        dut,
+        epoch=2,
+        step=STEP_SLEEP,
+        step_phase=True,
+        tile_id=0x20,
+        tile_lo=0x55,
+        tile_hi=0x33,
+        row=0x03,
+        pending_push=True,
+    )
+    require(logger, push_state, expected={"step": STEP_PUSH, "step_phase": False, "pending_push": True, "push_valid": False})
 
     stalled = await sample(
         dut,

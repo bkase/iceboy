@@ -38,6 +38,7 @@ fn with_pending_read(state: FetcherState, pending_valid: bool, pending_read: Pen
         epoch: state.epoch,
         source: state.source,
         step: state.step,
+        step_phase: state.step_phase,
         tile_id: state.tile_id,
         tile_lo: state.tile_lo,
         tile_hi: state.tile_hi,
@@ -55,6 +56,7 @@ fn with_epoch(state: FetcherState, epoch: uint<4>) -> FetcherState {
         epoch: epoch,
         source: state.source,
         step: state.step,
+        step_phase: state.step_phase,
         tile_id: state.tile_id,
         tile_lo: state.tile_lo,
         tile_hi: state.tile_hi,
@@ -72,6 +74,7 @@ fn fetcher_reset(state: FetcherState, source: FetcherSource, map_x: uint<5>, map
         epoch: state.epoch,
         source: source,
         step: FetcherStep::GetTile,
+        step_phase: false,
         tile_id: 0u8,
         tile_lo: 0u8,
         tile_hi: 0u8,
@@ -96,6 +99,7 @@ fn with_resp_fields(
         epoch: state.epoch,
         source: state.source,
         step: step,
+        step_phase: false,
         tile_id: tile_id,
         tile_lo: tile_lo,
         tile_hi: tile_hi,
@@ -267,9 +271,30 @@ fn advance_no_resp(state: FetcherState, render: PpuRenderInputs, fifo_has_room: 
         FetcherStep::GetTile => issue_read(state, tilemap_addr(render, state.source, state.map_x, state.map_y), FetcherStep::GetTile),
         FetcherStep::GetLo => issue_read(state, bgwin_tile_addr(render.lcdc_fetch, state.tile_id, state.row), FetcherStep::GetLo),
         FetcherStep::GetHi => issue_read(state, tile_hi_addr(render, state.tile_id, state.row), FetcherStep::GetHi),
-        FetcherStep::Sleep => idle_bg_fetcher_output(
-            with_resp_fields(state, FetcherStep::Push, state.tile_id, state.tile_lo, state.tile_hi, state.pending_push)
-        ),
+        FetcherStep::Sleep =>
+            if state.step_phase {
+                idle_bg_fetcher_output(
+                    with_resp_fields(state, FetcherStep::Push, state.tile_id, state.tile_lo, state.tile_hi, state.pending_push)
+                )
+            } else {
+                idle_bg_fetcher_output(
+                    FetcherState$(
+                        epoch: state.epoch,
+                        source: state.source,
+                        step: state.step,
+                        step_phase: true,
+                        tile_id: state.tile_id,
+                        tile_lo: state.tile_lo,
+                        tile_hi: state.tile_hi,
+                        map_x: state.map_x,
+                        map_y: state.map_y,
+                        row: state.row,
+                        pending_push: state.pending_push,
+                        pending_valid: false,
+                        pending_read: state.pending_read,
+                    )
+                )
+            },
         FetcherStep::Push => if fifo_has_room && state.pending_push {
             let row = decode_tile_row(state.tile_lo, state.tile_hi);
             BgFetcherOutput$(
