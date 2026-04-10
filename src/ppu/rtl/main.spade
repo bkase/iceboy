@@ -23,3 +23,4 @@ pub mod tile;
 pub mod tile_test_top;
 pub mod timing;
 pub mod timing_test_top;
+pub mod transfer_stall_test_top;

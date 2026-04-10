@@ -184,6 +184,7 @@ pub struct PpuSamplingState {
 pub struct PpuRenderState {
     dot_in_line: uint<9>,
     x_out: uint<8>,
+    stall_dots: uint<5>,
     window_state: WindowState,
     window_line: uint<8>,
     oam_scan: OamScanState,
@@ -324,6 +325,7 @@ pub fn ppu_render_state(first_frame_blank: bool) -> PpuRenderState {
     PpuRenderState$(
         dot_in_line: 0u9,
         x_out: 0u8,
+        stall_dots: 0u5,
         window_state: WindowState::Inactive,
         window_line: 0u8,
         oam_scan: empty_oam_scan_state(),

@@ -181,6 +181,7 @@ fn update_render_state(
     PpuRenderState$(
         dot_in_line: next_dot,
         x_out: next_x_out,
+        stall_dots: if line_start || !next_is_transfer { 0u5 } else { render.stall_dots },
         window_state: next_window_state,
         window_line: next_window_line,
         oam_scan: next_scan,
@@ -560,6 +561,10 @@ fn should_start_live_obj_fetch(render: PpuRenderState, regs: PpuRegs, x_out: uin
         }
 }
 
+pub fn add_stall_dots(current: uint<5>, added: uint<5>) -> uint<5> {
+    trunc(current + added)
+}
+
 fn obj_fetch_with_req(render: PpuRenderState, step: FetcherStep, req: PpuMemReq) -> (PpuRenderState, PpuMemReqs) {
     let fetcher = render.fetcher;
     let next_fetcher = lib::ppu::sem::types::FetcherState$(
@@ -580,6 +585,7 @@ fn obj_fetch_with_req(render: PpuRenderState, step: FetcherStep, req: PpuMemReq)
         PpuRenderState$(
             dot_in_line: render.dot_in_line,
             x_out: render.x_out,
+            stall_dots: render.stall_dots,
             window_state: render.window_state,
             window_line: render.window_line,
             oam_scan: render.oam_scan,
@@ -607,6 +613,7 @@ fn start_live_obj_fetch(render: PpuRenderState, mem_resp: PpuMemResp) -> PpuRend
     PpuRenderState$(
         dot_in_line: render.dot_in_line,
         x_out: render.x_out,
+        stall_dots: render.stall_dots,
         window_state: render.window_state,
         window_line: render.window_line,
         oam_scan: render.oam_scan,
@@ -682,6 +689,7 @@ fn complete_live_obj_fetch(
     PpuRenderState$(
         dot_in_line: render.dot_in_line,
         x_out: render.x_out,
+        stall_dots: render.stall_dots,
         window_state: render.window_state,
         window_line: render.window_line,
         oam_scan: render.oam_scan,
@@ -707,6 +715,7 @@ fn cancel_live_obj_fetch(
     PpuRenderState$(
         dot_in_line: render.dot_in_line,
         x_out: render.x_out,
+        stall_dots: render.stall_dots,
         window_state: render.window_state,
         window_line: render.window_line,
         oam_scan: render.oam_scan,
@@ -744,6 +753,7 @@ fn advance_live_obj_fetch(
                 PpuRenderState$(
                     dot_in_line: render.dot_in_line,
                     x_out: render.x_out,
+                    stall_dots: render.stall_dots,
                     window_state: render.window_state,
                     window_line: render.window_line,
                     oam_scan: render.oam_scan,
@@ -766,6 +776,7 @@ fn advance_live_obj_fetch(
                     PpuRenderState$(
                         dot_in_line: render.dot_in_line,
                         x_out: render.x_out,
+                        stall_dots: render.stall_dots,
                         window_state: render.window_state,
                         window_line: render.window_line,
                         oam_scan: render.oam_scan,
@@ -799,6 +810,7 @@ fn advance_live_obj_fetch(
                     PpuRenderState$(
                         dot_in_line: render.dot_in_line,
                         x_out: render.x_out,
+                        stall_dots: render.stall_dots,
                         window_state: render.window_state,
                         window_line: render.window_line,
                         oam_scan: render.oam_scan,
@@ -832,6 +844,7 @@ fn advance_live_obj_fetch(
                     PpuRenderState$(
                         dot_in_line: render.dot_in_line,
                         x_out: render.x_out,
+                        stall_dots: render.stall_dots,
                         window_state: render.window_state,
                         window_line: render.window_line,
                         oam_scan: render.oam_scan,
@@ -865,6 +878,7 @@ fn advance_live_obj_fetch(
                     PpuRenderState$(
                         dot_in_line: render.dot_in_line,
                         x_out: render.x_out,
+                        stall_dots: render.stall_dots,
                         window_state: render.window_state,
                         window_line: render.window_line,
                         oam_scan: render.oam_scan,
@@ -900,6 +914,7 @@ fn advance_live_obj_fetch(
                             PpuRenderState$(
                                 dot_in_line: render.dot_in_line,
                                 x_out: render.x_out,
+                                stall_dots: render.stall_dots,
                                 window_state: render.window_state,
                                 window_line: render.window_line,
                                 oam_scan: render.oam_scan,
@@ -954,6 +969,7 @@ fn advance_live_obj_fetch(
                         PpuRenderState$(
                             dot_in_line: render.dot_in_line,
                             x_out: render.x_out,
+                            stall_dots: render.stall_dots,
                             window_state: render.window_state,
                             window_line: render.window_line,
                             oam_scan: render.oam_scan,
@@ -1029,7 +1045,75 @@ fn apply_live_transfer(
             } else {
                 transfer_seed_render
             };
-        if obj_enabled && fetcher_source_is_object(transfer_render) {
+        let stall_active = transfer_render.stall_dots > 0u5;
+        let next_stall_dots = if stall_active { trunc(transfer_render.stall_dots - 1u5) } else { transfer_render.stall_dots };
+        if stall_active {
+            let next_status =
+                if next_is_transfer {
+                    let next_discard_scx = match candidate_state.status.phase {
+                        PpuPhase::Transfer$(x_out: _, discard_scx: discard_scx) => discard_scx,
+                        _ => base_discard_scx,
+                    };
+                    PpuStatusState$(
+                        run: candidate_state.status.run,
+                        phase: PpuPhase::Transfer$(x_out: base_x_out, discard_scx: next_discard_scx),
+                        stat_irq: candidate_state.status.stat_irq,
+                        lyc_match_flag: candidate_state.status.lyc_match_flag,
+                    )
+                } else {
+                    candidate_state.status
+                };
+            let next_render =
+                if next_is_transfer {
+                    PpuRenderState$(
+                        dot_in_line: candidate_state.render.dot_in_line,
+                        x_out: base_x_out,
+                        stall_dots: next_stall_dots,
+                        window_state: candidate_state.render.window_state,
+                        window_line: candidate_state.render.window_line,
+                        oam_scan: candidate_state.render.oam_scan,
+                        line_objs: candidate_state.render.line_objs,
+                        line_obj_fetch_index: transfer_render.line_obj_fetch_index,
+                        line_obj_fetched_mask: transfer_render.line_obj_fetched_mask,
+                        obj_fetch_ticket: transfer_render.obj_fetch_ticket,
+                        obj_fetch_flags: transfer_render.obj_fetch_flags,
+                        bg_fetcher_resume: transfer_render.bg_fetcher_resume,
+                        fetcher: transfer_render.fetcher,
+                        bg_fifo: transfer_render.bg_fifo,
+                        obj_fifo: transfer_render.obj_fifo,
+                        first_frame_blank: candidate_state.render.first_frame_blank,
+                    )
+                } else {
+                    PpuRenderState$(
+                        dot_in_line: candidate_state.render.dot_in_line,
+                        x_out: 0u8,
+                        stall_dots: 0u5,
+                        window_state: candidate_state.render.window_state,
+                        window_line: candidate_state.render.window_line,
+                        oam_scan: candidate_state.render.oam_scan,
+                        line_objs: candidate_state.render.line_objs,
+                        line_obj_fetch_index: 0u4,
+                        line_obj_fetched_mask: 0u10,
+                        obj_fetch_ticket: zero_selected_obj_ticket(),
+                        obj_fetch_flags: zero_obj_flags(),
+                        bg_fetcher_resume: initial_bg_fetcher_state(),
+                        fetcher: initial_bg_fetcher_state(),
+                        bg_fifo: clear_bg_fifo(),
+                        obj_fifo: empty_obj_fifo(),
+                        first_frame_blank: candidate_state.render.first_frame_blank,
+                    )
+                };
+            (
+                PpuState$(
+                    visible: candidate_state.visible,
+                    status: next_status,
+                    sampled: candidate_state.sampled,
+                    render: next_render,
+                ),
+                idle_ppu_mem_reqs(),
+                Option::None,
+            )
+        } else if obj_enabled && fetcher_source_is_object(transfer_render) {
             let (next_obj_render, obj_mem_reqs) = advance_live_obj_fetch(
                 transfer_render,
                 render_inputs,
@@ -1057,6 +1141,7 @@ fn apply_live_transfer(
                     PpuRenderState$(
                         dot_in_line: candidate_state.render.dot_in_line,
                         x_out: base_x_out,
+                        stall_dots: next_obj_render.stall_dots,
                         window_state: candidate_state.render.window_state,
                         window_line: candidate_state.render.window_line,
                         oam_scan: candidate_state.render.oam_scan,
@@ -1075,6 +1160,7 @@ fn apply_live_transfer(
                     PpuRenderState$(
                         dot_in_line: candidate_state.render.dot_in_line,
                         x_out: 0u8,
+                        stall_dots: 0u5,
                         window_state: candidate_state.render.window_state,
                         window_line: candidate_state.render.window_line,
                         oam_scan: candidate_state.render.oam_scan,
@@ -1194,6 +1280,7 @@ fn apply_live_transfer(
                 render: PpuRenderState$(
                     dot_in_line: candidate_state.render.dot_in_line,
                     x_out: if next_is_transfer { next_x_out } else { 0u8 },
+                    stall_dots: if next_is_transfer { next_stall_dots } else { 0u5 },
                     window_state: next_window_state,
                     window_line: pipe_output.next_window_line,
                     oam_scan: candidate_state.render.oam_scan,

@@ -102,6 +102,7 @@ fn seeded_state(seed_run_i: uint<2>, seed_phase_i: uint<3>, seed_ly_i: uint<8>, 
         render: lib::ppu::sem::types::PpuRenderState$(
             dot_in_line: seed_dot_in_line_i,
             x_out: base.render.x_out,
+            stall_dots: base.render.stall_dots,
             window_state: base.render.window_state,
             window_line: base.render.window_line,
             oam_scan: base.render.oam_scan,

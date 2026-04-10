@@ -193,6 +193,7 @@ fn seeded_state(
         render: lib::ppu::sem::types::PpuRenderState$(
             dot_in_line: start_dot_in_line_i,
             x_out: start_x_out_i,
+            stall_dots: 0u5,
             window_state: lib::ppu::sem::types::WindowState::Inactive,
             window_line: 0u8,
             oam_scan: empty_oam_scan_state(),

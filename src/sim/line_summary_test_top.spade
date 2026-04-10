@@ -106,6 +106,7 @@ fn build_render_state(
     PpuRenderState$(
         dot_in_line: dot_in_line_i,
         x_out: x_out_i,
+        stall_dots: 0u5,
         window_state: build_window_state(window_active_i, window_line_i),
         window_line: window_line_i,
         oam_scan: base.oam_scan,

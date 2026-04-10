@@ -1,0 +1,96 @@
+use lib::ppu::sem::step::add_stall_dots;
+use lib::ppu::sem::types::{BgFifo, BgPixel, PpuState, PpuStatusState, PpuVisibleState, PpuSamplingState, PpuPhase, LcdRunState, StatIrqState, initial_ppu_regs, initial_ppu_sampling_state, ppu_render_state};
+use lib::ppu::sem::events::idle_dot_input;
+use lib::ppu::sem::step::step_dot;
+use lib::sim::ppu_support::held_dot_output;
+use lib::sim::ppu_support::build_test_lcdc;
+
+fn seeded_bg_fifo() -> BgFifo {
+    BgFifo$(
+        count: 1u5,
+        pixels: [
+            BgPixel$(shade: 1u2, palette: 0xe4u8, from_window: false),
+            ppu_render_state(false).bg_fifo.pixels[1],
+            ppu_render_state(false).bg_fifo.pixels[2],
+            ppu_render_state(false).bg_fifo.pixels[3],
+            ppu_render_state(false).bg_fifo.pixels[4],
+            ppu_render_state(false).bg_fifo.pixels[5],
+            ppu_render_state(false).bg_fifo.pixels[6],
+            ppu_render_state(false).bg_fifo.pixels[7],
+            ppu_render_state(false).bg_fifo.pixels[8],
+            ppu_render_state(false).bg_fifo.pixels[9],
+            ppu_render_state(false).bg_fifo.pixels[10],
+            ppu_render_state(false).bg_fifo.pixels[11],
+            ppu_render_state(false).bg_fifo.pixels[12],
+            ppu_render_state(false).bg_fifo.pixels[13],
+            ppu_render_state(false).bg_fifo.pixels[14],
+            ppu_render_state(false).bg_fifo.pixels[15],
+        ],
+    )
+}
+
+fn seeded_state(seed_stall_dots_i: uint<5>, start_x_out_i: uint<8>) -> PpuState {
+    let regs = lib::ppu::sem::types::PpuRegs$(
+        lcdc: build_test_lcdc(false, false, true, false, false, false, true),
+        stat_sel: initial_ppu_regs().stat_sel,
+        scy: 0u8,
+        scx: 0u8,
+        lyc: 0u8,
+        wy: 0u8,
+        wx: 0u8,
+        bgp: 0xe4u8,
+        obp0: 0u8,
+        obp1: 0u8,
+    );
+    PpuState$(
+        visible: PpuVisibleState$(regs: regs, ly: 0u8),
+        status: PpuStatusState$(
+            run: LcdRunState::Running,
+            phase: PpuPhase::Transfer$(x_out: start_x_out_i, discard_scx: 0u3),
+            stat_irq: StatIrqState$(line_high: false),
+            lyc_match_flag: false,
+        ),
+        sampled: initial_ppu_sampling_state(),
+        render: lib::ppu::sem::types::PpuRenderState$(
+            dot_in_line: 80u9,
+            x_out: start_x_out_i,
+            stall_dots: seed_stall_dots_i,
+            window_state: ppu_render_state(false).window_state,
+            window_line: 0u8,
+            oam_scan: ppu_render_state(false).oam_scan,
+            line_objs: ppu_render_state(false).line_objs,
+            line_obj_fetch_index: 0u4,
+            line_obj_fetched_mask: 0u10,
+            obj_fetch_ticket: ppu_render_state(false).obj_fetch_ticket,
+            obj_fetch_flags: ppu_render_state(false).obj_fetch_flags,
+            bg_fetcher_resume: ppu_render_state(false).bg_fetcher_resume,
+            fetcher: ppu_render_state(false).fetcher,
+            bg_fifo: seeded_bg_fifo(),
+            obj_fifo: ppu_render_state(false).obj_fifo,
+            first_frame_blank: false,
+        ),
+    )
+}
+
+pub entity transfer_stall_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    dot_ce_i: bool,
+    seed_stall_dots_i: uint<5>,
+    start_x_out_i: uint<8>,
+    extra_stall_dots_i: uint<5>,
+) -> uint<18> {
+    decl state_reg;
+    let step = step_dot(
+        state_reg,
+        idle_dot_input(),
+    );
+    let visible = held_dot_output(state_reg, dot_ce_i, step);
+
+    reg(clk_i) state_reg: PpuState reset(rst_i: seeded_state(seed_stall_dots_i, start_x_out_i)) =
+        if dot_ce_i { visible.next_state } else { state_reg };
+
+    zext(visible.next_state.render.x_out)
+        | (zext(visible.next_state.render.stall_dots) << 8)
+        | (zext(add_stall_dots(seed_stall_dots_i, extra_stall_dots_i)) << 13)
+}
