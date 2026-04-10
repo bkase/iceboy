@@ -1238,6 +1238,7 @@ fn apply_live_transfer(
             } else {
                 fetcher_output.next_state
             };
+        let next_stall_dots_with_window = add_stall_dots(next_stall_dots, pipe_output.stall_dots_added);
         let obj_popped =
             if !obj_enabled {
                 ObjFifoPopResult$(next_fifo: empty_obj_fifo(), pixel_valid: false, pixel: zero_obj_pixel())
@@ -1280,7 +1281,7 @@ fn apply_live_transfer(
                 render: PpuRenderState$(
                     dot_in_line: candidate_state.render.dot_in_line,
                     x_out: if next_is_transfer { next_x_out } else { 0u8 },
-                    stall_dots: if next_is_transfer { next_stall_dots } else { 0u5 },
+                    stall_dots: if next_is_transfer { next_stall_dots_with_window } else { 0u5 },
                     window_state: next_window_state,
                     window_line: pipe_output.next_window_line,
                     oam_scan: candidate_state.render.oam_scan,

@@ -47,6 +47,7 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "window_win_line": (value >> 59) & 0xFF,
         "next_window_line": (value >> 67) & 0xFF,
         "restart_fetcher": bool((value >> 75) & 0x1),
+        "stall_dots_added": (value >> 76) & 0x1F,
     }
 
 
@@ -134,6 +135,7 @@ async def test_window_activation_basic_at_x0(dut):
             "window_win_line": 0,
             "next_window_line": 1,
             "restart_fetcher": True,
+            "stall_dots_added": 6,
             "next_fifo_count": 0,
             "pixel_valid": False,
         },
@@ -164,6 +166,7 @@ async def test_window_trigger_drops_stale_bg_push_on_restart(dut):
             "window_state": WINDOW_ACTIVE,
             "next_window_line": 1,
             "restart_fetcher": True,
+            "stall_dots_added": 6,
             "next_fifo_count": 0,
             "pixel_valid": False,
         },
@@ -266,6 +269,7 @@ async def test_window_wx_trigger_and_counter_progression(dut):
             "window_win_line": 5,
             "next_window_line": 6,
             "restart_fetcher": True,
+            "stall_dots_added": 6,
             "next_fifo_count": 0,
         },
     )
@@ -290,6 +294,7 @@ async def test_window_wx_trigger_and_counter_progression(dut):
             "window_win_line": 5,
             "next_window_line": 6,
             "restart_fetcher": False,
+            "stall_dots_added": 0,
         },
     )
 
@@ -319,6 +324,7 @@ async def test_window_midframe_disable_resume_and_vblank_reset(dut):
             "window_state": WINDOW_INACTIVE,
             "next_window_line": 8,
             "restart_fetcher": False,
+            "stall_dots_added": 0,
         },
     )
 
@@ -342,6 +348,7 @@ async def test_window_midframe_disable_resume_and_vblank_reset(dut):
             "window_win_line": 8,
             "next_window_line": 9,
             "restart_fetcher": True,
+            "stall_dots_added": 6,
         },
     )
 
@@ -368,5 +375,55 @@ async def test_window_midframe_disable_resume_and_vblank_reset(dut):
             "window_win_line": 0,
             "next_window_line": 1,
             "restart_fetcher": True,
+            "stall_dots_added": 6,
+        },
+    )
+
+
+@cocotb.test()
+async def test_window_trigger_adds_fixed_six_stall_dots_once(dut):
+    logger = case_logger("test_window_trigger_adds_fixed_six_stall_dots_once")
+
+    logger.step("The takeover dot adds a fixed 6-dot stall budget")
+    triggered = await sample(
+        dut,
+        window_state=WINDOW_ARMED,
+        window_line=4,
+        wy_triggered=True,
+        window_enable_at_mode2_start=True,
+        wx_live=15,
+        x_out=8,
+    )
+    require(
+        logger,
+        triggered,
+        expected={
+            "window_state": WINDOW_ACTIVE,
+            "restart_fetcher": True,
+            "stall_dots_added": 6,
+            "next_window_line": 5,
+        },
+    )
+
+    logger.step("Once active on the line, later pixels do not add another 6")
+    continued = await sample(
+        dut,
+        window_state=WINDOW_ACTIVE,
+        active_win_x=0,
+        active_win_line=4,
+        window_line=5,
+        wy_triggered=True,
+        window_enable_at_mode2_start=True,
+        wx_live=15,
+        x_out=9,
+    )
+    require(
+        logger,
+        continued,
+        expected={
+            "window_state": WINDOW_ACTIVE,
+            "restart_fetcher": False,
+            "stall_dots_added": 0,
+            "next_window_line": 5,
         },
     )

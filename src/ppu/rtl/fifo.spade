@@ -21,6 +21,7 @@ pub struct WindowStepOutput {
     next_window_line: uint<8>,
     restart_fetcher: bool,
     clear_bg_fifo: bool,
+    stall_dots_added: uint<5>,
 }
 
 pub struct BgPipeOutput {
@@ -32,6 +33,7 @@ pub struct BgPipeOutput {
     pixel: BgPixel,
     restart_fetcher: bool,
     discard_applied: bool,
+    stall_dots_added: uint<5>,
 }
 
 fn build_bg_pixel(shade: uint<2>, palette: uint<8>) -> BgPixel {
@@ -237,12 +239,14 @@ pub fn step_window_state(
                 next_window_line: trunc(base_window_line + 1u8),
                 restart_fetcher: true,
                 clear_bg_fifo: true,
+                stall_dots_added: 6u5,
             ),
             _ => WindowStepOutput$(
                 next_state: armed,
                 next_window_line: base_window_line,
                 restart_fetcher: false,
                 clear_bg_fifo: false,
+                stall_dots_added: 0u5,
             ),
         }
     } else {
@@ -251,6 +255,7 @@ pub fn step_window_state(
             next_window_line: base_window_line,
             restart_fetcher: false,
             clear_bg_fifo: false,
+            stall_dots_added: 0u5,
         )
     }
 }
@@ -288,5 +293,6 @@ pub fn advance_bg_pipe(
         pixel: popped.pixel,
         restart_fetcher: window_step.restart_fetcher,
         discard_applied: popped.discard_applied,
+        stall_dots_added: window_step.stall_dots_added,
     )
 }
