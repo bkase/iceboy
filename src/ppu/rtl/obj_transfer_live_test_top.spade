@@ -19,6 +19,8 @@ use lib::ppu::sem::types::{
     PpuVisibleState,
     SelectedObjTicket,
     StatIrqState,
+    BgFifo,
+    BgPixel,
     empty_bg_fifo,
     empty_obj_fifo,
     empty_oam_scan_state,
@@ -84,22 +86,40 @@ fn decode_fetcher_step(step_i: uint<3>) -> FetcherStep {
 
 fn seeded_fetcher(seed_fetcher_valid_i: bool, seed_fetcher_source_i: uint<2>, seed_fetcher_step_i: uint<3>) -> lib::ppu::sem::types::FetcherState {
     if seed_fetcher_valid_i {
+        let step = decode_fetcher_step(seed_fetcher_step_i);
         lib::ppu::sem::types::FetcherState$(
             epoch: 0u4,
             source: decode_fetcher_source(seed_fetcher_source_i),
-            step: decode_fetcher_step(seed_fetcher_step_i),
+            step: step,
             tile_id: 0u8,
             tile_lo: 0u8,
             tile_hi: 0u8,
             map_x: 0u5,
             map_y: 0u5,
             row: 0u3,
-            pending_push: false,
+            // A seeded Push fetcher must carry the pending row; otherwise the
+            // reducer is not exercising the real BG-push grant seam.
+            pending_push: match step {
+                FetcherStep::Push => true,
+                _ => false,
+            },
             pending_valid: false,
             pending_read: initial_fetcher_state().pending_read,
         )
     } else {
         initial_fetcher_state()
+    }
+}
+
+fn seeded_bg_pixel() -> BgPixel {
+    BgPixel$(shade: 0u2, palette: 0xfcu8, from_window: false)
+}
+
+fn seeded_bg_fifo(seed_bg_fifo_count_i: uint<5>) -> BgFifo {
+    if seed_bg_fifo_count_i == 0u5 {
+        empty_bg_fifo()
+    } else {
+        BgFifo$(count: seed_bg_fifo_count_i, pixels: [seeded_bg_pixel(); 16])
     }
 }
 
@@ -117,9 +137,41 @@ fn seeded_state(
     seed_fetcher_valid_i: bool,
     seed_fetcher_source_i: uint<2>,
     seed_fetcher_step_i: uint<3>,
+    seed_fetcher_pending_valid_i: bool,
+    seed_fetcher_pending_region_i: uint<1>,
+    seed_fetcher_pending_client_i: uint<3>,
+    seed_fetcher_pending_id_i: uint<4>,
+    seed_bg_fifo_count_i: uint<5>,
     start_in_oam_scan_i: bool,
 ) -> PpuState {
-    let seeded_fetcher_state = seeded_fetcher(seed_fetcher_valid_i, seed_fetcher_source_i, seed_fetcher_step_i);
+    let base_fetcher_state = seeded_fetcher(seed_fetcher_valid_i, seed_fetcher_source_i, seed_fetcher_step_i);
+    let seeded_fetcher_state =
+        if seed_fetcher_pending_valid_i {
+            lib::ppu::sem::types::FetcherState$(
+                epoch: base_fetcher_state.epoch,
+                source: base_fetcher_state.source,
+                step: base_fetcher_state.step,
+                tile_id: base_fetcher_state.tile_id,
+                tile_lo: base_fetcher_state.tile_lo,
+                tile_hi: base_fetcher_state.tile_hi,
+                map_x: base_fetcher_state.map_x,
+                map_y: base_fetcher_state.map_y,
+                row: base_fetcher_state.row,
+                pending_push: base_fetcher_state.pending_push,
+                pending_valid: true,
+                pending_read: lib::ppu::sem::memory::PendingRead$(
+                    tag: lib::ppu::sem::memory::MemTxnTag$(
+                        region: decode_mem_region_i(seed_fetcher_pending_region_i),
+                        client: decode_mem_client_i(seed_fetcher_pending_client_i),
+                        id: seed_fetcher_pending_id_i,
+                    ),
+                    epoch: base_fetcher_state.epoch,
+                ),
+            )
+        } else {
+            base_fetcher_state
+        };
+    let seeded_bg_fifo_state = seeded_bg_fifo(seed_bg_fifo_count_i);
     PpuState$(
         visible: PpuVisibleState$(regs: seeded_regs(obj_size_8x16_i, obj_enable_i), ly: visible_ly_i),
         status: PpuStatusState$(
@@ -151,7 +203,7 @@ fn seeded_state(
             obj_fetch_flags: lib::ppu::sem::types::zero_obj_flags(),
             bg_fetcher_resume: initial_fetcher_state(),
             fetcher: seeded_fetcher_state,
-            bg_fifo: empty_bg_fifo(),
+            bg_fifo: seeded_bg_fifo_state,
             obj_fifo: empty_obj_fifo(),
             first_frame_blank: false,
         ),
@@ -213,6 +265,45 @@ fn decode_bus_req(kind_i: uint<2>, addr_i: uint<16>, data_i: uint<8>) -> BusReq 
         1u2 => BusReq::Read$(addr: addr_i),
         2u2 => BusReq::Write$(addr: addr_i, data: data_i),
         _ => BusReq::Idle,
+    }
+}
+
+fn decode_mem_region_i(region_i: uint<1>) -> MemRegion {
+    match region_i {
+        1u1 => MemRegion::Oam,
+        _ => MemRegion::Vram,
+    }
+}
+
+fn decode_mem_client_i(client_i: uint<3>) -> MemClient {
+    match client_i {
+        1u3 => MemClient::BgFetcher,
+        2u3 => MemClient::ObjFetcher,
+        3u3 => MemClient::OamScanner,
+        4u3 => MemClient::Dma,
+        _ => MemClient::Cpu,
+    }
+}
+
+fn seeded_pending_req(
+    seed_pending_req_valid_i: bool,
+    seed_pending_req_addr_i: uint<16>,
+    seed_pending_req_region_i: uint<1>,
+    seed_pending_req_client_i: uint<3>,
+    seed_pending_req_id_i: uint<4>,
+) -> PpuMemReq {
+    if seed_pending_req_valid_i {
+        PpuMemReq$(
+            tag: lib::ppu::sem::memory::MemTxnTag$(
+                region: decode_mem_region_i(seed_pending_req_region_i),
+                client: decode_mem_client_i(seed_pending_req_client_i),
+                id: seed_pending_req_id_i,
+            ),
+            kind: PpuMemKind::Read,
+            addr: seed_pending_req_addr_i,
+        )
+    } else {
+        idle_ppu_mem_req()
     }
 }
 
@@ -304,6 +395,16 @@ pub entity obj_transfer_live_test_top(
     seed_fetcher_valid_i: bool,
     seed_fetcher_source_i: uint<2>,
     seed_fetcher_step_i: uint<3>,
+    seed_fetcher_pending_valid_i: bool,
+    seed_fetcher_pending_region_i: uint<1>,
+    seed_fetcher_pending_client_i: uint<3>,
+    seed_fetcher_pending_id_i: uint<4>,
+    seed_bg_fifo_count_i: uint<5>,
+    seed_pending_req_valid_i: bool,
+    seed_pending_req_addr_i: uint<16>,
+    seed_pending_req_region_i: uint<1>,
+    seed_pending_req_client_i: uint<3>,
+    seed_pending_req_id_i: uint<4>,
     tile_id_i: uint<8>,
     flags_i: uint<8>,
     tile_lo_i: uint<8>,
@@ -317,7 +418,7 @@ pub entity obj_transfer_live_test_top(
     req_addr_i: uint<16>,
     req_data_i: uint<8>,
     start_in_oam_scan_i: bool,
-) -> uint<111> {
+) -> uint<117> {
     decl state_reg;
     decl pending_req_reg;
     decl pending_resp_valid_reg;
@@ -395,12 +496,23 @@ pub entity obj_transfer_live_test_top(
         seed_fetcher_valid_i,
         seed_fetcher_source_i,
         seed_fetcher_step_i,
+        seed_fetcher_pending_valid_i,
+        seed_fetcher_pending_region_i,
+        seed_fetcher_pending_client_i,
+        seed_fetcher_pending_id_i,
+        seed_bg_fifo_count_i,
         start_in_oam_scan_i,
     )) =
         if dot_ce_i { visible.next_state } else { state_reg };
-    reg(clk_i) pending_req_reg: PpuMemReq reset(rst_i: idle_ppu_mem_req()) =
+    reg(clk_i) pending_req_reg: PpuMemReq reset(rst_i: seeded_pending_req(
+        seed_pending_req_valid_i,
+        seed_pending_req_addr_i,
+        seed_pending_req_region_i,
+        seed_pending_req_client_i,
+        seed_pending_req_id_i,
+    )) =
         if dot_ce_i { next_pending_req } else { pending_req_reg };
-    reg(clk_i) pending_resp_valid_reg: bool reset(rst_i: false) =
+    reg(clk_i) pending_resp_valid_reg: bool reset(rst_i: seed_pending_req_valid_i) =
         if dot_ce_i { visible.mem_reqs.count != 0u3 } else { pending_resp_valid_reg };
 
     zext(encode_fetcher_source(trace.fetcher.source))
@@ -426,4 +538,6 @@ pub entity obj_transfer_live_test_top(
         | (zext(phase_x_out(trace.phase_after)) << 89)
         | (zext(visible.next_state.render.obj_fetch_ticket.oam_index) << 97)
         | (zext(visible.next_state.render.obj_fetch_ticket.x) << 103)
+        | (zext(trace.bg_fifo.count) << 111)
+        | (zext(lib::util::bit(trace.fetcher.pending_valid)) << 116)
 }

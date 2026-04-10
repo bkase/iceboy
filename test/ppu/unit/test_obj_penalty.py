@@ -89,8 +89,8 @@ async def test_pyboy_bg_reference_case_matches_helper_tile_selection(dut):
     assert snapshot["tile_x"] == case.expected_tile_x
     assert snapshot["tile_y"] == case.expected_tile_y
     assert snapshot["pixel_offset"] == 0
-    assert snapshot["align_penalty"] == 5
-    assert snapshot["total_penalty"] == 11
+    assert snapshot["align_penalty"] == 6
+    assert snapshot["total_penalty"] == 12
 
 
 @cocotb.test()
@@ -135,8 +135,8 @@ async def test_scx_alignment_changes_bg_pixel_offset_and_penalty(dut):
     assert snapshot["tile_x"] == 4
     assert snapshot["tile_y"] == 3
     assert snapshot["pixel_offset"] == 5
-    assert snapshot["align_penalty"] == 0
-    assert snapshot["total_penalty"] == 6
+    assert snapshot["align_penalty"] == 1
+    assert snapshot["total_penalty"] == 7
 
 
 @cocotb.test()
@@ -186,8 +186,8 @@ async def test_next_tile_restarts_alignment_penalty_after_considered_tile(dut):
     assert snapshot["tile_y"] == 10
     assert snapshot["already_considered"] is False
     assert snapshot["pixel_offset"] == 1
-    assert snapshot["align_penalty"] == 4
-    assert snapshot["total_penalty"] == 10
+    assert snapshot["align_penalty"] == 5
+    assert snapshot["total_penalty"] == 11
     assert snapshot["next_valid"] is True
     assert snapshot["next_source_window"] is False
     assert snapshot["next_tile_x"] == 15
@@ -218,3 +218,59 @@ async def test_x_zero_special_case_forces_eleven_dot_penalty(dut):
     assert snapshot["next_source_window"] is True
     assert snapshot["next_tile_x"] == 1
     assert snapshot["next_tile_y"] == 0
+
+
+async def assert_scx_zero_alignment_case(dut, *, ticket_x: int, expected_align_penalty: int, expected_total_penalty: int):
+    snapshot = await sample(
+        dut,
+        ticket_x=ticket_x,
+        visible_ly=0,
+        scx=0,
+        scy=0,
+        wx=0,
+        window_enabled_line=False,
+        window_line=0,
+    )
+
+    assert snapshot["align_penalty"] == expected_align_penalty
+    assert snapshot["total_penalty"] == expected_total_penalty
+
+
+@cocotb.test()
+async def test_scx_zero_alignment_scx0_x8_offset0(dut):
+    await assert_scx_zero_alignment_case(dut, ticket_x=8, expected_align_penalty=6, expected_total_penalty=12)
+
+
+@cocotb.test()
+async def test_scx_zero_alignment_scx0_x9_offset1(dut):
+    await assert_scx_zero_alignment_case(dut, ticket_x=9, expected_align_penalty=5, expected_total_penalty=11)
+
+
+@cocotb.test()
+async def test_scx_zero_alignment_scx0_x10_offset2(dut):
+    await assert_scx_zero_alignment_case(dut, ticket_x=10, expected_align_penalty=4, expected_total_penalty=10)
+
+
+@cocotb.test()
+async def test_scx_zero_alignment_scx0_x11_offset3(dut):
+    await assert_scx_zero_alignment_case(dut, ticket_x=11, expected_align_penalty=3, expected_total_penalty=9)
+
+
+@cocotb.test()
+async def test_scx_zero_alignment_scx0_x12_offset4(dut):
+    await assert_scx_zero_alignment_case(dut, ticket_x=12, expected_align_penalty=2, expected_total_penalty=8)
+
+
+@cocotb.test()
+async def test_scx_zero_alignment_scx0_x13_offset5(dut):
+    await assert_scx_zero_alignment_case(dut, ticket_x=13, expected_align_penalty=1, expected_total_penalty=7)
+
+
+@cocotb.test()
+async def test_scx_zero_alignment_scx0_x14_offset6(dut):
+    await assert_scx_zero_alignment_case(dut, ticket_x=14, expected_align_penalty=0, expected_total_penalty=6)
+
+
+@cocotb.test()
+async def test_scx_zero_alignment_scx0_x15_offset7(dut):
+    await assert_scx_zero_alignment_case(dut, ticket_x=15, expected_align_penalty=0, expected_total_penalty=6)

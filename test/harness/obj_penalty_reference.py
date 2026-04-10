@@ -27,6 +27,15 @@ class ObjPenaltyReferenceCase:
     expected_tile_id: int
 
 
+@dataclass(frozen=True)
+class ObjPenaltyAlignmentReferenceCase:
+    name: str
+    scx: int
+    obj_x: int
+    expected_align_penalty: int
+    expected_total_penalty: int
+
+
 CHECKER_BALL_CANCEL_OVERLAP_BG_CASE = ObjPenaltyReferenceCase(
     name="checker_ball_cancel_overlap_bg_tile",
     rom_path=ROOT / "bench" / "roms" / "out" / "CHECKER_BALL_CANCEL_OVERLAP.gb",
@@ -108,4 +117,70 @@ PYBOY_OBJ_PENALTY_REFERENCE_CASES = (
     WINDOW_BASIC_BG_CASE,
     WINDOW_BASIC_WINDOW_THRESHOLD_CASE,
     WINDOW_BASIC_WINDOW_NEXT_TILE_CASE,
+)
+
+PYBOY_OBJ_PENALTY_ALIGNMENT_CASES = (
+    ObjPenaltyAlignmentReferenceCase(
+        name="scx0_x0_special_case",
+        scx=0,
+        obj_x=0,
+        expected_align_penalty=5,
+        expected_total_penalty=11,
+    ),
+    ObjPenaltyAlignmentReferenceCase(
+        name="scx0_x8_offset0",
+        scx=0,
+        obj_x=8,
+        expected_align_penalty=6,
+        expected_total_penalty=12,
+    ),
+    ObjPenaltyAlignmentReferenceCase(
+        name="scx0_x9_offset1",
+        scx=0,
+        obj_x=9,
+        expected_align_penalty=5,
+        expected_total_penalty=11,
+    ),
+    ObjPenaltyAlignmentReferenceCase(
+        name="scx0_x10_offset2",
+        scx=0,
+        obj_x=10,
+        expected_align_penalty=4,
+        expected_total_penalty=10,
+    ),
+    ObjPenaltyAlignmentReferenceCase(
+        name="scx0_x11_offset3",
+        scx=0,
+        obj_x=11,
+        expected_align_penalty=3,
+        expected_total_penalty=9,
+    ),
+    ObjPenaltyAlignmentReferenceCase(
+        name="scx0_x12_offset4",
+        scx=0,
+        obj_x=12,
+        expected_align_penalty=2,
+        expected_total_penalty=8,
+    ),
+    ObjPenaltyAlignmentReferenceCase(
+        name="scx0_x13_offset5",
+        scx=0,
+        obj_x=13,
+        expected_align_penalty=1,
+        expected_total_penalty=7,
+    ),
+    ObjPenaltyAlignmentReferenceCase(
+        name="scx0_x14_offset6",
+        scx=0,
+        obj_x=14,
+        expected_align_penalty=0,
+        expected_total_penalty=6,
+    ),
+    ObjPenaltyAlignmentReferenceCase(
+        name="scx0_x15_offset7",
+        scx=0,
+        obj_x=15,
+        expected_align_penalty=0,
+        expected_total_penalty=6,
+    ),
 )

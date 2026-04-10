@@ -135,11 +135,12 @@ fn tile_matches(considered: ObjPenaltyConsideredTile, tile: ObjPenaltyTile) -> b
 
 fn align_penalty_from_offset(pixel_offset: uint<3>) -> uint<4> {
     match pixel_offset {
-        0u3 => 5u4,
-        1u3 => 4u4,
-        2u3 => 3u4,
-        3u3 => 2u4,
-        4u3 => 1u4,
+        0u3 => 6u4,
+        1u3 => 5u4,
+        2u3 => 4u4,
+        3u3 => 3u4,
+        4u3 => 2u4,
+        5u3 => 1u4,
         _ => 0u4,
     }
 }

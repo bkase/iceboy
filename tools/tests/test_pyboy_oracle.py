@@ -27,7 +27,10 @@ if str(ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(ROOT / "tools"))
 
 from resolve_checkpoint_pc import resolve_checkpoint_pc
-from test.harness.obj_penalty_reference import PYBOY_OBJ_PENALTY_REFERENCE_CASES
+from test.harness.obj_penalty_reference import (
+    PYBOY_OBJ_PENALTY_ALIGNMENT_CASES,
+    PYBOY_OBJ_PENALTY_REFERENCE_CASES,
+)
 
 DMG_ACID2_ROM = ROOT / "bench" / "external" / "dmg-acid2" / "dmg-acid2.gb"
 DMG_ACID2_EXPECTED = ROOT / "bench" / "expected" / "suite_owned" / "dmg-acid2" / "reference-dmg.png"
@@ -317,6 +320,18 @@ class PyBoyOracleTest(unittest.TestCase):
                     tile_id = semantics.bg_tilemap.tile_id(case.expected_tile_x, case.expected_tile_y)
 
                 self.assertEqual(tile_id, case.expected_tile_id)
+
+    def test_obj_penalty_alignment_fixture_covers_scx_zero_offsets(self) -> None:
+        cases_by_x = {case.obj_x: case for case in PYBOY_OBJ_PENALTY_ALIGNMENT_CASES if case.scx == 0}
+        self.assertEqual(set(cases_by_x), {0, 8, 9, 10, 11, 12, 13, 14, 15})
+        self.assertEqual(cases_by_x[0].expected_total_penalty, 11)
+        self.assertEqual(cases_by_x[8].expected_align_penalty, 6)
+        self.assertEqual(cases_by_x[8].expected_total_penalty, 12)
+        self.assertEqual(cases_by_x[9].expected_total_penalty, 11)
+        self.assertEqual(cases_by_x[10].expected_total_penalty, 10)
+        self.assertEqual(cases_by_x[11].expected_total_penalty, 9)
+        self.assertEqual(cases_by_x[14].expected_total_penalty, 6)
+        self.assertEqual(cases_by_x[15].expected_total_penalty, 6)
 
     def test_resolve_checkpoint_pc_finds_wave_c_scene_ready_label(self) -> None:
         self.assertEqual(
