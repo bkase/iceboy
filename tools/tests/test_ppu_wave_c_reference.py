@@ -86,13 +86,13 @@ class PpuWaveCReferenceTest(unittest.TestCase):
 
     def test_obj_x_hidden_still_counts_scene_marks_hidden_and_visible_oam_entries(self) -> None:
         semantics, registers, _checkpoint = self.capture_scene("OBJ_X_HIDDEN_STILL_COUNTS")
-        self.assertEqual(registers["lcdc"], 0x91)
+        self.assertEqual(registers["lcdc"], 0x93)
         self.assertEqual((semantics.sprites[0].x, semantics.sprites[0].y), (-8, 40))
         self.assertFalse(semantics.sprites[0].on_screen)
         self.assertEqual((semantics.sprites[1].x, semantics.sprites[1].y), (160, 40))
         self.assertFalse(semantics.sprites[1].on_screen)
-        visible = semantics.sprites[2:11]
-        self.assertEqual([sprite.x for sprite in visible], [8, 16, 24, 32, 40, 48, 56, 64, 72])
+        visible = semantics.sprites[2:12]
+        self.assertEqual([sprite.x for sprite in visible], [8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
         self.assertTrue(all(sprite.on_screen for sprite in visible))
 
 

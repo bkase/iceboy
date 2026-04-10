@@ -717,11 +717,17 @@ fn start_live_obj_fetch(render: PpuRenderState, mem_resp: PpuMemResp) -> PpuRend
         Option::Some(ticket) => ticket,
         Option::None => zero_selected_obj_ticket(),
     };
+    let extra_hidden_left_stall =
+        if ticket.x == 0u8 {
+            1u5
+        } else {
+            0u5
+        };
     record_transfer_event(
         PpuRenderState$(
         dot_in_line: render.dot_in_line,
         x_out: render.x_out,
-        stall_dots: render.stall_dots,
+        stall_dots: add_stall_dots(render.stall_dots, extra_hidden_left_stall),
         transfer_event_count: render.transfer_event_count,
         transfer_event_hash: render.transfer_event_hash,
         transfer_window_restart_count: render.transfer_window_restart_count,

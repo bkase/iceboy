@@ -45,7 +45,7 @@ Entry:
 
     ; Visible sprites that would be candidates on the same line
     ld hl, $FE08
-    ld b, 9
+    ld b, 10
     ld c, 16
 .seed_visible:
     ld a, 56
@@ -61,6 +61,10 @@ Entry:
     ld c, a
     dec b
     jr nz, .seed_visible
+
+    ld a, LCDC_OBJ_9800_8000_ON
+    ld [rLCDC], a
+    call WaitForFrameStartVisible
 
 __checkpoint_scene_ready:
     ld a, 1
@@ -83,6 +87,15 @@ WaitForVBlank:
     ld a, [rLY]
     cp 144
     jr c, WaitForVBlank
+    ret
+
+WaitForFrameStartVisible:
+    ld a, [rLY]
+    cp 144
+    jr nc, WaitForFrameStartVisible
+    ld a, [rLY]
+    and a
+    jr nz, WaitForFrameStartVisible
     ret
 
 __fail:

@@ -35,6 +35,7 @@ from test.harness.obj_penalty_reference import (
 DMG_ACID2_ROM = ROOT / "bench" / "external" / "dmg-acid2" / "dmg-acid2.gb"
 DMG_ACID2_EXPECTED = ROOT / "bench" / "expected" / "suite_owned" / "dmg-acid2" / "reference-dmg.png"
 OBJ_BASIC_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_BASIC.gb"
+OBJ_X_HIDDEN_STILL_COUNTS_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_X_HIDDEN_STILL_COUNTS.gb"
 CHECKER_BALL_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL.gb"
 CHECKER_BALL_CANCEL_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL_CANCEL.gb"
 CHECKER_BALL_CANCEL_OVERLAP_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL_CANCEL_OVERLAP.gb"
@@ -213,6 +214,17 @@ class PyBoyOracleTest(unittest.TestCase):
         self.assertEqual(actual[(41 * 160) + 136], 0x00)
         self.assertEqual(actual[(41 * 160) + 144], 0xFF)
         self.assertEqual(actual[(41 * 160) + 152], 0x00)
+
+    def test_checkpoint_frame_capture_shows_hidden_x_entries_consuming_oam_slots(self) -> None:
+        actual = capture_checkpoint_frame_dmg_shades(
+            OBJ_X_HIDDEN_STILL_COUNTS_ROM,
+            sym_path=OBJ_X_HIDDEN_STILL_COUNTS_ROM.with_suffix(".sym"),
+        )
+        line = 40
+        for x in (8, 16, 24, 32, 40, 48, 56, 64):
+            self.assertEqual(actual[(line * 160) + x], 0x00, x)
+        for x in (72, 80):
+            self.assertEqual(actual[(line * 160) + x], 0xFF, x)
 
     def test_checkpoint_frame_capture_tracks_checker_ball_motion(self) -> None:
         frame1 = capture_checkpoint_frame_dmg_shades(

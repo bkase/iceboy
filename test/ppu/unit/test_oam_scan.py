@@ -171,6 +171,56 @@ async def test_oam_scan_respects_8x16_height_and_ten_object_cap(dut):
 
 
 @cocotb.test()
+async def test_x_hidden_sprites_still_count_toward_ten_limit(dut):
+    logger = case_logger("test_x_hidden_sprites_still_count_toward_ten_limit")
+
+    xs = [0x00, 0xA8, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x58]
+    found = 0
+    count = 0
+    selected_ids: list[int] = []
+    selected_ranks: list[int] = []
+
+    for scan_index, obj_x in enumerate(xs):
+        snapshot = await sample(
+            dut,
+            ly=0x18,
+            obj_y=0x28,
+            obj_x=obj_x,
+            obj_size_8x16=False,
+            scan_index=scan_index,
+            found=found,
+            count=count,
+        )
+        should_select = scan_index < 10
+        require(
+            logger,
+            snapshot,
+            expected={
+                "overlap": True,
+                "selected": should_select,
+                "next_found": min(scan_index + 1, 10),
+                "next_count": min(scan_index + 1, 10),
+            },
+        )
+        if should_select:
+            selected_ids.append(int(snapshot["ticket_oam_index"]))
+            selected_ranks.append(int(snapshot["ticket_rank"]))
+            require(
+                logger,
+                snapshot,
+                expected={
+                    "ticket_oam_index": scan_index,
+                    "ticket_rank": scan_index,
+                },
+            )
+        found = int(snapshot["next_found"])
+        count = int(snapshot["next_count"])
+
+    assert selected_ids == list(range(10)), selected_ids
+    assert selected_ranks == list(range(10)), selected_ranks
+
+
+@cocotb.test()
 async def test_oam_scan_rejects_non_overlapping_entries_and_stops_at_done(dut):
     logger = case_logger("test_oam_scan_rejects_non_overlapping_entries_and_stops_at_done")
 

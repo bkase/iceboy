@@ -204,6 +204,16 @@ async def run_steps(dut, count: int) -> list[dict[str, int | bool]]:
     return [await step(dut) for _ in range(count)]
 
 
+async def run_until_hblank(dut, *, max_steps: int = 320) -> list[dict[str, int | bool]]:
+    snapshots: list[dict[str, int | bool]] = []
+    for _ in range(max_steps):
+        snapshot = await step(dut)
+        snapshots.append(snapshot)
+        if snapshot["phase"] == PHASE_HBLANK:
+            return snapshots
+    raise AssertionError(f"did not reach HBlank within {max_steps} steps: last={snapshots[-1] if snapshots else None}")
+
+
 async def step_with_lcdc_write(dut, value: int) -> dict[str, int | bool]:
     return await step(dut, write_valid=True, write_target=0, write_value=value)
 
@@ -338,6 +348,57 @@ async def test_single_object_fetch_imposes_visible_transfer_penalty_before_x_adv
     assert any(s["fetcher_step"] == FETCHER_PUSH for s in snapshots), snapshots
     assert any(s["obj_fifo_count"] > 0 for s in snapshots), snapshots
     assert any(s["x_out"] > 1 for s in snapshots[8:]), snapshots
+
+
+@cocotb.test()
+async def test_x_hidden_right_object_never_starts_fetch_or_adds_penalty(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=1,
+        ticket0_x=168,
+        start_x_out=0,
+        start_dot_in_line=79,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+    )
+
+    snapshots = await run_until_hblank(dut)
+
+    assert all(s["fetcher_source"] != FETCHER_OBJ for s in snapshots), snapshots
+    assert max(int(s["transfer_obj_fetch_count"]) for s in snapshots) == 0, snapshots
+
+
+@cocotb.test()
+async def test_x_zero_special_case_adds_eleven_dots_while_x_hidden_right_still_counts_slot(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=1,
+        ticket0_x=168,
+        start_x_out=0,
+        start_dot_in_line=79,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+    )
+    hidden_right_only = await run_until_hblank(dut)
+
+    await reset_dut(
+        dut,
+        line_obj_count=2,
+        ticket0_x=0,
+        ticket1_x=168,
+        start_x_out=0,
+        start_dot_in_line=79,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+    )
+    x_zero_plus_hidden_right = await run_until_hblank(dut)
+
+    assert max(int(s["transfer_obj_fetch_count"]) for s in x_zero_plus_hidden_right) == 1, x_zero_plus_hidden_right
+    assert len(x_zero_plus_hidden_right) == len(hidden_right_only) + 11, (
+        len(hidden_right_only),
+        len(x_zero_plus_hidden_right),
+        x_zero_plus_hidden_right[-1],
+    )
 
 
 @cocotb.test()
