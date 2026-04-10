@@ -142,6 +142,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     ),
     SuiteDefinition("meta", "test_build_profiles.py", "python", "tools.tests.test_build_profiles"),
     SuiteDefinition("meta", "test_compare_shaded_frame.py", "python", "tools.tests.test_compare_shaded_frame"),
+    SuiteDefinition("meta", "test_compare_row_loop_timing.py", "python", "tools.tests.test_compare_row_loop_timing"),
     SuiteDefinition("meta", "test_rom_trace_summary.py", "python", "tools.tests.test_rom_trace_summary"),
     SuiteDefinition(
         "meta",

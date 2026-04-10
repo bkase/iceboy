@@ -1,0 +1,82 @@
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from dataclasses import asdict
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from bench.pyboy.oracle import CommitPoint, capture_checkpoint_hook_timings
+from tools.rom_trace_summary import summarize_rom_trace
+
+
+def compare_row_loop_timing(
+    *,
+    rom_path: Path,
+    sym_path: Path,
+    trace_path: Path,
+    line: int,
+    labels: tuple[str, ...],
+    write_pc: int,
+    checkpoint_label: str = "__checkpoint_scene_ready",
+    settle_rendered_frames: int = 2,
+) -> dict[str, object]:
+    pyboy_hook_points = tuple(
+        [CommitPoint(bank=None, addr=label) for label in labels] + [CommitPoint(bank=0, addr=write_pc, label="WriteObjOff")]
+    )
+    pyboy = capture_checkpoint_hook_timings(
+        rom_path,
+        sym_path=sym_path,
+        hook_points=pyboy_hook_points,
+        checkpoint_label=checkpoint_label,
+        settle_rendered_frames=settle_rendered_frames,
+        target_line=line,
+    )
+    native = summarize_rom_trace(trace_path, sym_path, line=line, labels=labels)
+    return {
+        "rom_path": str(rom_path),
+        "sym_path": str(sym_path),
+        "trace_path": str(trace_path),
+        "line": line,
+        "checkpoint_label": checkpoint_label,
+        "settle_rendered_frames": settle_rendered_frames,
+        "labels": list(labels),
+        "write_pc": f"0x{write_pc:04x}",
+        "pyboy": [asdict(capture) for capture in pyboy],
+        "native": native,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--rom", required=True, type=Path)
+    parser.add_argument("--sym", required=True, type=Path)
+    parser.add_argument("--trace", required=True, type=Path)
+    parser.add_argument("--line", required=True, type=int)
+    parser.add_argument("--label", action="append", default=[])
+    parser.add_argument("--write-pc", required=True, type=lambda value: int(value, 0))
+    parser.add_argument("--checkpoint-label", default="__checkpoint_scene_ready")
+    parser.add_argument("--settle-rendered-frames", type=int, default=2)
+    args = parser.parse_args()
+
+    summary = compare_row_loop_timing(
+        rom_path=args.rom,
+        sym_path=args.sym,
+        trace_path=args.trace,
+        line=args.line,
+        labels=tuple(args.label),
+        write_pc=args.write_pc,
+        checkpoint_label=args.checkpoint_label,
+        settle_rendered_frames=args.settle_rendered_frames,
+    )
+    json.dump(summary, sys.stdout, indent=2, sort_keys=True)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
