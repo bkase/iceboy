@@ -231,9 +231,13 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
         self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
         self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("rom ids: CHECKER_BALL CHECKER_BALL_CANCEL", completed.stdout)
         self.assertIn("rom id: CHECKER_BALL", completed.stdout)
+        self.assertIn("rom id: CHECKER_BALL_CANCEL", completed.stdout)
         self.assertIn("expected settles: 1 2 3", completed.stdout)
+        self.assertIn("expected settles: 1", completed.stdout)
         self.assertIn("checkpoint completed frames: 3 4 5", completed.stdout)
+        self.assertIn("checkpoint completed frames: 2", completed.stdout)
         self.assertIn("--settle-rendered-frames=1", completed.stdout)
         self.assertIn("--checkpoint-completed-frames=5", completed.stdout)
         self.assertIn("--max-mcycles=160000", completed.stdout)
@@ -307,6 +311,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_X_HIDDEN_STILL_COUNTS.asm").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_FETCH_CANCEL_LCDC1.asm").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL.asm").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL_CANCEL.asm").exists())
 
     def test_ppu_wave_c_live_suite_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
@@ -325,6 +330,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"tools/run_ppu_checker_ball_verilator.sh"', hook_text)
         self.assertTrue((TOOLS / "run_ppu_checker_ball_verilator.sh").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL.asm").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL_CANCEL.asm").exists())
 
     def test_obj_observe_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")

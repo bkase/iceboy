@@ -128,6 +128,7 @@ class RunTestsTest(unittest.TestCase):
     def test_ppu_checker_ball_native_runner_sources_exist(self) -> None:
         self.assertTrue((ROOT / "tools" / "run_ppu_checker_ball_verilator.sh").is_file())
         self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL.asm").is_file())
+        self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL_CANCEL.asm").is_file())
         self.assertTrue((ROOT / "tools" / "write_checkpoint_shaded_frame.py").is_file())
 
     def test_power_tier_includes_ppu_quiescence_suite(self) -> None:
