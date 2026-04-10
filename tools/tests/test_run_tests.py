@@ -64,7 +64,7 @@ class RunTestsTest(unittest.TestCase):
     def test_coverage_lines_report_implemented_tiers(self) -> None:
         lines = coverage_lines(selected_tiers(["meta", "unit", "formal", "lockstep"]), nightly=False)
         self.assertEqual(lines[0], "Implemented tiers: 4/4")
-        self.assertIn("Meta/Infrastructure: 38 suite(s)", lines)
+        self.assertIn("Meta/Infrastructure: 39 suite(s)", lines)
         self.assertIn("Unit Tests: 60 suite(s)", lines)
         self.assertIn("Formal Verification: 7 suite(s)", lines)
         self.assertIn("Lockstep: 4 suite(s)", lines)
@@ -118,6 +118,7 @@ class RunTestsTest(unittest.TestCase):
     def test_dmg_acid2_native_runner_sources_exist(self) -> None:
         self.assertTrue((ROOT / "tools" / "verilator" / "dmg_acid2_main.cpp").is_file())
         self.assertTrue((ROOT / "tools" / "compare_shaded_frame.py").is_file())
+        self.assertTrue((ROOT / "tools" / "rom_trace_summary.py").is_file())
         self.assertTrue((ROOT / "test" / "harness" / "verilog" / "soc_rom_top_verilator_wrapper.sv").is_file())
 
     def test_ppu_wave_c_native_runner_sources_exist(self) -> None:
