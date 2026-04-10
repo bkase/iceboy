@@ -121,6 +121,8 @@ struct Config {
     uint64_t progress_interval = 0;
     uint64_t stable_frames = 2;
     uint64_t completed_frames = 0;
+    uint64_t checkpoint_pc = 0;
+    uint64_t checkpoint_completed_frames = 0;
 };
 
 bool dump_mem_debug_enabled() {
@@ -261,6 +263,7 @@ struct StepResult {
     uint8_t preview_kind = 0;
     uint16_t preview_addr = 0;
     uint8_t preview_data = 0;
+    uint8_t supplied_bus_read_data = 0;
     bool video_sample_valid = false;
     Observation video_sample;
     bool write_allowed_valid = false;
@@ -299,6 +302,10 @@ Config parse_args(int argc, char** argv) {
             cfg.stable_frames = std::stoull(arg.substr(sizeof("--stable-frames=") - 1));
         } else if (arg.rfind("--completed-frames=", 0) == 0) {
             cfg.completed_frames = std::stoull(arg.substr(sizeof("--completed-frames=") - 1));
+        } else if (arg.rfind("--checkpoint-pc=", 0) == 0) {
+            cfg.checkpoint_pc = std::stoull(arg.substr(sizeof("--checkpoint-pc=") - 1), nullptr, 0);
+        } else if (arg.rfind("--checkpoint-completed-frames=", 0) == 0) {
+            cfg.checkpoint_completed_frames = std::stoull(arg.substr(sizeof("--checkpoint-completed-frames=") - 1));
         }
     }
     return cfg;
@@ -962,6 +969,7 @@ StepResult step_to_commit(Vsoc_rom_top_verilator_wrapper& top, BusModel& memory)
             result.video_sample_valid = true;
             result.video_sample = choose_video_sample(obs_t0, mid_observation, result.preview_kind, result.preview_addr);
         }
+        result.supplied_bus_read_data = bus_read_data;
         return bus_read_data;
     };
 
@@ -1007,7 +1015,7 @@ void capture_shade_pixel(std::array<uint8_t, SCREEN_WIDTH * SCREEN_HEIGHT>& fram
     }
 }
 
-void write_trace_line(std::ofstream& trace, uint64_t cycle, const Observation& observation) {
+void write_trace_line(std::ofstream& trace, uint64_t cycle, const Observation& observation, uint8_t supplied_bus_read_data) {
     if (!trace.is_open()) {
         return;
     }
@@ -1033,7 +1041,14 @@ void write_trace_line(std::ofstream& trace, uint64_t cycle, const Observation& o
           << "\"scanout_x\":" << static_cast<int>(observation.ppu_scanout_x) << ","
           << "\"scanout_y\":" << static_cast<int>(observation.ppu_scanout_y) << ","
           << "\"scanout_source\":" << static_cast<int>(observation.ppu_scanout_source) << ","
-          << "\"scanout_shade\":" << static_cast<int>(observation.ppu_scanout_shade)
+          << "\"scanout_shade\":" << static_cast<int>(observation.ppu_scanout_shade) << ","
+          << "\"bus_req_kind\":" << static_cast<int>(observation.bus_req_kind) << ","
+          << "\"bus_req_addr\":" << static_cast<int>(observation.bus_req_addr) << ","
+          << "\"bus_req_data\":" << static_cast<int>(observation.bus_req_data) << ","
+          << "\"preview_bus_req_kind\":" << static_cast<int>(observation.preview_bus_req_kind) << ","
+          << "\"preview_bus_req_addr\":" << static_cast<int>(observation.preview_bus_req_addr) << ","
+          << "\"preview_bus_req_data\":" << static_cast<int>(observation.preview_bus_req_data) << ","
+          << "\"supplied_bus_read_data\":" << static_cast<int>(supplied_bus_read_data)
           << "}\n";
 }
 
@@ -1064,6 +1079,8 @@ int main(int argc, char** argv) {
     uint64_t stable_completed_frames = 0;
     bool seen_frame_start = false;
     bool frame_start_active = false;
+    bool checkpoint_seen = false;
+    uint64_t completed_frames_after_checkpoint = 0;
     uint64_t completed_mcycles = 0;
     uint64_t completed_frames = 0;
     Observation last_post{};
@@ -1081,6 +1098,10 @@ int main(int argc, char** argv) {
         StepResult step = step_to_commit(top, memory);
         ++completed_mcycles;
         last_post = step.post;
+        if (!checkpoint_seen && cfg.checkpoint_pc != 0 && step.post.pc == cfg.checkpoint_pc) {
+            checkpoint_seen = true;
+            completed_frames_after_checkpoint = 0;
+        }
 
         const bool write_en = step.post.bus_req_kind == BUS_REQ_WRITE;
         const uint16_t write_addr = write_en ? step.post.bus_req_addr : 0;
@@ -1114,7 +1135,7 @@ int main(int argc, char** argv) {
         );
 
         for (const Observation& observation : step.scanout_observations) {
-            write_trace_line(trace, completed_mcycles, observation);
+            write_trace_line(trace, completed_mcycles, observation, step.supplied_bus_read_data);
             if (!debug_final_ly_targets.empty() &&
                 cfg.completed_frames != 0 &&
                 completed_frames + 1 == cfg.completed_frames &&
@@ -1135,7 +1156,42 @@ int main(int argc, char** argv) {
             if (observation.ppu_scanout_kind == 2) {
                 if (!frame_start_active && seen_frame_start) {
                     ++completed_frames;
-                    if (cfg.completed_frames != 0 && completed_frames >= cfg.completed_frames) {
+                    if (checkpoint_seen) {
+                        ++completed_frames_after_checkpoint;
+                    }
+                    if (cfg.checkpoint_pc != 0 &&
+                        cfg.checkpoint_completed_frames != 0 &&
+                        checkpoint_seen &&
+                        completed_frames_after_checkpoint >= cfg.checkpoint_completed_frames) {
+                        const auto regs = memory.ppu_debug_regs();
+                        std::ofstream raw_out(cfg.frame_capture_path, std::ios::binary | std::ios::trunc);
+                        raw_out.write(reinterpret_cast<const char*>(current_frame.data()), current_frame.size());
+                        raw_out.close();
+                        std::cout << "dmg-acid2 checkpoint frame captured"
+                                  << " mcycles=" << completed_mcycles
+                                  << " checkpoint_pc=0x" << std::hex << cfg.checkpoint_pc
+                                  << " completed_after_checkpoint=" << std::dec << completed_frames_after_checkpoint
+                                  << " completed_frames=" << completed_frames
+                                  << " last_pc=0x" << std::hex << step.post.pc << std::dec
+                                  << " lcdc=0x" << std::hex << static_cast<int>(regs[0])
+                                  << " stat=0x" << static_cast<int>(regs[1])
+                                  << " scy=0x" << static_cast<int>(regs[2])
+                                  << " scx=0x" << static_cast<int>(regs[3])
+                                  << " ly=0x" << static_cast<int>(regs[4])
+                                  << " lyc=0x" << static_cast<int>(regs[5])
+                                  << " bgp=0x" << static_cast<int>(regs[6])
+                                  << " obp0=0x" << static_cast<int>(regs[7])
+                                  << " obp1=0x" << static_cast<int>(regs[8])
+                                  << " wy=0x" << static_cast<int>(regs[9])
+                                  << " wx=0x" << static_cast<int>(regs[10])
+                                  << std::dec
+                                  << "\n";
+                        if (dump_mem_debug_enabled()) {
+                            dump_mem_debug(top);
+                        }
+                        return 0;
+                    }
+                    if (cfg.checkpoint_pc == 0 && cfg.completed_frames != 0 && completed_frames >= cfg.completed_frames) {
                         const auto regs = memory.ppu_debug_regs();
                         std::ofstream raw_out(cfg.frame_capture_path, std::ios::binary | std::ios::trunc);
                         raw_out.write(reinterpret_cast<const char*>(current_frame.data()), current_frame.size());
@@ -1169,7 +1225,7 @@ int main(int argc, char** argv) {
                         have_last_completed_frame = true;
                         stable_completed_frames = 1;
                     }
-                    if (cfg.completed_frames == 0 && stable_completed_frames >= cfg.stable_frames) {
+                    if (cfg.checkpoint_pc == 0 && cfg.completed_frames == 0 && stable_completed_frames >= cfg.stable_frames) {
                         std::ofstream raw_out(cfg.frame_capture_path, std::ios::binary | std::ios::trunc);
                         raw_out.write(reinterpret_cast<const char*>(current_frame.data()), current_frame.size());
                         raw_out.close();
