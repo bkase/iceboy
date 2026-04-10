@@ -46,6 +46,9 @@ MAX_MCYCLES="${ICEBOY_PPU_CHECKER_BALL_MAX_MCYCLES:-160000}"
 PROGRESS_INTERVAL="${ICEBOY_PPU_CHECKER_BALL_PROGRESS_INTERVAL:-0}"
 
 ROM_IDS=(CHECKER_BALL CHECKER_BALL_CANCEL)
+if [[ "${ICEBOY_PPU_CHECKER_BALL_INCLUDE_RED:-0}" == "1" ]]; then
+    ROM_IDS+=(CHECKER_BALL_CANCEL_OVERLAP)
+fi
 
 settles_for_rom() {
     case "$1" in
@@ -53,6 +56,9 @@ settles_for_rom() {
             echo "1 2 3"
             ;;
         CHECKER_BALL_CANCEL)
+            echo "1"
+            ;;
+        CHECKER_BALL_CANCEL_OVERLAP)
             echo "1"
             ;;
         *)
@@ -67,6 +73,9 @@ checkpoint_frames_for_rom() {
             echo "3 4 5"
             ;;
         CHECKER_BALL_CANCEL)
+            echo "2"
+            ;;
+        CHECKER_BALL_CANCEL_OVERLAP)
             echo "2"
             ;;
         *)

@@ -31,6 +31,7 @@ DMG_ACID2_EXPECTED = ROOT / "bench" / "expected" / "suite_owned" / "dmg-acid2" /
 OBJ_BASIC_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_BASIC.gb"
 CHECKER_BALL_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL.gb"
 CHECKER_BALL_CANCEL_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL_CANCEL.gb"
+CHECKER_BALL_CANCEL_OVERLAP_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL_CANCEL_OVERLAP.gb"
 OBJ_FETCH_CANCEL_LCDC1_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_FETCH_CANCEL_LCDC1.gb"
 
 
@@ -236,6 +237,15 @@ class PyBoyOracleTest(unittest.TestCase):
         )
         self.assertEqual(actual[(27 * 160) + 27], 0x00)
         self.assertEqual(actual[(43 * 160) + 99], 0x00)
+
+    def test_checkpoint_frame_capture_matches_checker_ball_cancel_overlap_scene(self) -> None:
+        actual = capture_checkpoint_frame_dmg_shades(
+            CHECKER_BALL_CANCEL_OVERLAP_ROM,
+            sym_path=CHECKER_BALL_CANCEL_OVERLAP_ROM.with_suffix(".sym"),
+        )
+        self.assertEqual(actual[(27 * 160) + 27], 0x00)
+        self.assertEqual(actual[(80 * 160) + 97], 0xFF)
+        self.assertEqual(actual[(80 * 160) + 104], 0xFF)
 
     def test_resolve_checkpoint_pc_finds_wave_c_scene_ready_label(self) -> None:
         self.assertEqual(

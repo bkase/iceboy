@@ -243,6 +243,21 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("--max-mcycles=160000", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
+    def test_ppu_checker_ball_verilator_wrapper_can_include_overlap_reducer(self) -> None:
+        env = dict(self.env)
+        env["ICEBOY_PPU_CHECKER_BALL_INCLUDE_RED"] = "1"
+        completed = subprocess.run(
+            [str(TOOLS / "run_ppu_checker_ball_verilator.sh"), "--dry-run", "--skip-build"],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("rom ids: CHECKER_BALL CHECKER_BALL_CANCEL CHECKER_BALL_CANCEL_OVERLAP", completed.stdout)
+        self.assertIn("rom id: CHECKER_BALL_CANCEL_OVERLAP", completed.stdout)
+        self.assertIn("checkpoint completed frames: 2", completed.stdout)
+
     def test_spram_synth_smoke_dry_run_targets_named_test_top(self) -> None:
         completed = self.run_script("run_spram_synth_smoke.sh", "--dry-run", "--skip-build")
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -312,6 +327,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_FETCH_CANCEL_LCDC1.asm").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL.asm").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL_CANCEL.asm").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL_CANCEL_OVERLAP.asm").exists())
 
     def test_ppu_wave_c_live_suite_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
@@ -331,6 +347,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((TOOLS / "run_ppu_checker_ball_verilator.sh").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL.asm").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL_CANCEL.asm").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL_CANCEL_OVERLAP.asm").exists())
 
     def test_obj_observe_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
