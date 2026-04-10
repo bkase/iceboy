@@ -200,6 +200,21 @@ class FrameSemanticCapture:
     line_scroll: tuple[LineScrollCapture, ...]
 
 
+@dataclass(frozen=True)
+class HookTimingCapture:
+    seq: int
+    frame: int
+    label: str
+    pc: int
+    ly: int
+    stat: int
+    lcdc: int
+    scx: int
+    scy: int
+    wx: int
+    wy: int
+
+
 class VideoOracle(Protocol):
     def reset(
         self,
@@ -346,6 +361,58 @@ def capture_checkpoint_frame_dmg_shades(
         if settle_rendered_frames > 0:
             oracle._require_pyboy().tick(int(settle_rendered_frames), True, False)
         return oracle.shade_buffer()
+
+
+def capture_checkpoint_hook_timings(
+    rom_path: str | Path,
+    *,
+    sym_path: str | Path,
+    hook_points: Sequence[CommitPoint],
+    checkpoint_label: str = "__checkpoint_scene_ready",
+    settle_rendered_frames: int = 2,
+    target_line: int | None = None,
+) -> tuple[HookTimingCapture, ...]:
+    captures: list[HookTimingCapture] = []
+    current_frame = {"value": 0}
+
+    with PyBoyOracle(
+        rom_path,
+        sym_path=sym_path,
+        commit_points=(CommitPoint(bank=None, addr=checkpoint_label),),
+    ) as oracle:
+        def capture(resolved: _ResolvedCommitPoint) -> None:
+            pyboy = oracle._require_pyboy()
+            registers = RegisterState.from_pyboy(pyboy)
+            ly = int(pyboy.memory[0xFF44]) & 0xFF
+            if target_line is not None and ly != target_line:
+                return
+            captures.append(
+                HookTimingCapture(
+                    seq=len(captures),
+                    frame=current_frame["value"],
+                    label=resolved.label,
+                    pc=registers.pc,
+                    ly=ly,
+                    stat=int(pyboy.memory[0xFF41]) & 0xFF,
+                    lcdc=int(pyboy.memory[0xFF40]) & 0xFF,
+                    scx=int(pyboy.memory[0xFF43]) & 0xFF,
+                    scy=int(pyboy.memory[0xFF42]) & 0xFF,
+                    wx=int(pyboy.memory[0xFF4B]) & 0xFF,
+                    wy=int(pyboy.memory[0xFF4A]) & 0xFF,
+                )
+            )
+
+        for point in hook_points:
+            oracle.register_runtime_hook(bank=point.bank, addr=point.addr, callback=capture, label=point.label)
+
+        oracle.reset(ModelProfile.DMG, ResetProfile.SkipBoot)
+        oracle.step_commit()
+        pyboy = oracle._require_pyboy()
+        for frame in range(int(settle_rendered_frames)):
+            current_frame["value"] = frame + 1
+            pyboy.tick(1, True, False)
+
+    return tuple(captures)
 
 
 def _is_executable_rom(bank: int, addr: int) -> bool:

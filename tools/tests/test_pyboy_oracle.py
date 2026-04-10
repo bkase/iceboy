@@ -10,6 +10,7 @@ from bench.actions.generators import IeOverrideEvent, IfClearBitsEvent, IfSetBit
 from bench.pyboy.oracle import (
     CommitPoint,
     PyBoyOracle,
+    capture_checkpoint_hook_timings,
     _normalize_rgba_to_dmg_shades,
     capture_checkpoint_frame_dmg_shades,
     capture_rendered_frame_dmg_shades,
@@ -246,6 +247,36 @@ class PyBoyOracleTest(unittest.TestCase):
         self.assertEqual(actual[(27 * 160) + 27], 0x00)
         self.assertEqual(actual[(80 * 160) + 97], 0xFF)
         self.assertEqual(actual[(80 * 160) + 104], 0xFF)
+
+    def test_capture_checkpoint_hook_timings_tracks_overlap_row_loop_order(self) -> None:
+        captures = capture_checkpoint_hook_timings(
+            CHECKER_BALL_CANCEL_OVERLAP_ROM,
+            sym_path=CHECKER_BALL_CANCEL_OVERLAP_ROM.with_suffix(".sym"),
+            hook_points=(
+                CommitPoint(bank=None, addr="WaitForMode3"),
+                CommitPoint(bank=None, addr="DelayCancel"),
+                CommitPoint(bank=0, addr=0x01D5, label="WriteObjOff"),
+            ),
+            settle_rendered_frames=2,
+            target_line=80,
+        )
+        labels = [capture.label for capture in captures]
+        self.assertIn("WaitForMode3", labels)
+        self.assertIn("DelayCancel", labels)
+        self.assertIn("WriteObjOff", labels)
+
+        wait = next(capture for capture in captures if capture.label == "WaitForMode3")
+        delay = next(capture for capture in captures if capture.label == "DelayCancel")
+        write = next(capture for capture in captures if capture.label == "WriteObjOff")
+        self.assertEqual(wait.frame, 1)
+        self.assertEqual(delay.frame, 1)
+        self.assertEqual(write.frame, 1)
+        self.assertEqual(wait.ly, 80)
+        self.assertEqual(delay.ly, 80)
+        self.assertEqual(write.ly, 80)
+        self.assertLess(wait.seq, delay.seq)
+        self.assertLess(delay.seq, write.seq)
+        self.assertEqual(write.pc, 0x01D5)
 
     def test_resolve_checkpoint_pc_finds_wave_c_scene_ready_label(self) -> None:
         self.assertEqual(
