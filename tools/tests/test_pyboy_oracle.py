@@ -37,6 +37,7 @@ DMG_ACID2_EXPECTED = ROOT / "bench" / "expected" / "suite_owned" / "dmg-acid2" /
 OBJ_BASIC_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_BASIC.gb"
 OBJ_X_HIDDEN_STILL_COUNTS_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_X_HIDDEN_STILL_COUNTS.gb"
 OAM_DMA_ISOLATION_ROM = ROOT / "bench" / "roms" / "out" / "OAM_DMA_ISOLATION.gb"
+DMA_MODE2_HIDE_ROM = ROOT / "bench" / "roms" / "out" / "DMA_MODE2_HIDE.gb"
 CHECKER_BALL_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL.gb"
 CHECKER_BALL_CANCEL_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL_CANCEL.gb"
 CHECKER_BALL_CANCEL_OVERLAP_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL_CANCEL_OVERLAP.gb"
@@ -236,6 +237,17 @@ class PyBoyOracleTest(unittest.TestCase):
 
         self.assertEqual(labels, ("__fail",))
         self.assertEqual(abi.log, bytes.fromhex("0200ffe41b02"))
+
+    def test_dma_mode2_hide_frame_shows_missing_top_sprite_rows(self) -> None:
+        actual = capture_checkpoint_frame_dmg_shades(
+            DMA_MODE2_HIDE_ROM,
+            sym_path=DMA_MODE2_HIDE_ROM.with_suffix(".sym"),
+            settle_rendered_frames=1,
+        )
+        self.assertEqual(actual[(0 * 160) + 40], 0xFF)
+        self.assertEqual(actual[(1 * 160) + 40], 0xFF)
+        self.assertEqual(actual[(2 * 160) + 40], 0xFF)
+        self.assertEqual(actual[(7 * 160) + 40], 0xFF)
 
     def test_checkpoint_frame_capture_tracks_checker_ball_motion(self) -> None:
         frame1 = capture_checkpoint_frame_dmg_shades(

@@ -87,6 +87,7 @@ class RunTestsTest(unittest.TestCase):
     def test_rom_tier_includes_wave_a_ppu_rom_and_mooneye_suites(self) -> None:
         rom_labels = [suite.label for suite in suites_for_tier("rom", nightly=False)]
         self.assertIn("test_cpu_instrs_blargg.py", rom_labels)
+        self.assertIn("test_dma_mode2_hide.py", rom_labels)
         self.assertIn("test_ppu_wave_a.py", rom_labels)
         self.assertIn("test_ppu_wave_a_mooneye.py", rom_labels)
         self.assertIn("test_ppu_wave_b.py", rom_labels)
@@ -101,6 +102,9 @@ class RunTestsTest(unittest.TestCase):
         wave_c_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_ppu_wave_c.py")
         self.assertEqual(wave_c_suite.runner, "shell")
         self.assertEqual(wave_c_suite.target, "tools/run_ppu_wave_c_verilator.sh")
+        dma_mode2_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_dma_mode2_hide.py")
+        self.assertEqual(dma_mode2_suite.runner, "shell")
+        self.assertEqual(dma_mode2_suite.target, "tools/run_dma_mode2_hide_verilator.sh")
         checker_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_ppu_checker_ball.py")
         self.assertEqual(checker_suite.runner, "shell")
         self.assertEqual(checker_suite.target, "tools/run_ppu_checker_ball_verilator.sh")
@@ -132,6 +136,11 @@ class RunTestsTest(unittest.TestCase):
         self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL.asm").is_file())
         self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL_CANCEL.asm").is_file())
         self.assertTrue((ROOT / "tools" / "write_checkpoint_shaded_frame.py").is_file())
+
+    def test_dma_mode2_hide_native_runner_sources_exist(self) -> None:
+        self.assertTrue((ROOT / "tools" / "run_dma_mode2_hide_verilator.sh").is_file())
+        self.assertTrue((ROOT / "bench" / "roms" / "DMA_MODE2_HIDE.asm").is_file())
+        self.assertTrue((ROOT / "tools" / "run_ppu_wave_c_verilator.sh").is_file())
 
     def test_power_tier_includes_ppu_quiescence_suite(self) -> None:
         power_labels = [suite.label for suite in suites_for_tier("power", nightly=False)]

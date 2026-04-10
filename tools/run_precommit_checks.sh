@@ -54,6 +54,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/ppu/unit/test_transfer_penalty.py"
     "test/ppu/unit/test_obj_transfer_live.py"
     "tools/run_ppu_checker_ball_verilator.sh"
+    "tools/run_dma_mode2_hide_verilator.sh"
     "test/unit/test_interrupt_service.py"
     "test/unit/test_joypad.py"
     "test/unit/test_joypad_interrupts.py"

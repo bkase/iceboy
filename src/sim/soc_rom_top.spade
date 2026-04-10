@@ -7,7 +7,8 @@ use lib::bus::types::{BusReq, BusResp};
 use lib::cpu::core::cpu_core;
 use lib::cpu::types::{IrqPending, SimulationProfiles};
 use lib::ppu::rtl::core::ppu_core;
-use lib::ppu::sem::events::{VideoCoord, idle_oam_dma_state};
+use lib::periph::oam_dma::oam_dma;
+use lib::ppu::sem::events::{OamDmaState, VideoCoord};
 use lib::ppu::sem::memory::{MemRegion, PpuMemKind, PpuMemReq, PpuMemResp, PpuMemResult, idle_ppu_mem_req, idle_ppu_mem_resp};
 use lib::sim::encode::{encode_halt, encode_ime, encode_phase, encode_scanout_kind, scanout_blank_reason, scanout_shade, scanout_source, scanout_x, scanout_y};
 use lib::sim::ppu_support::{encode_ppu_mode, line_summary_or_empty, line_summary_valid, scanout_or_blank};
@@ -128,6 +129,14 @@ fn is_oam_addr(addr: uint<16>) -> bool {
     addr >= 0xfe00u16 && addr <= 0xfe9fu16
 }
 
+fn is_wram_addr(addr: uint<16>) -> bool {
+    addr >= 0xc000u16 && addr <= 0xdfffu16
+}
+
+fn is_hram_addr(addr: uint<16>) -> bool {
+    addr >= 0xff80u16 && addr <= 0xfffeu16
+}
+
 fn req_is_vram(req: PpuMemReq) -> bool {
     match req.tag.region {
         MemRegion::Vram => true,
@@ -181,6 +190,25 @@ entity soc_rom_top(
     decl cpu_req;
     decl mem_resp_now;
     let ppu_dot_ce = requested_peripheral_arch_time && tb.dot_ce;
+    let (dma_start_valid, dma_source_high) = match cpu_req {
+        lib::bus::types::BusReq::Write$(addr: addr, data: data) =>
+            if cpu_m_ce && addr == 0xff46u16 {
+                (true, data)
+            } else {
+                (false, 0u8)
+            },
+        _ => (false, 0u8),
+    };
+    let dma = inst oam_dma(clk, rst, cpu_m_ce, dma_start_valid, dma_source_high);
+    // DMA starts owning OAM on the FF46 write cycle; exposing only the registered
+    // state here leaves the PPU one CPU M-cycle late to mode-2 contention.
+    let dma_visible_active = dma.active || dma_start_valid;
+    let dma_visible_source_high =
+        if dma_start_valid {
+            dma_source_high
+        } else {
+            dma.source_high
+        };
     let (ppu_bus_events, ppu_bus_event_count) = inst ppu_event_bridge(
         clk,
         rst,
@@ -198,7 +226,7 @@ entity soc_rom_top(
         ppu_bus_events,
         ppu_bus_event_count,
         mem_resp_now,
-        idle_oam_dma_state(),
+        OamDmaState$(active: dma_visible_active, source_high: dma_visible_source_high),
     );
     reg(clk) ppu_vblank_req_accum: bool reset(rst: false) =
         if tb.m_ce { false } else { ppu_vblank_req_accum || ppu.irq_req.vblank_req };
@@ -217,8 +245,12 @@ entity soc_rom_top(
     let (if_write_seen, if_write_value_low2) = if_write_low2(cpu_req);
     let cpu_vram_write_en = cpu_m_ce && is_vram_addr(cpu.bus_req_addr) && cpu.bus_req_kind == 2u2;
     let cpu_oam_write_en = cpu_m_ce && is_oam_addr(cpu.bus_req_addr) && cpu.bus_req_kind == 2u2;
+    let cpu_wram_write_en = cpu_m_ce && is_wram_addr(cpu.bus_req_addr) && cpu.bus_req_kind == 2u2;
+    let cpu_hram_write_en = cpu_m_ce && is_hram_addr(cpu.bus_req_addr) && cpu.bus_req_kind == 2u2;
     let cpu_vram_write_addr: uint<13> = trunc(cpu.bus_req_addr - 0x8000u16);
     let cpu_oam_write_addr: uint<8> = trunc(cpu.bus_req_addr - 0xfe00u16);
+    let cpu_wram_write_addr: uint<13> = trunc(cpu.bus_req_addr - 0xc000u16);
+    let cpu_hram_write_addr: uint<7> = trunc(cpu.bus_req_addr - 0xff80u16);
     let next_pending_req = if ppu.mem_reqs.count != 0u3 { ppu.mem_reqs.slots[0] } else { idle_ppu_mem_req() };
     reg(clk) pending_req_reg: PpuMemReq reset(rst: idle_ppu_mem_req()) =
         if ppu_dot_ce { next_pending_req } else { pending_req_reg };
@@ -229,9 +261,37 @@ entity soc_rom_top(
         [(cpu_vram_write_en, cpu_vram_write_addr, cpu.bus_req_data)],
         [0u8; 8192],
     );
+    let wram_shadow = inst clocked_memory_init::<8192, 1, 13, uint<8>>(
+        clk,
+        [(cpu_wram_write_en, cpu_wram_write_addr, cpu.bus_req_data)],
+        [0u8; 8192],
+    );
+    let hram_shadow = inst clocked_memory_init::<128, 1, 7, uint<8>>(
+        clk,
+        [(cpu_hram_write_en, cpu_hram_write_addr, cpu.bus_req_data)],
+        [0u8; 128],
+    );
+    let dma_oam_write_en = dma.write_en;
+    let dma_oam_write_addr: uint<8> = trunc(dma.dest_addr - 0xfe00u16);
+    let dma_vram_data = inst read_memory(vram_mem, trunc(dma.source_addr - 0x8000u16));
+    let dma_wram_data = inst read_memory(wram_shadow, trunc(dma.source_addr - 0xc000u16));
+    let dma_hram_data = inst read_memory(hram_shadow, trunc(dma.source_addr - 0xff80u16));
+    let dma_oam_write_data =
+        if dma.source_addr >= 0x8000u16 && dma.source_addr <= 0x9fffu16 {
+            dma_vram_data
+        } else if dma.source_addr >= 0xc000u16 && dma.source_addr <= 0xdfffu16 {
+            dma_wram_data
+        } else if dma.source_addr >= 0xff80u16 && dma.source_addr <= 0xfffeu16 {
+            dma_hram_data
+        } else {
+            0xffu8
+        };
+    let oam_write_en = if dma_oam_write_en { true } else { cpu_oam_write_en };
+    let oam_write_addr = if dma_oam_write_en { dma_oam_write_addr } else { cpu_oam_write_addr };
+    let oam_write_data = if dma_oam_write_en { dma_oam_write_data } else { cpu.bus_req_data };
     let oam_mem = inst clocked_memory_init::<256, 1, 8, uint<8>>(
         clk,
-        [(cpu_oam_write_en, cpu_oam_write_addr, cpu.bus_req_data)],
+        [(oam_write_en, oam_write_addr, oam_write_data)],
         [0u8; 256],
     );
     let vram_read_data = inst read_memory(vram_mem, req_vram_addr(pending_req_reg));

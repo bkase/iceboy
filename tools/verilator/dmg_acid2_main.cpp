@@ -963,13 +963,11 @@ StepResult step_to_commit(Vsoc_rom_top_verilator_wrapper& top, BusModel& memory)
             if (result.preview_addr == IF_ADDR) {
                 bus_read_data = static_cast<uint8_t>((memory.if_reg() | memory.integrated_ppu_if_bits()) & 0x1F);
             } else if (result.preview_addr >= LCDC_ADDR && result.preview_addr <= WX_ADDR) {
-                // Keep LCDC/STAT/LY shadow reads pinned to obs_t0.
-                // I tried switching this to the later preview observation while chasing the
-                // overlap cancel bug, but it did not move the native canary at all. The CPU
-                // side still diverged by the same 52 pixels, so this path is not the seam.
-                // Using obs_t0 here preserves the established integrated MMIO contract and
-                // avoids reintroducing that dead-end hypothesis.
-                bus_read_data = memory.integrated_ppu_mmio_read_from_observation(obs_t0, result.preview_addr);
+                // PPU MMIO polling must see the same preview-phase observation that produced
+                // the current bus request. Pinning these reads to obs_t0 leaves LY/STAT a bus
+                // phase behind and can strand ROM wait loops even when the trace already shows
+                // the target line or mode on the live preview path.
+                bus_read_data = memory.integrated_ppu_mmio_read_from_observation(observation, result.preview_addr);
             } else if ((result.preview_addr >= VRAM_BASE && result.preview_addr < VRAM_BASE + VRAM_SIZE) ||
                        (result.preview_addr >= OAM_BASE && result.preview_addr < OAM_BASE + OAM_SIZE)) {
                 result.video_sample_valid = true;
@@ -993,6 +991,9 @@ StepResult step_to_commit(Vsoc_rom_top_verilator_wrapper& top, BusModel& memory)
 
     const int skip_to_prefinal = obs_t0.m_ce ? 3 : std::max(0, 2 - static_cast<int>(obs_t0.t_index));
     uint8_t bus_read_data = pending_inputs(obs_t0, nullptr);
+    const bool preview_targets_video =
+        (result.preview_addr >= VRAM_BASE && result.preview_addr < VRAM_BASE + VRAM_SIZE) ||
+        (result.preview_addr >= OAM_BASE && result.preview_addr < OAM_BASE + OAM_SIZE);
     Observation mid_observation{};
     bool have_mid = false;
     Observation prefinal_observation = obs_t0;
@@ -1011,7 +1012,9 @@ StepResult step_to_commit(Vsoc_rom_top_verilator_wrapper& top, BusModel& memory)
                 prefinal_observation = subcycle_observation;
             }
         }
-        bus_read_data = pending_inputs(prefinal_observation, have_mid ? &mid_observation : nullptr);
+        if (preview_targets_video) {
+            bus_read_data = pending_inputs(prefinal_observation, have_mid ? &mid_observation : nullptr);
+        }
     }
 
     set_idle_inputs(top, bus_read_data, memory.if_reg(), memory.ie_reg());

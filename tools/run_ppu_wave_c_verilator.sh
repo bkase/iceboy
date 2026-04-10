@@ -59,6 +59,7 @@ MAX_MCYCLES="${ICEBOY_PPU_WAVE_C_MAX_MCYCLES:-120000}"
 STABLE_FRAMES="${ICEBOY_PPU_WAVE_C_STABLE_FRAMES:-1}"
 COMPLETED_FRAMES="${ICEBOY_PPU_WAVE_C_COMPLETED_FRAMES:-3}"
 CHECKPOINT_COMPLETED_FRAMES="${ICEBOY_PPU_WAVE_C_CHECKPOINT_COMPLETED_FRAMES:-2}"
+SETTLE_RENDERED_FRAMES="${ICEBOY_PPU_WAVE_C_SETTLE_RENDERED_FRAMES:-1}"
 PROGRESS_INTERVAL="${ICEBOY_PPU_WAVE_C_PROGRESS_INTERVAL:-0}"
 
 if [[ "$DRY_RUN" == "1" ]]; then
@@ -88,7 +89,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
         trace_path="${BUILD_DIR}/${rom_id}.trace.jsonl"
         checkpoint_pc="$("$PYTHON_BIN" "$CHECKPOINT_PC_TOOL" "--sym=${sym_path}")"
         printf 'DRY RUN:'
-        printf ' %q' "$UV_BIN" run --with-requirements "$ICEBOY_PYTHON_LOCK" python "$WRITE_EXPECTED" "--rom=${rom_path}" "--sym=${sym_path}" "--output-raw=${expected_raw}"
+        printf ' %q' "$UV_BIN" run --with-requirements "$ICEBOY_PYTHON_LOCK" python "$WRITE_EXPECTED" "--rom=${rom_path}" "--sym=${sym_path}" "--settle-rendered-frames=${SETTLE_RENDERED_FRAMES}" "--output-raw=${expected_raw}"
         printf '\n'
         printf 'DRY RUN:'
         printf ' %q' "$RUNNER_BIN" "--rom=${rom_path}" "--frame-capture=${actual_raw}" "--trace=${trace_path}" "--max-mcycles=${MAX_MCYCLES}" "--stable-frames=${STABLE_FRAMES}" "--progress-interval=${PROGRESS_INTERVAL}" "--checkpoint-pc=${checkpoint_pc}" "--checkpoint-completed-frames=${CHECKPOINT_COMPLETED_FRAMES}"
@@ -132,6 +133,7 @@ for rom_id in "${ROM_IDS[@]}"; do
     "$UV_BIN" run --with-requirements "$ICEBOY_PYTHON_LOCK" python "$WRITE_EXPECTED" \
         "--rom=${rom_path}" \
         "--sym=${sym_path}" \
+        "--settle-rendered-frames=${SETTLE_RENDERED_FRAMES}" \
         "--output-raw=${expected_raw}"
     "$RUNNER_BIN" \
         "--rom=${rom_path}" \

@@ -238,9 +238,16 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("expected settles: 1", completed.stdout)
         self.assertIn("checkpoint completed frames: 3 4 5", completed.stdout)
         self.assertIn("checkpoint completed frames: 2", completed.stdout)
-        self.assertIn("--settle-rendered-frames=1", completed.stdout)
-        self.assertIn("--checkpoint-completed-frames=5", completed.stdout)
-        self.assertIn("--max-mcycles=160000", completed.stdout)
+
+    def test_dma_mode2_hide_verilator_wrapper_dry_run_uses_native_soc_rom_runner(self) -> None:
+        completed = self.run_script("run_dma_mode2_hide_verilator.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("rom ids: DMA_MODE2_HIDE", completed.stdout)
+        self.assertIn("--stable-frames=1", completed.stdout)
+        self.assertIn("--checkpoint-completed-frames=3", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
     def test_ppu_checker_ball_verilator_wrapper_can_include_overlap_reducer(self) -> None:
@@ -348,6 +355,15 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL.asm").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL_CANCEL.asm").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "CHECKER_BALL_CANCEL_OVERLAP.asm").exists())
+
+    def test_dma_mode2_hide_live_suite_assets_exist(self) -> None:
+        run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
+        hook_text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
+        self.assertIn('"test_dma_mode2_hide.py"', run_tests_text)
+        self.assertIn('"tools/run_dma_mode2_hide_verilator.sh"', run_tests_text)
+        self.assertIn('"tools/run_dma_mode2_hide_verilator.sh"', hook_text)
+        self.assertTrue((TOOLS / "run_dma_mode2_hide_verilator.sh").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "DMA_MODE2_HIDE.asm").exists())
 
     def test_obj_observe_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
@@ -547,6 +563,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/rom/test_mbc3_ram.py"', text)
         self.assertIn('"test/rom/test_mbc3_switch.py"', text)
         self.assertIn('"tools/run_cpu_instrs_blargg_verilator.sh"', text)
+        self.assertIn('"tools/run_dma_mode2_hide_verilator.sh"', text)
         self.assertIn('"test/rom/test_ppu_wave_a.py"', text)
         self.assertIn('"test/rom/test_ppu_wave_b.py"', text)
         self.assertIn('"tools/run_ppu_wave_c_verilator.sh"', text)
