@@ -193,6 +193,18 @@ roms:
     compare_scope:
       domains: [cpu_core, dma_registers, oam, wram_signature]
 
+  - id: OAM_DMA_ISOLATION
+    <<: *dmg_entry
+    path: bench/roms/out/OAM_DMA_ISOLATION.gb
+    rom_sha256: 0a5b85efbaca1c5adb69763eb3e2b0ea17627fa5ecebd1043c37ea010c88fa32
+    requires: [cpu, dma]
+    oracle_mode: checkpoint
+    raster_event_coord_space: symbolic
+    timeout_commits: 400000
+    checkpoint_symbols: []
+    compare_scope:
+      domains: [cpu_core, dma_registers, wram_signature]
+
   - id: MBC1_SWITCH
     <<: *dmg_entry
     path: bench/roms/out/MBC1_SWITCH.gb

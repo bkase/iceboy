@@ -254,10 +254,12 @@ class RomRunnerTest(unittest.TestCase):
         self.assertEqual(bus.read(0xFE00), 0xFF)
         self.assertEqual(bus.read(0xFFFF), 0xFF)
         self.assertEqual(bus.read(0xFF80), 0xC3)
-        self.assertEqual(bus.read(0xFF01), 0x41)
+        self.assertEqual(bus.read(0xFF01), 0xFF)
 
         bus.write(0xC123, 0x99)
+        bus.write(0xFF01, 0x55)
         self.assertEqual(bus.read(0xC123), 0xFF)
+        self.assertEqual(bus.read(0xFF01), 0xFF)
         self.advance_idle_cycles(bus, 158)
         self.assertTrue(bus.dma_active)
         self.advance_idle_cycles(bus, 1)
@@ -267,6 +269,7 @@ class RomRunnerTest(unittest.TestCase):
         self.assertEqual(bus.read(0xFE00), 0x12)
         self.assertEqual(bus.read(0xFE01), 0x34)
         self.assertEqual(bus.read(0xFE9F), 0xAB)
+        self.assertEqual(bus.read(0xFF01), 0x41)
 
     def test_external_memory_bus_models_ppu_registers_and_access_gating(self) -> None:
         bus = ExternalMemoryBus(bytes(0x8000))
@@ -1327,6 +1330,13 @@ class RomRunnerTest(unittest.TestCase):
         self.assertEqual(entry.rom_id, "DMA_OAM_COPY")
         self.assertEqual(entry.rom_path.name, "DMA_OAM_COPY.gb")
         self.assertEqual(entry.sym_path.name, "DMA_OAM_COPY.sym")
+        self.assertEqual(entry.manifest_entry["requires"], ["cpu", "dma"])
+
+    def test_load_manifest_entry_resolves_oam_dma_isolation_rom(self) -> None:
+        entry = load_manifest_entry("OAM_DMA_ISOLATION")
+        self.assertEqual(entry.rom_id, "OAM_DMA_ISOLATION")
+        self.assertEqual(entry.rom_path.name, "OAM_DMA_ISOLATION.gb")
+        self.assertEqual(entry.sym_path.name, "OAM_DMA_ISOLATION.sym")
         self.assertEqual(entry.manifest_entry["requires"], ["cpu", "dma"])
 
     def test_load_manifest_entry_resolves_joy_rom(self) -> None:

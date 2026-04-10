@@ -711,13 +711,7 @@ class ExternalMemoryBus:
             return False
         if not self.dma_active:
             return False
-        if addr < 0x8000:
-            return False
-        if 0xFF00 <= addr <= 0xFF7F:
-            return False
-        if 0xFF80 <= addr <= 0xFFFE:
-            return False
-        return True
+        return not (0xFF80 <= addr <= 0xFFFE)
 
     def _raw_read(self, addr: int) -> int:
         addr &= 0xFFFF
@@ -966,10 +960,11 @@ class ExternalMemoryBus:
             self.hram[addr - 0xFF80] = value
 
     def next_if_set_bits(self, *, write_en: bool, write_addr: int, write_data: int) -> int:
-        effective_sys_counter = 0 if write_en and write_addr == DIV_ADDR else self.sys_counter
-        write_tima = write_en and write_addr == TIMA_ADDR
-        write_tma = write_en and write_addr == TMA_ADDR
-        write_tac = write_en and write_addr == TAC_ADDR
+        write_visible = write_en and not self._dma_blocks_cpu_addr(write_addr)
+        effective_sys_counter = 0 if write_visible and write_addr == DIV_ADDR else self.sys_counter
+        write_tima = write_visible and write_addr == TIMA_ADDR
+        write_tma = write_visible and write_addr == TMA_ADDR
+        write_tac = write_visible and write_addr == TAC_ADDR
 
         next_tma = write_data if write_tma else self.tma
         next_tac = (write_data & 0x7) if write_tac else self.tac
@@ -993,7 +988,7 @@ class ExternalMemoryBus:
 
         next_serial_irq = self.serial_cycles_left == 1 and (self.serial_sc & 0x81) == 0x81
         ppu_if_bits = self._ppu_step_mcycle(
-            write_en=write_en,
+            write_en=write_visible,
             write_addr=write_addr,
             write_data=write_data,
             preview=True,
@@ -1010,12 +1005,13 @@ class ExternalMemoryBus:
         irq_ack_valid: bool,
         irq_ack_bit: int,
     ) -> None:
-        write_div = write_en and write_addr == DIV_ADDR
-        write_tima = write_en and write_addr == TIMA_ADDR
-        write_tma = write_en and write_addr == TMA_ADDR
-        write_tac = write_en and write_addr == TAC_ADDR
-        write_if = write_en and write_addr == IF_ADDR
-        write_ie = write_en and write_addr == IE_ADDR
+        write_visible = write_en and not self._dma_blocks_cpu_addr(write_addr)
+        write_div = write_visible and write_addr == DIV_ADDR
+        write_tima = write_visible and write_addr == TIMA_ADDR
+        write_tma = write_visible and write_addr == TMA_ADDR
+        write_tac = write_visible and write_addr == TAC_ADDR
+        write_if = write_visible and write_addr == IF_ADDR
+        write_ie = write_visible and write_addr == IE_ADDR
 
         effective_sys_counter = 0 if write_div else self.sys_counter
         next_tma = write_data if write_tma else self.tma
@@ -1062,12 +1058,12 @@ class ExternalMemoryBus:
         self.overflow_delay = next_overflow_delay
         self.sys_counter = 4 if write_div else (self.sys_counter + 4) & 0xFFFF_FFFF
         if self.use_integrated_ppu:
-            if write_en and LCDC_ADDR <= write_addr <= WX_ADDR and write_addr != DMA_ADDR:
+            if write_visible and LCDC_ADDR <= write_addr <= WX_ADDR and write_addr != DMA_ADDR:
                 self._ppu_apply_shadow_write(write_addr, write_data)
             ppu_if_bits = self.integrated_ppu_if_bits
         else:
             ppu_if_bits = self._ppu_step_mcycle(
-                write_en=write_en,
+                write_en=write_visible,
                 write_addr=write_addr,
                 write_data=write_data,
                 preview=False,
@@ -1557,10 +1553,11 @@ async def run_dut_to_abi_result(
     max_mcycles: int,
     checkpoint_addr: int | None = None,
     event_schedule: Any | None = None,
+    enforce_dma_cpu_restrictions: bool = False,
 ) -> DutTerminalState:
     from cocotb.triggers import Timer
 
-    memory = ExternalMemoryBus(rom_bytes)
+    memory = ExternalMemoryBus(rom_bytes, enforce_dma_cpu_restrictions=enforce_dma_cpu_restrictions)
     event_index = 0
     await Timer(1, units="ns")
     for cycle in range(1, max_mcycles + 1):

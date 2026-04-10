@@ -537,6 +537,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/harness/test_reset_profile.py"', text)
         self.assertIn('"test/rom/test_ei_delay.py"', text)
         self.assertIn('"test/rom/test_dma_oam_copy.py"', text)
+        self.assertIn('"test/rom/test_oam_dma_isolation.py"', text)
         self.assertIn('"test/rom/test_alu16_sp.py"', text)
         self.assertIn('"test/rom/test_joy_diverge_persist.py"', text)
         self.assertIn('"test/rom/test_mbc1_ram.py"', text)

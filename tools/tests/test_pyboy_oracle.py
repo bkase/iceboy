@@ -36,6 +36,7 @@ DMG_ACID2_ROM = ROOT / "bench" / "external" / "dmg-acid2" / "dmg-acid2.gb"
 DMG_ACID2_EXPECTED = ROOT / "bench" / "expected" / "suite_owned" / "dmg-acid2" / "reference-dmg.png"
 OBJ_BASIC_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_BASIC.gb"
 OBJ_X_HIDDEN_STILL_COUNTS_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_X_HIDDEN_STILL_COUNTS.gb"
+OAM_DMA_ISOLATION_ROM = ROOT / "bench" / "roms" / "out" / "OAM_DMA_ISOLATION.gb"
 CHECKER_BALL_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL.gb"
 CHECKER_BALL_CANCEL_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL_CANCEL.gb"
 CHECKER_BALL_CANCEL_OVERLAP_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL_CANCEL_OVERLAP.gb"
@@ -225,6 +226,16 @@ class PyBoyOracleTest(unittest.TestCase):
             self.assertEqual(actual[(line * 160) + x], 0x00, x)
         for x in (72, 80):
             self.assertEqual(actual[(line * 160) + x], 0xFF, x)
+
+    def test_oam_dma_isolation_rom_characterizes_pyboy_io_write_behavior(self) -> None:
+        from test.harness.rom_runner import build_manifest, load_manifest_entry, run_oracle_to_terminal
+
+        entry = load_manifest_entry("OAM_DMA_ISOLATION")
+        manifest = build_manifest(entry)
+        labels, abi = run_oracle_to_terminal(entry, manifest)
+
+        self.assertEqual(labels, ("__fail",))
+        self.assertEqual(abi.log, bytes.fromhex("0200ffe41b02"))
 
     def test_checkpoint_frame_capture_tracks_checker_ball_motion(self) -> None:
         frame1 = capture_checkpoint_frame_dmg_shades(

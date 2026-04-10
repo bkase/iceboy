@@ -108,7 +108,7 @@ class SimulationProfilesTest(unittest.TestCase):
         inventory = yaml.safe_load(ROM_INVENTORY_PATH.read_text(encoding="utf-8"))
         roms = {rom["id"]: rom for rom in inventory["roms"]}
 
-        for rom_id in ("DMA_OAM_COPY", "MBC1_SWITCH", "MBC1_RAM", "MBC3_SWITCH", "MBC3_RAM"):
+        for rom_id in ("DMA_OAM_COPY", "OAM_DMA_ISOLATION", "MBC1_SWITCH", "MBC1_RAM", "MBC3_SWITCH", "MBC3_RAM"):
             gb_path = Path(roms[rom_id]["path"])
             source_path = ROOT / "bench" / "roms" / f"{gb_path.stem}.asm"
             self.assertTrue(source_path.exists(), source_path)
