@@ -148,6 +148,25 @@ def require(logger: TestLogger, snapshot: dict[str, int | bool], *, expected: di
         )
 
 
+def next_state_kwargs(snapshot: dict[str, int | bool]) -> dict[str, int | bool]:
+    return {
+        "epoch": int(snapshot["epoch"]),
+        "source": int(snapshot["source"]),
+        "step": int(snapshot["step"]),
+        "step_phase": bool(snapshot["step_phase"]),
+        "tile_id": int(snapshot["tile_id"]),
+        "tile_lo": int(snapshot["tile_lo"]),
+        "tile_hi": int(snapshot["tile_hi"]),
+        "map_x": int(snapshot["map_x"]),
+        "map_y": int(snapshot["map_y"]),
+        "row": int(snapshot["row"]),
+        "pending_push": bool(snapshot["pending_push"]),
+        "pending_valid": bool(snapshot["pending_valid"]),
+        "pending_id": int(snapshot["pending_id"]),
+        "pending_epoch": int(snapshot["pending_epoch"]),
+    }
+
+
 @cocotb.test()
 async def test_start_bg_fetcher_uses_sampled_scx_scy_for_tilemap_read(dut):
     logger = case_logger("test_start_bg_fetcher_uses_sampled_scx_scy_for_tilemap_read")
@@ -305,6 +324,70 @@ async def test_fetch_sequence_progresses_through_sleep_and_push_stall(dut):
             "push_row": pack_row([0, 1, 2, 3, 0, 1, 2, 3]),
         },
     )
+
+
+@cocotb.test()
+async def test_bg_fetch_step_takes_two_dots(dut):
+    logger = case_logger("test_bg_fetch_step_takes_two_dots")
+
+    logger.step("GetTile spends one dot issuing the read and one dot waiting for the response")
+    get_tile_issue = await sample(dut, epoch=1, step=STEP_GET_TILE, map_x=4, map_y=2, row=6)
+    require(logger, get_tile_issue, expected={"step": STEP_GET_TILE, "pending_valid": True, "req_valid": True})
+
+    get_tile_wait = await sample(dut, **next_state_kwargs(get_tile_issue))
+    require(logger, get_tile_wait, expected={"step": STEP_GET_TILE, "pending_valid": True, "req_valid": False})
+
+    get_lo = await sample(
+        dut,
+        **next_state_kwargs(get_tile_wait),
+        resp_valid=True,
+        resp_id=int(get_tile_wait["pending_id"]),
+        resp_data=0x20,
+    )
+    require(logger, get_lo, expected={"step": STEP_GET_LO, "tile_id": 0x20, "pending_valid": False})
+
+    logger.step("GetLo also holds for an issue dot and a wait dot before the low byte lands")
+    get_lo_issue = await sample(dut, **next_state_kwargs(get_lo))
+    require(logger, get_lo_issue, expected={"step": STEP_GET_LO, "pending_valid": True, "req_valid": True})
+
+    get_lo_wait = await sample(dut, **next_state_kwargs(get_lo_issue))
+    require(logger, get_lo_wait, expected={"step": STEP_GET_LO, "pending_valid": True, "req_valid": False})
+
+    get_hi = await sample(
+        dut,
+        **next_state_kwargs(get_lo_wait),
+        resp_valid=True,
+        resp_id=int(get_lo_wait["pending_id"]),
+        resp_data=0x55,
+    )
+    require(logger, get_hi, expected={"step": STEP_GET_HI, "tile_lo": 0x55, "pending_valid": False})
+
+    logger.step("GetHi repeats the same two-dot cadence before entering Sleep")
+    get_hi_issue = await sample(dut, **next_state_kwargs(get_hi))
+    require(logger, get_hi_issue, expected={"step": STEP_GET_HI, "pending_valid": True, "req_valid": True})
+
+    get_hi_wait = await sample(dut, **next_state_kwargs(get_hi_issue))
+    require(logger, get_hi_wait, expected={"step": STEP_GET_HI, "pending_valid": True, "req_valid": False})
+
+    sleep = await sample(
+        dut,
+        **next_state_kwargs(get_hi_wait),
+        resp_valid=True,
+        resp_id=int(get_hi_wait["pending_id"]),
+        resp_data=0x33,
+    )
+    require(logger, sleep, expected={"step": STEP_SLEEP, "tile_hi": 0x33, "pending_push": True, "step_phase": False})
+
+    logger.step("Sleep burns two dots before the fetcher reaches Push")
+    sleep_wait = await sample(dut, **next_state_kwargs(sleep))
+    require(logger, sleep_wait, expected={"step": STEP_SLEEP, "step_phase": True, "pending_push": True})
+
+    push = await sample(dut, **next_state_kwargs(sleep_wait))
+    require(logger, push, expected={"step": STEP_PUSH, "step_phase": False, "pending_push": True})
+
+    logger.step("Push can hold for multiple dots until the FIFO is empty")
+    push_wait = await sample(dut, **next_state_kwargs(push), fifo_has_room=False)
+    require(logger, push_wait, expected={"step": STEP_PUSH, "pending_push": True, "push_valid": False})
 
 
 @cocotb.test()

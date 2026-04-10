@@ -227,8 +227,8 @@ async def test_fifo_empty_and_full_stall_cases(dut):
 
 
 @cocotb.test()
-async def test_push_requires_empty_fifo(dut):
-    logger = case_logger("test_push_requires_empty_fifo")
+async def test_bg_push_requires_empty_fifo(dut):
+    logger = case_logger("test_bg_push_requires_empty_fifo")
 
     logger.step("Only an empty FIFO has room for a full eight-pixel BG push")
     for count in [0, 1, 4, 7, 8, 16]:
