@@ -274,6 +274,28 @@ async def test_obj_observe_live_scan_reaches_oam_index_40_before_transfer(dut):
 
 
 @cocotb.test()
+async def test_obj_observe_line_start_clears_stale_obj_fetcher_state(dut):
+    await reset_dut(dut)
+    await step(dut, write_target=LCDC_TARGET, write_value=LCDC_OBJ_ON)
+
+    saw_line_with_objects = False
+    next_line_oam = None
+    prev_ly = 0
+
+    for _ in range(456 * 3):
+        snapshot = await step(dut)
+        saw_line_with_objects = saw_line_with_objects or snapshot["line_obj_count"] > 0 or snapshot["line_obj_fetch_index"] > 0
+        if saw_line_with_objects and snapshot["phase"] == PHASE_OAM and snapshot["ly"] != prev_ly:
+            next_line_oam = snapshot
+            break
+        prev_ly = int(snapshot["ly"])
+
+    assert next_line_oam is not None, "did not reach next OAM line after object activity"
+    assert next_line_oam["fetcher_source"] == FETCHER_BG, next_line_oam
+    assert next_line_oam["obj_fifo_count"] == 0, next_line_oam
+
+
+@cocotb.test()
 async def test_obj_observe_window_arms_on_line_start_and_switches_to_window_fetch(dut):
     await reset_dut(dut)
     await step(dut, write_target=LCDC_TARGET, write_value=LCDC_OFF)

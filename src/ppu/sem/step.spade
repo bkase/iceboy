@@ -131,6 +131,13 @@ fn next_first_frame_blank(run: LcdRunState) -> bool {
     }
 }
 
+fn phase_is_transfer(phase: PpuPhase) -> bool {
+    match phase {
+        PpuPhase::Transfer$(x_out: _, discard_scx: _) => true,
+        _ => false,
+    }
+}
+
 fn live_oam_scan_req(scan: OamScanState) -> PpuMemReqs {
     if scan.index >= 40u6 {
         idle_ppu_mem_reqs()
@@ -152,6 +159,7 @@ fn update_render_state(
     frame_start: bool,
     line_start: bool,
 ) -> PpuRenderState {
+    let next_is_transfer = phase_is_transfer(next_phase);
     let (next_scan, next_list) =
         if line_start {
             (lib::ppu::sem::types::empty_oam_scan_state(), lib::ppu::sem::types::empty_line_obj_list())
@@ -179,12 +187,12 @@ fn update_render_state(
         line_objs: next_list,
         line_obj_fetch_index: if line_start { 0u4 } else { render.line_obj_fetch_index },
         line_obj_fetched_mask: if line_start { 0u10 } else { render.line_obj_fetched_mask },
-        obj_fetch_ticket: if line_start { zero_selected_obj_ticket() } else { render.obj_fetch_ticket },
-        obj_fetch_flags: if line_start { zero_obj_flags() } else { render.obj_fetch_flags },
-        bg_fetcher_resume: if line_start { initial_bg_fetcher_state() } else { render.bg_fetcher_resume },
-        fetcher: render.fetcher,
-        bg_fifo: render.bg_fifo,
-        obj_fifo: if line_start { empty_obj_fifo() } else { render.obj_fifo },
+        obj_fetch_ticket: if line_start || !next_is_transfer { zero_selected_obj_ticket() } else { render.obj_fetch_ticket },
+        obj_fetch_flags: if line_start || !next_is_transfer { zero_obj_flags() } else { render.obj_fetch_flags },
+        bg_fetcher_resume: if line_start || !next_is_transfer { initial_bg_fetcher_state() } else { render.bg_fetcher_resume },
+        fetcher: if line_start || !next_is_transfer { initial_bg_fetcher_state() } else { render.fetcher },
+        bg_fifo: if line_start || !next_is_transfer { clear_bg_fifo() } else { render.bg_fifo },
+        obj_fifo: if line_start || !next_is_transfer { empty_obj_fifo() } else { render.obj_fifo },
         first_frame_blank: next_first_frame_blank(next_run),
     )
 }
@@ -874,7 +882,44 @@ fn advance_live_obj_fetch(
                     ),
                     idle_ppu_mem_reqs(),
                 ),
-                FetcherStep::Push => (complete_live_obj_fetch(render, render_inputs, visible_ly, x_out), idle_ppu_mem_reqs()),
+                FetcherStep::Push =>
+                    if render.fetcher.pending_push {
+                        (
+                            PpuRenderState$(
+                                dot_in_line: render.dot_in_line,
+                                x_out: render.x_out,
+                                window_state: render.window_state,
+                                window_line: render.window_line,
+                                oam_scan: render.oam_scan,
+                                line_objs: render.line_objs,
+                                line_obj_fetch_index: render.line_obj_fetch_index,
+                                line_obj_fetched_mask: render.line_obj_fetched_mask,
+                                obj_fetch_ticket: render.obj_fetch_ticket,
+                                obj_fetch_flags: render.obj_fetch_flags,
+                                bg_fetcher_resume: render.bg_fetcher_resume,
+                                fetcher: lib::ppu::sem::types::FetcherState$(
+                                    epoch: render.fetcher.epoch,
+                                    source: FetcherSource::Object,
+                                    step: FetcherStep::Push,
+                                    tile_id: render.fetcher.tile_id,
+                                    tile_lo: render.fetcher.tile_lo,
+                                    tile_hi: render.fetcher.tile_hi,
+                                    map_x: render.fetcher.map_x,
+                                    map_y: render.fetcher.map_y,
+                                    row: render.fetcher.row,
+                                    pending_push: false,
+                                    pending_valid: false,
+                                    pending_read: render.fetcher.pending_read,
+                                ),
+                                bg_fifo: render.bg_fifo,
+                                obj_fifo: render.obj_fifo,
+                                first_frame_blank: render.first_frame_blank,
+                            ),
+                            idle_ppu_mem_reqs(),
+                        )
+                    } else {
+                        (complete_live_obj_fetch(render, render_inputs, visible_ly, x_out), idle_ppu_mem_reqs())
+                    },
             }
         }
     } else if render.fetcher.pending_valid {
@@ -891,7 +936,44 @@ fn advance_live_obj_fetch(
                 let meta = resolve_obj_meta(render.obj_fetch_ticket, render.fetcher.tile_id, render.obj_fetch_flags, visible_ly);
                 obj_fetch_with_req(render, FetcherStep::Sleep, obj_fetch_hi_req(meta, render_inputs.lcdc_fetch.obj_size_8x16))
             },
-            FetcherStep::Push => (complete_live_obj_fetch(render, render_inputs, visible_ly, x_out), idle_ppu_mem_reqs()),
+            FetcherStep::Push =>
+                if render.fetcher.pending_push {
+                    (
+                        PpuRenderState$(
+                            dot_in_line: render.dot_in_line,
+                            x_out: render.x_out,
+                            window_state: render.window_state,
+                            window_line: render.window_line,
+                            oam_scan: render.oam_scan,
+                            line_objs: render.line_objs,
+                            line_obj_fetch_index: render.line_obj_fetch_index,
+                            line_obj_fetched_mask: render.line_obj_fetched_mask,
+                            obj_fetch_ticket: render.obj_fetch_ticket,
+                            obj_fetch_flags: render.obj_fetch_flags,
+                            bg_fetcher_resume: render.bg_fetcher_resume,
+                            fetcher: lib::ppu::sem::types::FetcherState$(
+                                epoch: render.fetcher.epoch,
+                                source: FetcherSource::Object,
+                                step: FetcherStep::Push,
+                                tile_id: render.fetcher.tile_id,
+                                tile_lo: render.fetcher.tile_lo,
+                                tile_hi: render.fetcher.tile_hi,
+                                map_x: render.fetcher.map_x,
+                                map_y: render.fetcher.map_y,
+                                row: render.fetcher.row,
+                                pending_push: false,
+                                pending_valid: false,
+                                pending_read: render.fetcher.pending_read,
+                            ),
+                            bg_fifo: render.bg_fifo,
+                            obj_fifo: render.obj_fifo,
+                            first_frame_blank: render.first_frame_blank,
+                        ),
+                        idle_ppu_mem_reqs(),
+                    )
+                } else {
+                    (complete_live_obj_fetch(render, render_inputs, visible_ly, x_out), idle_ppu_mem_reqs())
+                },
         }
     }
 }
@@ -926,13 +1008,14 @@ fn apply_live_transfer(
         };
         let render_inputs = sample_render_inputs(candidate_state.visible, candidate_state.sampled, candidate_state.status.phase);
         let obj_enabled = candidate_state.visible.regs.lcdc.obj_enable;
+        let transfer_seed_render = if entering_transfer { candidate_state.render } else { state.render };
         let transfer_render =
-            if next_is_transfer && !obj_enabled && fetcher_source_is_object(state.render) {
-                cancel_live_obj_fetch(state.render, render_inputs, candidate_state.visible.ly, base_x_out)
-            } else if next_is_transfer && should_start_live_obj_fetch(state.render, candidate_state.visible.regs, base_x_out) {
-                start_live_obj_fetch(state.render, mem_resp)
+            if next_is_transfer && !obj_enabled && fetcher_source_is_object(transfer_seed_render) {
+                cancel_live_obj_fetch(transfer_seed_render, render_inputs, candidate_state.visible.ly, base_x_out)
+            } else if next_is_transfer && should_start_live_obj_fetch(transfer_seed_render, candidate_state.visible.regs, base_x_out) {
+                start_live_obj_fetch(transfer_seed_render, mem_resp)
             } else {
-                state.render
+                transfer_seed_render
             };
         if obj_enabled && fetcher_source_is_object(transfer_render) {
             let (next_obj_render, obj_mem_reqs) = advance_live_obj_fetch(

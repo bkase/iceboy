@@ -1,4 +1,9 @@
-use lib::ppu::sem::events::{DotInput, idle_oam_dma_state, idle_timed_ppu_event, zero_video_coord};
+use std::option::Option;
+
+use lib::bus::ppu_event_bridge::ppu_event_bridge;
+use lib::bus::types::BusReq;
+use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
+use lib::ppu::sem::events::{DotInput, idle_oam_dma_state, zero_video_coord};
 use lib::ppu::sem::memory::{MemClient, MemRegion, PpuMemKind, PpuMemReq, PpuMemResp, PpuMemResult, idle_ppu_mem_req, idle_ppu_mem_resp};
 use lib::ppu::sem::step::step_dot;
 use lib::ppu::sem::types::{
@@ -20,7 +25,7 @@ use lib::ppu::sem::types::{
     initial_fetcher_state,
 };
 use lib::sim::encode::{encode_scanout_kind, scanout_shade, scanout_source, scanout_x};
-use lib::sim::ppu_support::{build_test_lcdc, held_dot_output, ppu_debug_trace};
+use lib::sim::ppu_support::{build_test_lcdc, held_dot_output, ppu_debug_trace, timed_events_from_direct};
 
 fn configured_ticket(oam_index: uint<6>, x: uint<8>, y: uint<8>, selection_rank: uint<4>) -> SelectedObjTicket {
     SelectedObjTicket$(oam_index: oam_index, x: x, y: y, selection_rank: selection_rank)
@@ -70,12 +75,18 @@ fn seeded_state(
     obj_enable_i: bool,
     start_x_out_i: uint<8>,
     start_dot_in_line_i: uint<9>,
+    start_in_oam_scan_i: bool,
 ) -> PpuState {
     PpuState$(
         visible: PpuVisibleState$(regs: seeded_regs(obj_size_8x16_i, obj_enable_i), ly: visible_ly_i),
         status: PpuStatusState$(
             run: LcdRunState::Running,
-            phase: PpuPhase::Transfer$(x_out: start_x_out_i, discard_scx: 0u3),
+            phase:
+                if start_in_oam_scan_i {
+                    PpuPhase::OamScan$(index: 40u6, found: line_obj_count_i)
+                } else {
+                    PpuPhase::Transfer$(x_out: start_x_out_i, discard_scx: 0u3)
+                },
             stat_irq: StatIrqState$(line_high: false),
             lyc_match_flag: true,
         ),
@@ -136,6 +147,29 @@ fn encode_mem_client(client: MemClient) -> uint<3> {
         MemClient::ObjFetcher => 2u3,
         MemClient::OamScanner => 3u3,
         MemClient::Dma => 4u3,
+    }
+}
+
+fn decode_mmio_reg(target_i: uint<4>) -> MmioReg {
+    match target_i {
+        1u4 => MmioReg::Stat,
+        2u4 => MmioReg::Scy,
+        3u4 => MmioReg::Scx,
+        4u4 => MmioReg::Lyc,
+        5u4 => MmioReg::Wy,
+        6u4 => MmioReg::Wx,
+        7u4 => MmioReg::Bgp,
+        8u4 => MmioReg::Obp0,
+        9u4 => MmioReg::Obp1,
+        _ => MmioReg::Lcdc,
+    }
+}
+
+fn decode_bus_req(kind_i: uint<2>, addr_i: uint<16>, data_i: uint<8>) -> BusReq {
+    match kind_i {
+        1u2 => BusReq::Read$(addr: addr_i),
+        2u2 => BusReq::Write$(addr: addr_i, data: data_i),
+        _ => BusReq::Idle,
     }
 }
 
@@ -228,23 +262,54 @@ pub entity obj_transfer_live_test_top(
     flags_i: uint<8>,
     tile_lo_i: uint<8>,
     tile_hi_i: uint<8>,
+    write_valid_i: bool,
+    write_target_i: uint<4>,
+    write_value_i: uint<8>,
+    use_bridge_i: bool,
+    m_ce_i: bool,
+    req_kind_i: uint<2>,
+    req_addr_i: uint<16>,
+    req_data_i: uint<8>,
+    start_in_oam_scan_i: bool,
 ) -> uint<111> {
     decl state_reg;
     decl pending_req_reg;
     decl pending_resp_valid_reg;
     let mem_resp_now = if pending_resp_valid_reg { ok_mem_resp(pending_req_reg, tile_id_i, flags_i, tile_lo_i, tile_hi_i) } else { idle_ppu_mem_resp() };
+    let write =
+        if write_valid_i {
+            Option::Some(MmioWrite$(target: decode_mmio_reg(write_target_i), value: write_value_i))
+        } else {
+            Option::None
+        };
     let state_now = PpuState$(
         visible: PpuVisibleState$(
-            regs: seeded_regs(obj_size_8x16_i, obj_enable_i),
+            regs: state_reg.visible.regs,
             ly: state_reg.visible.ly,
         ),
         status: state_reg.status,
         sampled: state_reg.sampled,
         render: state_reg.render,
     );
+    let (direct_events, direct_event_count) = timed_events_from_direct(zero_video_coord(), 0u64, write, Option::None);
+    let (bridge_events, bridge_event_count) = inst ppu_event_bridge(
+        clk_i,
+        rst_i,
+        m_ce_i,
+        decode_bus_req(req_kind_i, req_addr_i, req_data_i),
+        state_now.render.dot_in_line == 0u9 && state_now.visible.ly == 0u8,
+        state_now.visible.ly,
+        state_now.render.dot_in_line,
+    );
+    let (bus_events, bus_event_count) =
+        if use_bridge_i {
+            (bridge_events, bridge_event_count)
+        } else {
+            (direct_events, direct_event_count)
+        };
     let step = step_dot(
         state_now,
-        DotInput$(bus_events: [idle_timed_ppu_event(); 4], bus_event_count: 0u4, mem_resp: mem_resp_now, dma_state: idle_oam_dma_state()),
+        DotInput$(bus_events: bus_events, bus_event_count: bus_event_count, mem_resp: mem_resp_now, dma_state: idle_oam_dma_state()),
     );
     let visible = held_dot_output(state_now, dot_ce_i, step);
     let trace = ppu_debug_trace(zero_video_coord(), visible);
@@ -281,6 +346,7 @@ pub entity obj_transfer_live_test_top(
         obj_enable_i,
         start_x_out_i,
         start_dot_in_line_i,
+        start_in_oam_scan_i,
     )) =
         if dot_ce_i { visible.next_state } else { state_reg };
     reg(clk_i) pending_req_reg: PpuMemReq reset(rst_i: idle_ppu_mem_req()) =

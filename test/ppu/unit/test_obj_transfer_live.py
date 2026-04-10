@@ -6,6 +6,9 @@ from cocotb.clock import Clock
 from cocotb.triggers import ReadOnly, RisingEdge, Timer
 
 
+REQ_IDLE = 0
+REQ_READ = 1
+REQ_WRITE = 2
 FETCHER_BG = 0
 FETCHER_OBJ = 2
 FETCHER_PUSH = 4
@@ -48,6 +51,10 @@ def decode_output(value: int) -> dict[str, int | bool]:
     }
 
 
+def lcdc_with_obj_enable(obj_size_8x16: bool, obj_enable: bool) -> int:
+    return 0x80 | 0x10 | (0x04 if obj_size_8x16 else 0x00) | (0x02 if obj_enable else 0x00) | 0x01
+
+
 async def reset_dut(
     dut,
     *,
@@ -65,6 +72,15 @@ async def reset_dut(
     flags: int = 0x00,
     tile_lo: int = 0x50,
     tile_hi: int = 0x30,
+    write_valid: bool = False,
+    write_target: int = 0,
+    write_value: int = 0,
+    use_bridge: bool = False,
+    m_ce: bool = False,
+    req_kind: int = REQ_IDLE,
+    req_addr: int = 0,
+    req_data: int = 0,
+    start_in_oam_scan: bool = False,
 ) -> None:
     cocotb.start_soon(Clock(dut.clk_i, 10, units="ns").start())
     dut.dot_ce_i.value = 0
@@ -82,6 +98,15 @@ async def reset_dut(
     dut.flags_i.value = flags & 0xFF
     dut.tile_lo_i.value = tile_lo & 0xFF
     dut.tile_hi_i.value = tile_hi & 0xFF
+    dut.write_valid_i.value = int(write_valid)
+    dut.write_target_i.value = write_target & 0xF
+    dut.write_value_i.value = write_value & 0xFF
+    dut.use_bridge_i.value = int(use_bridge)
+    dut.m_ce_i.value = int(m_ce)
+    dut.req_kind_i.value = req_kind & 0x3
+    dut.req_addr_i.value = req_addr & 0xFFFF
+    dut.req_data_i.value = req_data & 0xFF
+    dut.start_in_oam_scan_i.value = int(start_in_oam_scan)
     dut.rst_i.value = 1
     await RisingEdge(dut.clk_i)
     await RisingEdge(dut.clk_i)
@@ -93,7 +118,24 @@ async def reset_dut(
 
 async def step(
     dut,
+    *,
+    write_valid: bool = False,
+    write_target: int = 0,
+    write_value: int = 0,
+    use_bridge: bool = False,
+    m_ce: bool = False,
+    req_kind: int = REQ_IDLE,
+    req_addr: int = 0,
+    req_data: int = 0,
 ) -> dict[str, int | bool]:
+    dut.write_valid_i.value = int(write_valid)
+    dut.write_target_i.value = write_target & 0xF
+    dut.write_value_i.value = write_value & 0xFF
+    dut.use_bridge_i.value = int(use_bridge)
+    dut.m_ce_i.value = int(m_ce)
+    dut.req_kind_i.value = req_kind & 0x3
+    dut.req_addr_i.value = req_addr & 0xFFFF
+    dut.req_data_i.value = req_data & 0xFF
     dut.dot_ce_i.value = 1
     await RisingEdge(dut.clk_i)
     await ReadOnly()
@@ -104,6 +146,14 @@ async def step(
 
 async def run_steps(dut, count: int) -> list[dict[str, int | bool]]:
     return [await step(dut) for _ in range(count)]
+
+
+async def step_with_lcdc_write(dut, value: int) -> dict[str, int | bool]:
+    return await step(dut, write_valid=True, write_target=0, write_value=value)
+
+
+async def step_with_bridge_lcdc_write(dut, value: int) -> dict[str, int | bool]:
+    return await step(dut, use_bridge=True, m_ce=True, req_kind=REQ_WRITE, req_addr=0xFF40, req_data=value)
 
 @cocotb.test()
 async def test_transfer_drives_live_object_fetch_requests_and_fifo_fill(dut):
@@ -454,8 +504,7 @@ async def test_object_enable_low_cancels_active_fetch_and_reenable_restarts_it(d
 
     assert any(s["fetcher_source"] == FETCHER_OBJ for s in armed), armed
 
-    dut.obj_enable_i.value = 0
-    disabled = await run_steps(dut, 8)
+    disabled = [await step_with_lcdc_write(dut, lcdc_with_obj_enable(False, False))] + await run_steps(dut, 7)
     assert all(s["fetcher_source"] != FETCHER_OBJ for s in disabled), disabled
     assert all(s["obj_fifo_count"] == 0 for s in disabled), disabled
     assert not any(
@@ -465,8 +514,7 @@ async def test_object_enable_low_cancels_active_fetch_and_reenable_restarts_it(d
         for s in disabled
     ), disabled
 
-    dut.obj_enable_i.value = 1
-    resumed = await run_steps(dut, 32)
+    resumed = [await step_with_lcdc_write(dut, lcdc_with_obj_enable(False, True))] + await run_steps(dut, 31)
     assert any(
         s["fetcher_source"] == FETCHER_OBJ
         and s["mem_req_count"] > 0
@@ -479,3 +527,196 @@ async def test_object_enable_low_cancels_active_fetch_and_reenable_restarts_it(d
         and s["scanout_source"] == PIXEL_SOURCE_OBJECT
         for s in resumed
     ), resumed
+
+
+@cocotb.test()
+async def test_lcdc_disable_bus_event_blocks_first_late_object_pixels(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=1,
+        ticket0_x=128,
+        start_x_out=116,
+        start_dot_in_line=195,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+    )
+
+    armed = []
+    for _ in range(16):
+        snapshot = await step(dut)
+        armed.append(snapshot)
+        if int(snapshot["x_out"]) >= 118:
+            break
+
+    assert int(armed[-1]["x_out"]) >= 118, armed
+
+    disabled = await step_with_lcdc_write(dut, 0x91)
+    tail = [disabled] + await run_steps(dut, 24)
+    object_pixels = [
+        s for s in tail
+        if s["scanout_valid"]
+        and s["scanout_kind"] == SCANOUT_PIXEL
+        and s["scanout_source"] == PIXEL_SOURCE_OBJECT
+    ]
+
+    assert not object_pixels, object_pixels
+
+
+@cocotb.test()
+async def test_bridge_lcdc_disable_blocks_first_late_object_pixels(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=1,
+        ticket0_x=128,
+        start_x_out=116,
+        start_dot_in_line=195,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+        use_bridge=True,
+    )
+
+    armed = []
+    for _ in range(16):
+        snapshot = await step(dut, use_bridge=True)
+        armed.append(snapshot)
+        if int(snapshot["x_out"]) >= 118:
+            break
+
+    assert int(armed[-1]["x_out"]) >= 118, armed
+
+    disabled = await step_with_bridge_lcdc_write(dut, 0x91)
+    tail = [disabled] + [await step(dut, use_bridge=True) for _ in range(24)]
+    object_pixels = [
+        s for s in tail
+        if s["scanout_valid"]
+        and s["scanout_kind"] == SCANOUT_PIXEL
+        and s["scanout_source"] == PIXEL_SOURCE_OBJECT
+    ]
+
+    assert not object_pixels, object_pixels
+
+
+@cocotb.test()
+async def test_bridge_lcdc_disable_after_fixed_late_line_delay_blocks_first_target_row(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=3,
+        ticket0_x=128,
+        ticket1_x=136,
+        ticket2_x=144,
+        start_x_out=116,
+        start_dot_in_line=195,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+        use_bridge=True,
+    )
+
+    pre_disable = [await step(dut, use_bridge=True) for _ in range(12)]
+    disabled = await step_with_bridge_lcdc_write(dut, 0x91)
+    tail = [disabled] + [await step(dut, use_bridge=True) for _ in range(24)]
+
+    leaked_first_row_pixels = [
+        s for s in tail
+        if s["scanout_valid"]
+        and s["scanout_kind"] == SCANOUT_PIXEL
+        and s["scanout_source"] == PIXEL_SOURCE_OBJECT
+        and 120 <= int(s["scanout_x"]) <= 127
+    ]
+
+    assert int(pre_disable[-1]["x_out"]) >= 120 or pre_disable[-1]["fetcher_source"] == FETCHER_OBJ, pre_disable
+    assert not leaked_first_row_pixels, leaked_first_row_pixels
+
+
+@cocotb.test()
+async def test_bridge_lcdc_disable_after_row_loop_like_delay_blocks_first_target_row(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=3,
+        ticket0_x=128,
+        ticket1_x=136,
+        ticket2_x=144,
+        start_x_out=64,
+        start_dot_in_line=144,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+        use_bridge=True,
+    )
+
+    pre_disable = [await step(dut, use_bridge=True) for _ in range(72)]
+    disabled = await step_with_bridge_lcdc_write(dut, 0x91)
+    tail = [disabled] + [await step(dut, use_bridge=True) for _ in range(48)]
+
+    leaked_first_row_pixels = [
+        s for s in tail
+        if s["scanout_valid"]
+        and s["scanout_kind"] == SCANOUT_PIXEL
+        and s["scanout_source"] == PIXEL_SOURCE_OBJECT
+        and 120 <= int(s["scanout_x"]) <= 127
+    ]
+
+    assert (
+        120 <= int(pre_disable[-1]["x_out"]) <= 127
+        or pre_disable[-1]["fetcher_source"] == FETCHER_OBJ
+    ), pre_disable[-8:]
+    assert not leaked_first_row_pixels, leaked_first_row_pixels
+
+
+@cocotb.test()
+async def test_bridge_lcdc_disable_after_oam_to_transfer_boundary_blocks_first_target_row(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=3,
+        ticket0_x=128,
+        ticket1_x=136,
+        ticket2_x=144,
+        visible_ly=40,
+        start_x_out=0,
+        start_dot_in_line=79,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+        use_bridge=True,
+        start_in_oam_scan=True,
+    )
+
+    pre_disable = [await step(dut, use_bridge=True) for _ in range(37)]
+    disabled = await step_with_bridge_lcdc_write(dut, 0x91)
+    tail = [disabled] + [await step(dut, use_bridge=True) for _ in range(48)]
+
+    leaked_first_row_pixels = [
+        s for s in tail
+        if s["scanout_valid"]
+        and s["scanout_kind"] == SCANOUT_PIXEL
+        and s["scanout_source"] == PIXEL_SOURCE_OBJECT
+        and 120 <= int(s["scanout_x"]) <= 127
+    ]
+
+    assert any(s["phase"] == PHASE_TRANSFER for s in pre_disable), pre_disable
+    assert not leaked_first_row_pixels, leaked_first_row_pixels
+
+
+@cocotb.test()
+async def test_late_object_fetch_does_not_leave_stale_object_state_on_next_line(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=3,
+        ticket0_x=128,
+        ticket1_x=136,
+        ticket2_x=144,
+        visible_ly=39,
+        start_x_out=116,
+        start_dot_in_line=195,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+    )
+
+    crossed = []
+    for _ in range(320):
+        snapshot = await step(dut)
+        crossed.append(snapshot)
+        if snapshot["ly"] == 40 and snapshot["phase"] != PHASE_TRANSFER:
+            break
+
+    assert crossed[-1]["ly"] == 40, crossed[-8:]
+    assert crossed[-1]["phase"] != PHASE_TRANSFER, crossed[-8:]
+    assert crossed[-1]["fetcher_source"] != FETCHER_OBJ, crossed[-8:]
+    assert crossed[-1]["obj_fifo_count"] == 0, crossed[-8:]
