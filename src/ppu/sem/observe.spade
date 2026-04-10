@@ -10,6 +10,7 @@ use lib::ppu::sem::types::{
     LcdRunState,
     OamScanState,
     ObjFifo,
+    PpuRenderState,
     PpuIrqReq,
     PpuMode,
     PpuPhase,
@@ -129,6 +130,43 @@ pub fn zero_transfer_digest() -> TransferDigest {
     TransferDigest$(event_count: 0u16, event_hash: 0u64, window_restart_count: 0u2, obj_fetch_count: 0u4)
 }
 
+fn transfer_event_hash_sample(event: TransferEvent) -> uint<64> {
+    match event {
+        TransferEvent::BgWarmup => 0x100u64,
+        TransferEvent::ScxDiscard$(count) => 0x200u64 | zext(count),
+        TransferEvent::WindowRestart => 0x300u64,
+        TransferEvent::ObjFetchStart$(oam_index) => 0x400u64 | zext(oam_index),
+        TransferEvent::ObjFetchCancel => 0x500u64,
+        TransferEvent::PixelPop$(x) => 0x600u64 | zext(x),
+    }
+}
+
+pub fn digest_transfer_event(digest: TransferDigest, event: TransferEvent) -> TransferDigest {
+    let window_restart_count = match event {
+        TransferEvent::WindowRestart => trunc(digest.window_restart_count + 1u2),
+        _ => digest.window_restart_count,
+    };
+    let obj_fetch_count = match event {
+        TransferEvent::ObjFetchStart$(oam_index: _) => trunc(digest.obj_fetch_count + 1u4),
+        _ => digest.obj_fetch_count,
+    };
+    TransferDigest$(
+        event_count: trunc(digest.event_count + 1u16),
+        event_hash: mix_hash64(digest.event_hash, transfer_event_hash_sample(event)),
+        window_restart_count: window_restart_count,
+        obj_fetch_count: obj_fetch_count,
+    )
+}
+
+pub fn render_transfer_digest(render: PpuRenderState) -> TransferDigest {
+    TransferDigest$(
+        event_count: render.transfer_event_count,
+        event_hash: render.transfer_event_hash,
+        window_restart_count: render.transfer_window_restart_count,
+        obj_fetch_count: render.transfer_obj_fetch_count,
+    )
+}
+
 fn mix_hash64(hash: uint<64>, sample: uint<64>) -> uint<64> {
     trunc((hash << 5) ^ hash ^ sample ^ 0x9e3779b97f4a7c15u64)
 }
@@ -207,6 +245,7 @@ pub fn basic_line_summary(state_before: PpuState, state_after: PpuState) -> Line
     let window_start_x = summary_window_start_x(state_after.visible.regs, state_after.render.window_state);
     let selected_objs = selected_obj_ids(state_after.render.line_objs);
     let mode3_len = mode3_len_at_boundary(state_before);
+    let transfer = render_transfer_digest(state_after.render);
     let hash0 = mix_hash64(0u64, zext(state_after.visible.ly));
     let hash1 = mix_hash64(hash0, zext(mode3_len));
     let hash2 = mix_hash64(hash1, option_u8_hash_sample(window_start_x));
@@ -222,6 +261,10 @@ pub fn basic_line_summary(state_before: PpuState, state_after: PpuState) -> Line
     let hash12 = mix_hash64(hash11, option_u6_hash_sample(selected_objs[7]));
     let hash13 = mix_hash64(hash12, option_u6_hash_sample(selected_objs[8]));
     let hash14 = mix_hash64(hash13, option_u6_hash_sample(selected_objs[9]));
+    let hash15 = mix_hash64(hash14, zext(transfer.event_count));
+    let hash16 = mix_hash64(hash15, transfer.event_hash);
+    let hash17 = mix_hash64(hash16, zext(transfer.window_restart_count));
+    let hash18 = mix_hash64(hash17, zext(transfer.obj_fetch_count));
     LineSummary$(
         frame: 0u32,
         ly: state_after.visible.ly,
@@ -230,8 +273,8 @@ pub fn basic_line_summary(state_before: PpuState, state_after: PpuState) -> Line
         window_line_after: state_after.render.window_line,
         obj_count: state_after.render.line_objs.count,
         selected_objs: selected_objs,
-        transfer: zero_transfer_digest(),
-        line_hash: hash14,
+        transfer: transfer,
+        line_hash: hash18,
     )
 }
 

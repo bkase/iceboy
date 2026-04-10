@@ -36,6 +36,10 @@ def expected_hash(
     window_line_after: int,
     obj_count: int,
     selected_objs: list[int | None],
+    transfer_event_count: int,
+    transfer_event_hash: int,
+    transfer_window_restart_count: int,
+    transfer_obj_fetch_count: int,
 ) -> int:
     value = mix_hash(0, ly)
     value = mix_hash(value, mode3_len)
@@ -44,6 +48,10 @@ def expected_hash(
     value = mix_hash(value, obj_count)
     for obj in selected_objs:
         value = mix_hash(value, option_u6_sample(obj))
+    value = mix_hash(value, transfer_event_count)
+    value = mix_hash(value, transfer_event_hash)
+    value = mix_hash(value, transfer_window_restart_count)
+    value = mix_hash(value, transfer_obj_fetch_count)
     return value
 
 
@@ -62,6 +70,10 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "slot1_valid": bool((value >> 49) & 0x1),
         "slot1_id": (value >> 50) & 0x3F,
         "line_hash": (value >> 56) & 0xFFFFFFFFFFFFFFFF,
+        "transfer_event_count": (value >> 120) & 0xFFFF,
+        "transfer_window_restart_count": (value >> 136) & 0x3,
+        "transfer_obj_fetch_count": (value >> 138) & 0xF,
+        "transfer_event_hash": (value >> 142) & 0xFFFFFFFFFFFFFFFF,
     }
 
 
@@ -86,6 +98,10 @@ def drive_defaults(dut) -> None:
     dut.x_out_i.value = 160
     dut.discard_scx_i.value = 0
     dut.first_frame_blank_i.value = 0
+    dut.transfer_event_count_i.value = 0
+    dut.transfer_event_hash_i.value = 0
+    dut.transfer_window_restart_count_i.value = 0
+    dut.transfer_obj_fetch_count_i.value = 0
 
 
 @cocotb.test()
@@ -115,6 +131,10 @@ async def test_transfer_to_hblank_emits_summary_with_window_and_obj_ids(dut):
     assert snapshot["slot0_id"] == 3
     assert snapshot["slot1_valid"] is True
     assert snapshot["slot1_id"] == 17
+    assert snapshot["transfer_event_count"] == 0
+    assert snapshot["transfer_window_restart_count"] == 0
+    assert snapshot["transfer_obj_fetch_count"] == 0
+    assert snapshot["transfer_event_hash"] == 0
     assert snapshot["line_hash"] == expected_hash(
         ly=37,
         mode3_len=178,
@@ -122,6 +142,10 @@ async def test_transfer_to_hblank_emits_summary_with_window_and_obj_ids(dut):
         window_line_after=9,
         obj_count=2,
         selected_objs=[3, 17, None, None, None, None, None, None, None, None],
+        transfer_event_count=0,
+        transfer_event_hash=0,
+        transfer_window_restart_count=0,
+        transfer_obj_fetch_count=0,
     )
 
 
@@ -147,6 +171,10 @@ async def test_warmup_line0_uses_shorter_mode3_len(dut):
         window_line_after=0,
         obj_count=0,
         selected_objs=[None, None, None, None, None, None, None, None, None, None],
+        transfer_event_count=0,
+        transfer_event_hash=0,
+        transfer_window_restart_count=0,
+        transfer_obj_fetch_count=0,
     )
 
 
@@ -172,6 +200,10 @@ async def test_clean_running_row_uses_documented_172_dot_baseline(dut):
         window_line_after=0,
         obj_count=0,
         selected_objs=[None, None, None, None, None, None, None, None, None, None],
+        transfer_event_count=0,
+        transfer_event_hash=0,
+        transfer_window_restart_count=0,
+        transfer_obj_fetch_count=0,
     )
 
 
@@ -207,4 +239,40 @@ async def test_late_transfer_boundary_reports_dynamic_mode3_len(dut):
         window_line_after=0,
         obj_count=0,
         selected_objs=[None, None, None, None, None, None, None, None, None, None],
+        transfer_event_count=0,
+        transfer_event_hash=0,
+        transfer_window_restart_count=0,
+        transfer_obj_fetch_count=0,
+    )
+
+
+@cocotb.test()
+async def test_summary_carries_transfer_digest_into_hash(dut):
+    drive_defaults(dut)
+    dut.phase_i.value = PHASE_TRANSFER
+    dut.ly_i.value = 19
+    dut.dot_in_line_i.value = 249
+    dut.x_out_i.value = 160
+    dut.transfer_event_count_i.value = 7
+    dut.transfer_event_hash_i.value = 0x1234567890ABCDEF
+    dut.transfer_window_restart_count_i.value = 1
+    dut.transfer_obj_fetch_count_i.value = 2
+
+    snapshot = await observe(dut)
+    assert snapshot["summary_valid"] is True
+    assert snapshot["transfer_event_count"] == 7
+    assert snapshot["transfer_event_hash"] == 0x1234567890ABCDEF
+    assert snapshot["transfer_window_restart_count"] == 1
+    assert snapshot["transfer_obj_fetch_count"] == 2
+    assert snapshot["line_hash"] == expected_hash(
+        ly=19,
+        mode3_len=172,
+        window_start_x=None,
+        window_line_after=0,
+        obj_count=0,
+        selected_objs=[None, None, None, None, None, None, None, None, None, None],
+        transfer_event_count=7,
+        transfer_event_hash=0x1234567890ABCDEF,
+        transfer_window_restart_count=1,
+        transfer_obj_fetch_count=2,
     )

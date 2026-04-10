@@ -15,6 +15,10 @@ use lib::sim::types::{SimStimulus, cpu_arch_time_enable, peripheral_arch_time_en
 use lib::util::cpu_bus_req;
 
 struct SocRomTopOut {
+    ppu_line_summary_transfer_obj_fetch_count: uint<4>,
+    ppu_line_summary_transfer_window_restart_count: uint<2>,
+    ppu_line_summary_transfer_event_count: uint<16>,
+    ppu_line_summary_transfer_event_hash: uint<64>,
     ppu_line_summary_valid: bool,
     ppu_line_summary_mode3_len: uint<9>,
     ppu_oam_scan_index: uint<6>,
@@ -253,6 +257,10 @@ entity soc_rom_top(
     let slot0 = ppu.trace.line_objs.slots[0];
 
     SocRomTopOut$(
+        ppu_line_summary_transfer_obj_fetch_count: ppu_line_summary.transfer.obj_fetch_count,
+        ppu_line_summary_transfer_window_restart_count: ppu_line_summary.transfer.window_restart_count,
+        ppu_line_summary_transfer_event_count: ppu_line_summary.transfer.event_count,
+        ppu_line_summary_transfer_event_hash: ppu_line_summary.transfer.event_hash,
         ppu_line_summary_valid: ppu_line_summary_valid,
         ppu_line_summary_mode3_len: ppu_line_summary.mode3_len,
         ppu_oam_scan_index: ppu.trace.oam_scan.index,

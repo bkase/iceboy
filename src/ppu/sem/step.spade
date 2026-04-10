@@ -19,9 +19,13 @@ use lib::ppu::sem::observe::{
     PpuMemReqs,
     PpuIrqEdge,
     PpuSemanticCommit,
+    TransferEvent,
     basic_line_summary,
+    digest_transfer_event,
     idle_ppu_mem_reqs,
     idle_ppu_mmio_resp,
+    render_transfer_digest,
+    zero_transfer_digest,
 };
 use lib::ppu::sem::profiles::dmg_behavior_config;
 use lib::ppu::sem::sample::sample_render_inputs;
@@ -182,6 +186,20 @@ fn update_render_state(
         dot_in_line: next_dot,
         x_out: next_x_out,
         stall_dots: if line_start || !next_is_transfer { 0u5 } else { render.stall_dots },
+        transfer_event_count: if line_start || !next_is_transfer { 0u16 } else { render.transfer_event_count },
+        transfer_event_hash: if line_start || !next_is_transfer { 0u64 } else { render.transfer_event_hash },
+        transfer_window_restart_count:
+            if line_start || !next_is_transfer {
+                0u2
+            } else {
+                render.transfer_window_restart_count
+            },
+        transfer_obj_fetch_count:
+            if line_start || !next_is_transfer {
+                0u4
+            } else {
+                render.transfer_obj_fetch_count
+            },
         window_state: next_window_state,
         window_line: next_window_line,
         oam_scan: next_scan,
@@ -561,6 +579,48 @@ fn should_start_live_obj_fetch(render: PpuRenderState, regs: PpuRegs, x_out: uin
         }
 }
 
+fn with_transfer_digest(render: PpuRenderState, digest: lib::ppu::sem::observe::TransferDigest) -> PpuRenderState {
+    PpuRenderState$(
+        dot_in_line: render.dot_in_line,
+        x_out: render.x_out,
+        stall_dots: render.stall_dots,
+        transfer_event_count: digest.event_count,
+        transfer_event_hash: digest.event_hash,
+        transfer_window_restart_count: digest.window_restart_count,
+        transfer_obj_fetch_count: digest.obj_fetch_count,
+        window_state: render.window_state,
+        window_line: render.window_line,
+        oam_scan: render.oam_scan,
+        line_objs: render.line_objs,
+        line_obj_fetch_index: render.line_obj_fetch_index,
+        line_obj_fetched_mask: render.line_obj_fetched_mask,
+        obj_fetch_ticket: render.obj_fetch_ticket,
+        obj_fetch_flags: render.obj_fetch_flags,
+        bg_fetcher_resume: render.bg_fetcher_resume,
+        fetcher: render.fetcher,
+        bg_fifo: render.bg_fifo,
+        obj_fifo: render.obj_fifo,
+        first_frame_blank: render.first_frame_blank,
+    )
+}
+
+fn reset_transfer_digest(render: PpuRenderState) -> PpuRenderState {
+    with_transfer_digest(render, zero_transfer_digest())
+}
+
+fn record_transfer_event(render: PpuRenderState, event: TransferEvent) -> PpuRenderState {
+    with_transfer_digest(render, digest_transfer_event(render_transfer_digest(render), event))
+}
+
+fn record_transfer_entry(render: PpuRenderState, discard_scx: uint<3>) -> PpuRenderState {
+    let with_warmup = record_transfer_event(render, TransferEvent::BgWarmup);
+    if discard_scx > 0u3 {
+        record_transfer_event(with_warmup, TransferEvent::ScxDiscard$(count: discard_scx))
+    } else {
+        with_warmup
+    }
+}
+
 pub fn add_stall_dots(current: uint<5>, added: uint<5>) -> uint<5> {
     trunc(current + added)
 }
@@ -587,6 +647,10 @@ fn obj_fetch_with_req(render: PpuRenderState, step: FetcherStep, req: PpuMemReq)
             dot_in_line: render.dot_in_line,
             x_out: render.x_out,
             stall_dots: render.stall_dots,
+            transfer_event_count: render.transfer_event_count,
+            transfer_event_hash: render.transfer_event_hash,
+            transfer_window_restart_count: render.transfer_window_restart_count,
+            transfer_obj_fetch_count: render.transfer_obj_fetch_count,
             window_state: render.window_state,
             window_line: render.window_line,
             oam_scan: render.oam_scan,
@@ -611,10 +675,15 @@ fn start_live_obj_fetch(render: PpuRenderState, mem_resp: PpuMemResp) -> PpuRend
         Option::Some(ticket) => ticket,
         Option::None => zero_selected_obj_ticket(),
     };
-    PpuRenderState$(
+    record_transfer_event(
+        PpuRenderState$(
         dot_in_line: render.dot_in_line,
         x_out: render.x_out,
         stall_dots: render.stall_dots,
+        transfer_event_count: render.transfer_event_count,
+        transfer_event_hash: render.transfer_event_hash,
+        transfer_window_restart_count: render.transfer_window_restart_count,
+        transfer_obj_fetch_count: render.transfer_obj_fetch_count,
         window_state: render.window_state,
         window_line: render.window_line,
         oam_scan: render.oam_scan,
@@ -642,6 +711,8 @@ fn start_live_obj_fetch(render: PpuRenderState, mem_resp: PpuMemResp) -> PpuRend
         bg_fifo: render.bg_fifo,
         obj_fifo: render.obj_fifo,
         first_frame_blank: render.first_frame_blank,
+    ),
+        TransferEvent::ObjFetchStart$(oam_index: ticket.oam_index),
     )
 }
 
@@ -692,6 +763,10 @@ fn complete_live_obj_fetch(
         dot_in_line: render.dot_in_line,
         x_out: render.x_out,
         stall_dots: render.stall_dots,
+        transfer_event_count: render.transfer_event_count,
+        transfer_event_hash: render.transfer_event_hash,
+        transfer_window_restart_count: render.transfer_window_restart_count,
+        transfer_obj_fetch_count: render.transfer_obj_fetch_count,
         window_state: render.window_state,
         window_line: render.window_line,
         oam_scan: render.oam_scan,
@@ -714,10 +789,15 @@ fn cancel_live_obj_fetch(
     visible_ly: uint<8>,
     x_out: uint<8>,
 ) -> PpuRenderState {
-    PpuRenderState$(
+    record_transfer_event(
+        PpuRenderState$(
         dot_in_line: render.dot_in_line,
         x_out: render.x_out,
         stall_dots: render.stall_dots,
+        transfer_event_count: render.transfer_event_count,
+        transfer_event_hash: render.transfer_event_hash,
+        transfer_window_restart_count: render.transfer_window_restart_count,
+        transfer_obj_fetch_count: render.transfer_obj_fetch_count,
         window_state: render.window_state,
         window_line: render.window_line,
         oam_scan: render.oam_scan,
@@ -731,6 +811,8 @@ fn cancel_live_obj_fetch(
         bg_fifo: render.bg_fifo,
         obj_fifo: empty_obj_fifo(),
         first_frame_blank: render.first_frame_blank,
+    ),
+        TransferEvent::ObjFetchCancel,
     )
 }
 
@@ -756,6 +838,10 @@ fn advance_live_obj_fetch(
                     dot_in_line: render.dot_in_line,
                     x_out: render.x_out,
                     stall_dots: render.stall_dots,
+                    transfer_event_count: render.transfer_event_count,
+                    transfer_event_hash: render.transfer_event_hash,
+                    transfer_window_restart_count: render.transfer_window_restart_count,
+                    transfer_obj_fetch_count: render.transfer_obj_fetch_count,
                     window_state: render.window_state,
                     window_line: render.window_line,
                     oam_scan: render.oam_scan,
@@ -779,6 +865,10 @@ fn advance_live_obj_fetch(
                         dot_in_line: render.dot_in_line,
                         x_out: render.x_out,
                         stall_dots: render.stall_dots,
+                        transfer_event_count: render.transfer_event_count,
+                        transfer_event_hash: render.transfer_event_hash,
+                        transfer_window_restart_count: render.transfer_window_restart_count,
+                        transfer_obj_fetch_count: render.transfer_obj_fetch_count,
                         window_state: render.window_state,
                         window_line: render.window_line,
                         oam_scan: render.oam_scan,
@@ -814,6 +904,10 @@ fn advance_live_obj_fetch(
                         dot_in_line: render.dot_in_line,
                         x_out: render.x_out,
                         stall_dots: render.stall_dots,
+                        transfer_event_count: render.transfer_event_count,
+                        transfer_event_hash: render.transfer_event_hash,
+                        transfer_window_restart_count: render.transfer_window_restart_count,
+                        transfer_obj_fetch_count: render.transfer_obj_fetch_count,
                         window_state: render.window_state,
                         window_line: render.window_line,
                         oam_scan: render.oam_scan,
@@ -849,6 +943,10 @@ fn advance_live_obj_fetch(
                         dot_in_line: render.dot_in_line,
                         x_out: render.x_out,
                         stall_dots: render.stall_dots,
+                        transfer_event_count: render.transfer_event_count,
+                        transfer_event_hash: render.transfer_event_hash,
+                        transfer_window_restart_count: render.transfer_window_restart_count,
+                        transfer_obj_fetch_count: render.transfer_obj_fetch_count,
                         window_state: render.window_state,
                         window_line: render.window_line,
                         oam_scan: render.oam_scan,
@@ -884,6 +982,10 @@ fn advance_live_obj_fetch(
                         dot_in_line: render.dot_in_line,
                         x_out: render.x_out,
                         stall_dots: render.stall_dots,
+                        transfer_event_count: render.transfer_event_count,
+                        transfer_event_hash: render.transfer_event_hash,
+                        transfer_window_restart_count: render.transfer_window_restart_count,
+                        transfer_obj_fetch_count: render.transfer_obj_fetch_count,
                         window_state: render.window_state,
                         window_line: render.window_line,
                         oam_scan: render.oam_scan,
@@ -921,6 +1023,10 @@ fn advance_live_obj_fetch(
                                 dot_in_line: render.dot_in_line,
                                 x_out: render.x_out,
                                 stall_dots: render.stall_dots,
+                                transfer_event_count: render.transfer_event_count,
+                                transfer_event_hash: render.transfer_event_hash,
+                                transfer_window_restart_count: render.transfer_window_restart_count,
+                                transfer_obj_fetch_count: render.transfer_obj_fetch_count,
                                 window_state: render.window_state,
                                 window_line: render.window_line,
                                 oam_scan: render.oam_scan,
@@ -977,6 +1083,10 @@ fn advance_live_obj_fetch(
                             dot_in_line: render.dot_in_line,
                             x_out: render.x_out,
                             stall_dots: render.stall_dots,
+                            transfer_event_count: render.transfer_event_count,
+                            transfer_event_hash: render.transfer_event_hash,
+                            transfer_window_restart_count: render.transfer_window_restart_count,
+                            transfer_obj_fetch_count: render.transfer_obj_fetch_count,
                             window_state: render.window_state,
                             window_line: render.window_line,
                             oam_scan: render.oam_scan,
@@ -1044,7 +1154,7 @@ fn apply_live_transfer(
         };
         let render_inputs = sample_render_inputs(candidate_state.visible, candidate_state.sampled, candidate_state.status.phase);
         let obj_enabled = candidate_state.visible.regs.lcdc.obj_enable;
-        let transfer_seed_render = if entering_transfer { candidate_state.render } else { state.render };
+        let transfer_seed_render = if entering_transfer { record_transfer_entry(candidate_state.render, next_discard_seed) } else { state.render };
         let transfer_render =
             if next_is_transfer && !obj_enabled && fetcher_source_is_object(transfer_seed_render) {
                 cancel_live_obj_fetch(transfer_seed_render, render_inputs, candidate_state.visible.ly, base_x_out)
@@ -1077,6 +1187,10 @@ fn apply_live_transfer(
                         dot_in_line: candidate_state.render.dot_in_line,
                         x_out: base_x_out,
                         stall_dots: next_stall_dots,
+                        transfer_event_count: transfer_render.transfer_event_count,
+                        transfer_event_hash: transfer_render.transfer_event_hash,
+                        transfer_window_restart_count: transfer_render.transfer_window_restart_count,
+                        transfer_obj_fetch_count: transfer_render.transfer_obj_fetch_count,
                         window_state: candidate_state.render.window_state,
                         window_line: candidate_state.render.window_line,
                         oam_scan: candidate_state.render.oam_scan,
@@ -1096,6 +1210,10 @@ fn apply_live_transfer(
                         dot_in_line: candidate_state.render.dot_in_line,
                         x_out: 0u8,
                         stall_dots: 0u5,
+                        transfer_event_count: transfer_render.transfer_event_count,
+                        transfer_event_hash: transfer_render.transfer_event_hash,
+                        transfer_window_restart_count: transfer_render.transfer_window_restart_count,
+                        transfer_obj_fetch_count: transfer_render.transfer_obj_fetch_count,
                         window_state: candidate_state.render.window_state,
                         window_line: candidate_state.render.window_line,
                         oam_scan: candidate_state.render.oam_scan,
@@ -1150,6 +1268,10 @@ fn apply_live_transfer(
                         dot_in_line: candidate_state.render.dot_in_line,
                         x_out: base_x_out,
                         stall_dots: next_obj_render.stall_dots,
+                        transfer_event_count: next_obj_render.transfer_event_count,
+                        transfer_event_hash: next_obj_render.transfer_event_hash,
+                        transfer_window_restart_count: next_obj_render.transfer_window_restart_count,
+                        transfer_obj_fetch_count: next_obj_render.transfer_obj_fetch_count,
                         window_state: candidate_state.render.window_state,
                         window_line: candidate_state.render.window_line,
                         oam_scan: candidate_state.render.oam_scan,
@@ -1169,6 +1291,10 @@ fn apply_live_transfer(
                         dot_in_line: candidate_state.render.dot_in_line,
                         x_out: 0u8,
                         stall_dots: 0u5,
+                        transfer_event_count: next_obj_render.transfer_event_count,
+                        transfer_event_hash: next_obj_render.transfer_event_hash,
+                        transfer_window_restart_count: next_obj_render.transfer_window_restart_count,
+                        transfer_obj_fetch_count: next_obj_render.transfer_obj_fetch_count,
                         window_state: candidate_state.render.window_state,
                         window_line: candidate_state.render.window_line,
                         oam_scan: candidate_state.render.oam_scan,
@@ -1247,19 +1373,31 @@ fn apply_live_transfer(
                 fetcher_output.next_state
             };
         let next_stall_dots_with_window = add_stall_dots(next_stall_dots, pipe_output.stall_dots_added);
+        let transfer_after_window =
+            if pipe_output.restart_fetcher {
+                record_transfer_event(transfer_render, TransferEvent::WindowRestart)
+            } else {
+                transfer_render
+            };
         let obj_popped =
             if !obj_enabled {
                 ObjFifoPopResult$(next_fifo: empty_obj_fifo(), pixel_valid: false, pixel: zero_obj_pixel())
             } else if pipe_output.pixel_valid {
-                pop_obj_fifo(transfer_render.obj_fifo)
+                pop_obj_fifo(transfer_after_window.obj_fifo)
             } else {
-                ObjFifoPopResult$(next_fifo: transfer_render.obj_fifo, pixel_valid: false, pixel: zero_obj_pixel())
+                ObjFifoPopResult$(next_fifo: transfer_after_window.obj_fifo, pixel_valid: false, pixel: zero_obj_pixel())
             };
         let next_x_out =
             if pipe_output.pixel_valid {
                 trunc(base_x_out + 1u8)
             } else {
                 base_x_out
+            };
+        let transfer_after_pixel =
+            if pipe_output.pixel_valid {
+                record_transfer_event(transfer_after_window, TransferEvent::PixelPop$(x: base_x_out))
+            } else {
+                transfer_after_window
             };
         let pixel_scanout = lib::ppu::rtl::mixer::emit_mixed_scanout(
             pipe_output.pixel_valid && !candidate_state.render.first_frame_blank && candidate_state.visible.ly < 144u8,
@@ -1290,15 +1428,21 @@ fn apply_live_transfer(
                     dot_in_line: candidate_state.render.dot_in_line,
                     x_out: if next_is_transfer { next_x_out } else { 0u8 },
                     stall_dots: if next_is_transfer { next_stall_dots_with_window } else { 0u5 },
+                    transfer_event_count: transfer_after_pixel.transfer_event_count,
+                    transfer_event_hash: transfer_after_pixel.transfer_event_hash,
+                    transfer_window_restart_count:
+                        transfer_after_pixel.transfer_window_restart_count,
+                    transfer_obj_fetch_count:
+                        transfer_after_pixel.transfer_obj_fetch_count,
                     window_state: next_window_state,
                     window_line: pipe_output.next_window_line,
                     oam_scan: candidate_state.render.oam_scan,
                     line_objs: candidate_state.render.line_objs,
                     line_obj_fetch_index: candidate_state.render.line_obj_fetch_index,
                     line_obj_fetched_mask: candidate_state.render.line_obj_fetched_mask,
-                    obj_fetch_ticket: if next_is_transfer { candidate_state.render.obj_fetch_ticket } else { zero_selected_obj_ticket() },
-                    obj_fetch_flags: if next_is_transfer { candidate_state.render.obj_fetch_flags } else { zero_obj_flags() },
-                    bg_fetcher_resume: if next_is_transfer { candidate_state.render.bg_fetcher_resume } else { initial_bg_fetcher_state() },
+                    obj_fetch_ticket: if next_is_transfer { transfer_after_pixel.obj_fetch_ticket } else { zero_selected_obj_ticket() },
+                    obj_fetch_flags: if next_is_transfer { transfer_after_pixel.obj_fetch_flags } else { zero_obj_flags() },
+                    bg_fetcher_resume: if next_is_transfer { transfer_after_pixel.bg_fetcher_resume } else { initial_bg_fetcher_state() },
                     fetcher: if next_is_transfer { next_fetcher } else { initial_bg_fetcher_state() },
                     bg_fifo: if next_is_transfer { pipe_output.next_fifo } else { clear_bg_fifo() },
                     obj_fifo: if next_is_transfer { obj_popped.next_fifo } else { empty_obj_fifo() },

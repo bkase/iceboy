@@ -13,6 +13,7 @@ FETCHER_BG = 0
 FETCHER_OBJ = 2
 FETCHER_GET_HI = 2
 FETCHER_PUSH = 4
+WINDOW_ARMED = 1
 
 MEM_REGION_VRAM = 0
 MEM_REGION_OAM = 1
@@ -52,6 +53,10 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "active_obj_x": (value >> 103) & 0xFF,
         "bg_fifo_count": (value >> 111) & 0x1F,
         "fetcher_pending_valid": bool((value >> 116) & 0x1),
+        "transfer_event_count": (value >> 117) & 0xFFFF,
+        "transfer_obj_fetch_count": (value >> 133) & 0xF,
+        "transfer_window_restart_count": (value >> 137) & 0x3,
+        "transfer_event_hash": (value >> 139) & 0xFFFFFFFFFFFFFFFF,
     }
 
 
@@ -70,6 +75,10 @@ async def reset_dut(
     visible_ly: int = 0,
     obj_size_8x16: bool = False,
     obj_enable: bool = True,
+    scx: int = 0,
+    wx: int = 0,
+    window_state: int = 0,
+    window_line: int = 0,
     start_x_out: int = 1,
     start_dot_in_line: int = 80,
     seed_fetcher_valid: bool = False,
@@ -109,6 +118,10 @@ async def reset_dut(
     dut.visible_ly_i.value = visible_ly & 0xFF
     dut.obj_size_8x16_i.value = int(obj_size_8x16)
     dut.obj_enable_i.value = int(obj_enable)
+    dut.scx_i.value = scx & 0xFF
+    dut.wx_i.value = wx & 0xFF
+    dut.window_state_i.value = window_state & 0x3
+    dut.window_line_i.value = window_line & 0xFF
     dut.start_x_out_i.value = start_x_out & 0xFF
     dut.start_dot_in_line_i.value = start_dot_in_line & 0x1FF
     dut.seed_fetcher_valid_i.value = int(seed_fetcher_valid)
@@ -773,3 +786,78 @@ async def test_late_object_fetch_does_not_leave_stale_object_state_on_next_line(
     assert crossed[-1]["phase"] != PHASE_TRANSFER, crossed[-8:]
     assert crossed[-1]["fetcher_source"] != FETCHER_OBJ, crossed[-8:]
     assert crossed[-1]["obj_fifo_count"] == 0, crossed[-8:]
+
+
+@cocotb.test()
+async def test_transfer_entry_records_bg_warmup_and_scx_discard_events(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=0,
+        scx=3,
+        start_x_out=0,
+        start_dot_in_line=79,
+        start_in_oam_scan=True,
+    )
+
+    first = await step(dut)
+
+    assert first["phase"] == PHASE_TRANSFER, first
+    assert first["transfer_event_count"] == 2, first
+    assert first["transfer_obj_fetch_count"] == 0, first
+    assert first["transfer_window_restart_count"] == 0, first
+    assert first["transfer_event_hash"] != 0, first
+
+
+@cocotb.test()
+async def test_due_object_fetch_records_obj_fetch_start_event(dut):
+    await reset_dut(dut, line_obj_count=1, ticket0_x=9, start_x_out=1, start_dot_in_line=80)
+
+    first = await step(dut)
+
+    assert first["fetcher_source"] == FETCHER_OBJ, first
+    assert first["transfer_event_count"] == 1, first
+    assert first["transfer_obj_fetch_count"] == 1, first
+
+
+@cocotb.test()
+async def test_lcdc_disable_during_object_fetch_records_cancel_event(dut):
+    await reset_dut(dut, line_obj_count=1, ticket0_x=9, start_x_out=1, start_dot_in_line=80)
+
+    started = await step(dut)
+    assert started["fetcher_source"] == FETCHER_OBJ, started
+    assert started["transfer_event_count"] == 1, started
+
+    disabled = await step_with_lcdc_write(dut, 0x91)
+
+    assert disabled["fetcher_source"] != FETCHER_OBJ, disabled
+    assert disabled["transfer_event_count"] == 2, disabled
+    assert disabled["transfer_obj_fetch_count"] == 1, disabled
+
+
+@cocotb.test()
+async def test_window_restart_records_transfer_window_event(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=0,
+        start_x_out=0,
+        start_dot_in_line=80,
+        window_state=WINDOW_ARMED,
+        window_line=4,
+        wx=7,
+    )
+
+    first = await step(dut)
+
+    assert first["transfer_event_count"] == 1, first
+    assert first["transfer_window_restart_count"] == 1, first
+
+
+@cocotb.test()
+async def test_pixel_pop_events_accumulate_in_transfer_digest(dut):
+    await reset_dut(dut, line_obj_count=0, start_x_out=0, start_dot_in_line=80)
+
+    snapshots = await run_steps(dut, 32)
+    pixel_steps = [s for s in snapshots if s["scanout_valid"] and s["scanout_kind"] == SCANOUT_PIXEL]
+
+    assert pixel_steps, snapshots
+    assert pixel_steps[-1]["transfer_event_count"] >= len(pixel_steps), pixel_steps[-4:]

@@ -101,12 +101,20 @@ fn build_render_state(
     slot1_i: uint<6>,
     x_out_i: uint<8>,
     first_frame_blank_i: bool,
+    transfer_event_count_i: uint<16>,
+    transfer_event_hash_i: uint<64>,
+    transfer_window_restart_count_i: uint<2>,
+    transfer_obj_fetch_count_i: uint<4>,
 ) -> PpuRenderState {
     let base = initial_ppu_state().render;
     PpuRenderState$(
         dot_in_line: dot_in_line_i,
         x_out: x_out_i,
         stall_dots: 0u5,
+        transfer_event_count: transfer_event_count_i,
+        transfer_event_hash: transfer_event_hash_i,
+        transfer_window_restart_count: transfer_window_restart_count_i,
+        transfer_obj_fetch_count: transfer_obj_fetch_count_i,
         window_state: build_window_state(window_active_i, window_line_i),
         window_line: window_line_i,
         oam_scan: base.oam_scan,
@@ -137,6 +145,10 @@ fn build_state(
     x_out_i: uint<8>,
     discard_scx_i: uint<3>,
     first_frame_blank_i: bool,
+    transfer_event_count_i: uint<16>,
+    transfer_event_hash_i: uint<64>,
+    transfer_window_restart_count_i: uint<2>,
+    transfer_obj_fetch_count_i: uint<4>,
 ) -> PpuState {
     let base = initial_ppu_state();
     PpuState$(
@@ -157,6 +169,10 @@ fn build_state(
             slot1_i,
             x_out_i,
             first_frame_blank_i,
+            transfer_event_count_i,
+            transfer_event_hash_i,
+            transfer_window_restart_count_i,
+            transfer_obj_fetch_count_i,
         ),
     )
 }
@@ -175,7 +191,11 @@ pub entity line_summary_test_top(
     x_out_i: uint<8>,
     discard_scx_i: uint<3>,
     first_frame_blank_i: bool,
-) -> uint<120> {
+    transfer_event_count_i: uint<16>,
+    transfer_event_hash_i: uint<64>,
+    transfer_window_restart_count_i: uint<2>,
+    transfer_obj_fetch_count_i: uint<4>,
+) -> uint<206> {
     let output = step_dot(
         build_state(
             run_i,
@@ -191,6 +211,10 @@ pub entity line_summary_test_top(
             x_out_i,
             discard_scx_i,
             first_frame_blank_i,
+            transfer_event_count_i,
+            transfer_event_hash_i,
+            transfer_window_restart_count_i,
+            transfer_obj_fetch_count_i,
         ),
         idle_dot_input(),
     );
@@ -240,4 +264,8 @@ pub entity line_summary_test_top(
         | (zext(lib::util::bit(slot1_valid)) << 49)
         | (zext(slot1_id) << 50)
         | (zext(line_summary.line_hash) << 56)
+        | (zext(line_summary.transfer.event_count) << 120)
+        | (zext(line_summary.transfer.window_restart_count) << 136)
+        | (zext(line_summary.transfer.obj_fetch_count) << 138)
+        | (zext(line_summary.transfer.event_hash) << 142)
 }

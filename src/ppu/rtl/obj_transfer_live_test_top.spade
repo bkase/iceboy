@@ -51,19 +51,27 @@ fn configured_line_objs(line_obj_count_i: uint<4>, ticket0_x_i: uint<8>, ticket1
     )
 }
 
-fn seeded_regs(obj_size_8x16_i: bool, obj_enable_i: bool) -> PpuRegs {
+fn seeded_regs(obj_size_8x16_i: bool, obj_enable_i: bool, scx_i: uint<8>, wx_i: uint<8>) -> PpuRegs {
     PpuRegs$(
         lcdc: build_test_lcdc(false, false, true, false, obj_size_8x16_i, obj_enable_i, true),
         stat_sel: lib::ppu::sem::types::zero_stat_select(),
         scy: 0u8,
-        scx: 0u8,
+        scx: scx_i,
         lyc: 0u8,
         wy: 0u8,
-        wx: 0u8,
+        wx: wx_i,
         bgp: 0xfcu8,
         obp0: 0xe4u8,
         obp1: 0xe4u8,
     )
+}
+
+fn decode_window_state(window_state_i: uint<2>, window_line_i: uint<8>) -> lib::ppu::sem::types::WindowState {
+    match window_state_i {
+        1u2 => lib::ppu::sem::types::WindowState::ArmedThisFrame,
+        2u2 => lib::ppu::sem::types::WindowState::ActiveOnLine$(win_x: 0u5, win_line: window_line_i),
+        _ => lib::ppu::sem::types::WindowState::Inactive,
+    }
 }
 
 fn decode_fetcher_source(source_i: uint<2>) -> FetcherSource {
@@ -133,6 +141,10 @@ fn seeded_state(
     visible_ly_i: uint<8>,
     obj_size_8x16_i: bool,
     obj_enable_i: bool,
+    scx_i: uint<8>,
+    wx_i: uint<8>,
+    window_state_i: uint<2>,
+    window_line_i: uint<8>,
     start_x_out_i: uint<8>,
     start_dot_in_line_i: uint<9>,
     seed_fetcher_valid_i: bool,
@@ -143,7 +155,7 @@ fn seeded_state(
     seed_fetcher_pending_client_i: uint<3>,
     seed_fetcher_pending_id_i: uint<4>,
     seed_bg_fifo_count_i: uint<5>,
-    start_in_oam_scan_i: bool,
+        start_in_oam_scan_i: bool,
 ) -> PpuState {
     let base_fetcher_state = seeded_fetcher(seed_fetcher_valid_i, seed_fetcher_source_i, seed_fetcher_step_i);
     let seeded_fetcher_state =
@@ -175,7 +187,7 @@ fn seeded_state(
         };
     let seeded_bg_fifo_state = seeded_bg_fifo(seed_bg_fifo_count_i);
     PpuState$(
-        visible: PpuVisibleState$(regs: seeded_regs(obj_size_8x16_i, obj_enable_i), ly: visible_ly_i),
+        visible: PpuVisibleState$(regs: seeded_regs(obj_size_8x16_i, obj_enable_i, scx_i, wx_i), ly: visible_ly_i),
         status: PpuStatusState$(
             run: LcdRunState::Running,
             phase:
@@ -188,7 +200,7 @@ fn seeded_state(
             lyc_match_flag: true,
         ),
         sampled: PpuSamplingState$(
-            scx_low3_line: 0u3,
+            scx_low3_line: trunc(scx_i & 0x7u8),
             wy_triggered_this_frame: false,
             window_enable_at_mode2_start: false,
         ),
@@ -196,8 +208,12 @@ fn seeded_state(
             dot_in_line: start_dot_in_line_i,
             x_out: start_x_out_i,
             stall_dots: 0u5,
-            window_state: lib::ppu::sem::types::WindowState::Inactive,
-            window_line: 0u8,
+            transfer_event_count: 0u16,
+            transfer_event_hash: 0u64,
+            transfer_window_restart_count: 0u2,
+            transfer_obj_fetch_count: 0u4,
+            window_state: decode_window_state(window_state_i, window_line_i),
+            window_line: window_line_i,
             oam_scan: empty_oam_scan_state(),
             line_objs: configured_line_objs(line_obj_count_i, ticket0_x_i, ticket1_x_i, ticket2_x_i, ticket_y_i),
             line_obj_fetch_index: 0u4,
@@ -393,6 +409,10 @@ pub entity obj_transfer_live_test_top(
     visible_ly_i: uint<8>,
     obj_size_8x16_i: bool,
     obj_enable_i: bool,
+    scx_i: uint<8>,
+    wx_i: uint<8>,
+    window_state_i: uint<2>,
+    window_line_i: uint<8>,
     start_x_out_i: uint<8>,
     start_dot_in_line_i: uint<9>,
     seed_fetcher_valid_i: bool,
@@ -421,7 +441,7 @@ pub entity obj_transfer_live_test_top(
     req_addr_i: uint<16>,
     req_data_i: uint<8>,
     start_in_oam_scan_i: bool,
-) -> uint<117> {
+) -> uint<203> {
     decl state_reg;
     decl pending_req_reg;
     decl pending_resp_valid_reg;
@@ -494,6 +514,10 @@ pub entity obj_transfer_live_test_top(
         visible_ly_i,
         obj_size_8x16_i,
         obj_enable_i,
+        scx_i,
+        wx_i,
+        window_state_i,
+        window_line_i,
         start_x_out_i,
         start_dot_in_line_i,
         seed_fetcher_valid_i,
@@ -543,4 +567,8 @@ pub entity obj_transfer_live_test_top(
         | (zext(visible.next_state.render.obj_fetch_ticket.x) << 103)
         | (zext(trace.bg_fifo.count) << 111)
         | (zext(lib::util::bit(trace.fetcher.pending_valid)) << 116)
+        | (zext(visible.next_state.render.transfer_event_count) << 117)
+        | (zext(visible.next_state.render.transfer_obj_fetch_count) << 133)
+        | (zext(visible.next_state.render.transfer_window_restart_count) << 137)
+        | (zext(visible.next_state.render.transfer_event_hash) << 139)
 }

@@ -65,6 +65,10 @@ enum class PpuMode : uint8_t {
 };
 
 struct Observation {
+    uint8_t ppu_line_summary_transfer_obj_fetch_count = 0;
+    uint8_t ppu_line_summary_transfer_window_restart_count = 0;
+    uint16_t ppu_line_summary_transfer_event_count = 0;
+    uint64_t ppu_line_summary_transfer_event_hash = 0;
     bool ppu_line_summary_valid = false;
     uint16_t ppu_line_summary_mode3_len = 0;
     uint8_t ppu_oam_scan_index = 0;
@@ -326,6 +330,10 @@ Observation observe(const Vsoc_rom_top_verilator_wrapper& top) {
     };
 
     Observation obs;
+    obs.ppu_line_summary_transfer_obj_fetch_count = static_cast<uint8_t>(extract_bits(252, 4));
+    obs.ppu_line_summary_transfer_window_restart_count = static_cast<uint8_t>(extract_bits(256, 2));
+    obs.ppu_line_summary_transfer_event_count = static_cast<uint16_t>(extract_bits(258, 16));
+    obs.ppu_line_summary_transfer_event_hash = extract_bits(274, 64);
     obs.ppu_line_summary_valid = extract_bits(251, 1) != 0;
     obs.ppu_line_summary_mode3_len = static_cast<uint16_t>(extract_bits(242, 9));
     obs.ppu_oam_scan_index = static_cast<uint8_t>(extract_bits(236, 6));
@@ -1035,6 +1043,10 @@ void write_trace_line(std::ofstream& trace, uint64_t cycle, const Observation& o
           << "\"ppu_mode\":" << static_cast<int>(observation.ppu_mode) << ","
           << "\"ppu_ly\":" << static_cast<int>(observation.ppu_ly) << ","
           << "\"ppu_stat\":" << static_cast<int>(observation.ppu_stat) << ","
+          << "\"line_summary_transfer_obj_fetch_count\":" << static_cast<int>(observation.ppu_line_summary_transfer_obj_fetch_count) << ","
+          << "\"line_summary_transfer_window_restart_count\":" << static_cast<int>(observation.ppu_line_summary_transfer_window_restart_count) << ","
+          << "\"line_summary_transfer_event_count\":" << static_cast<int>(observation.ppu_line_summary_transfer_event_count) << ","
+          << "\"line_summary_transfer_event_hash\":" << observation.ppu_line_summary_transfer_event_hash << ","
           << "\"line_summary_valid\":" << (observation.ppu_line_summary_valid ? "true" : "false") << ","
           << "\"line_summary_mode3_len\":" << static_cast<int>(observation.ppu_line_summary_mode3_len) << ","
           << "\"oam_scan_index\":" << static_cast<int>(observation.ppu_oam_scan_index) << ","
