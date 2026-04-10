@@ -43,8 +43,24 @@ class CompareRowLoopTimingTest(unittest.TestCase):
                         wx=0,
                         wy=0,
                     ),
+                    HookTimingCapture(
+                        seq=1,
+                        frame=1,
+                        label="WriteObjOff",
+                        pc=0x01D5,
+                        ly=80,
+                        stat=0x83,
+                        lcdc=0x91,
+                        scx=0,
+                        scy=0,
+                        wx=0,
+                        wy=0,
+                    ),
                 )
-                summarize.return_value = {"milestones": {"first_lcdc_write": {"scanout_x": 106}}}
+                summarize.return_value = {
+                    "label_stats": {"WaitForMode3": {"count": 2}},
+                    "milestones": {"first_lcdc_write": {"scanout_x": 106}},
+                }
 
                 summary = compare_row_loop_timing(
                     rom_path=rom,
@@ -59,6 +75,9 @@ class CompareRowLoopTimingTest(unittest.TestCase):
         self.assertEqual(summary["write_pc"], "0x01d5")
         self.assertEqual(summary["labels"], ["WaitForMode3", "DelayCancel"])
         self.assertEqual(summary["pyboy"][0]["label"], "WaitForMode3")
+        self.assertEqual(summary["pyboy_label_stats"]["WaitForMode3"]["count"], 1)
+        self.assertEqual(summary["pyboy_label_stats"]["WriteObjOff"]["first"]["pc"], 0x01D5)
+        self.assertEqual(summary["native"]["label_stats"]["WaitForMode3"]["count"], 2)
         self.assertEqual(summary["native"]["milestones"]["first_lcdc_write"]["scanout_x"], 106)
         capture.assert_called_once()
         summarize.assert_called_once()

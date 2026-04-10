@@ -75,6 +75,18 @@ def _first_record(
     return None
 
 
+def _matching_records(
+    records: Iterable[dict[str, Any]],
+    predicate,
+    labels_by_addr: dict[int, tuple[str, ...]],
+) -> list[dict[str, Any]]:
+    matches: list[dict[str, Any]] = []
+    for record in records:
+        if predicate(record):
+            matches.append(_record_summary(record, labels_by_addr.get(int(record.get("pc", -1)), ())))
+    return matches
+
+
 def summarize_rom_trace(
     trace_path: Path,
     sym_path: Path,
@@ -88,19 +100,27 @@ def summarize_rom_trace(
     line_filter = (lambda record: record.get("ppu_ly") == line) if line is not None else (lambda record: True)
 
     requested_labels: dict[str, dict[str, Any] | None] = {}
+    label_stats: dict[str, dict[str, Any]] = {}
     for label in labels:
         addr = table.lookup(label).addr
-        requested_labels[label] = _first_record(
+        matches = _matching_records(
             records,
             lambda record, addr=addr: line_filter(record) and int(record.get("pc", -1)) == addr,
             labels_by_addr,
         )
+        requested_labels[label] = matches[0] if matches else None
+        label_stats[label] = {
+            "count": len(matches),
+            "first": matches[0] if matches else None,
+            "last": matches[-1] if matches else None,
+        }
 
     return {
         "trace_path": str(trace_path),
         "sym_path": str(sym_path),
         "line": line,
         "labels": requested_labels,
+        "label_stats": label_stats,
         "milestones": {
             "first_selected_object": _first_record(
                 records,

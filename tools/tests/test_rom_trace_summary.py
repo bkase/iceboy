@@ -99,6 +99,9 @@ class RomTraceSummaryTest(unittest.TestCase):
             self.assertEqual(summary["labels"]["FrameLoop.row_loop"]["pc"], "0x01ea")
             self.assertEqual(summary["labels"]["WaitForMode3"]["cycle"], 20)
             self.assertEqual(summary["labels"]["DelayCancel"]["labels"], ["DelayCancel"])
+            self.assertEqual(summary["label_stats"]["FrameLoop.row_loop"]["count"], 1)
+            self.assertEqual(summary["label_stats"]["WaitForMode3"]["first"]["cycle"], 20)
+            self.assertEqual(summary["label_stats"]["DelayCancel"]["last"]["pc"], "0x0250")
             self.assertEqual(summary["milestones"]["first_selected_object"]["cycle"], 20)
             self.assertEqual(summary["milestones"]["first_object_scanout"]["scanout_x"], 120)
             self.assertEqual(summary["milestones"]["first_lcdc_write"]["bus_req_addr"], "0xff40")
@@ -146,6 +149,7 @@ class RomTraceSummaryTest(unittest.TestCase):
             )
             parsed = json.loads(completed.stdout)
             self.assertEqual(parsed["labels"]["WaitForMode3"]["pc"], "0x0246")
+            self.assertEqual(parsed["label_stats"]["WaitForMode3"]["count"], 1)
             self.assertEqual(parsed["milestones"]["first_lcdc_write"]["bus_req_data"], "0x91")
 
 

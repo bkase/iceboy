@@ -14,6 +14,18 @@ from bench.pyboy.oracle import CommitPoint, capture_checkpoint_hook_timings
 from tools.rom_trace_summary import summarize_rom_trace
 
 
+def _hook_stats(captures: list[dict[str, object]], labels: tuple[str, ...]) -> dict[str, dict[str, object]]:
+    stats: dict[str, dict[str, object]] = {}
+    for label in labels:
+        matches = [capture for capture in captures if capture.get("label") == label]
+        stats[label] = {
+            "count": len(matches),
+            "first": matches[0] if matches else None,
+            "last": matches[-1] if matches else None,
+        }
+    return stats
+
+
 def compare_row_loop_timing(
     *,
     rom_path: Path,
@@ -37,6 +49,7 @@ def compare_row_loop_timing(
         target_line=line,
     )
     native = summarize_rom_trace(trace_path, sym_path, line=line, labels=labels)
+    pyboy_records = [asdict(capture) for capture in pyboy]
     return {
         "rom_path": str(rom_path),
         "sym_path": str(sym_path),
@@ -46,7 +59,8 @@ def compare_row_loop_timing(
         "settle_rendered_frames": settle_rendered_frames,
         "labels": list(labels),
         "write_pc": f"0x{write_pc:04x}",
-        "pyboy": [asdict(capture) for capture in pyboy],
+        "pyboy": pyboy_records,
+        "pyboy_label_stats": _hook_stats(pyboy_records, tuple(label for label in labels) + ("WriteObjOff",)),
         "native": native,
     }
 
