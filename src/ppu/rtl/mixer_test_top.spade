@@ -7,9 +7,15 @@ use lib::ppu::sem::types::{BgPixel, ObjDrawRank, ObjPaletteSel, ObjPixel};
 use lib::sim::encode::encode_pixel_source;
 use lib::sim::ppu_support::build_test_lcdc;
 
-fn build_render(bgp_pop_i: uint<8>, obp0_pop_i: uint<8>, obp1_pop_i: uint<8>, bg_enable_i: bool) -> PpuRenderInputs {
+fn build_render(
+    bgp_pop_i: uint<8>,
+    obp0_pop_i: uint<8>,
+    obp1_pop_i: uint<8>,
+    bg_enable_i: bool,
+    obj_enable_i: bool,
+) -> PpuRenderInputs {
     PpuRenderInputs$(
-        lcdc_fetch: build_test_lcdc(false, false, true, false, false, true, bg_enable_i),
+        lcdc_fetch: build_test_lcdc(false, false, true, false, false, obj_enable_i, bg_enable_i),
         scx_fetch: 0u8,
         scy_fetch: 0u8,
         scx_low3_line: 0u3,
@@ -33,6 +39,7 @@ pub entity mixer_test_top(
     obp0_pop_i: uint<8>,
     obp1_pop_i: uint<8>,
     bg_enable_i: bool,
+    obj_enable_i: bool,
     pixel_valid_i: bool,
     obj_valid_i: bool,
     obj_color_i: uint<2>,
@@ -50,7 +57,7 @@ pub entity mixer_test_top(
         draw_rank: ObjDrawRank$(x: obj_x_i, selection_rank: obj_selection_rank_i),
         bg_over_obj: obj_bg_over_obj_i,
     );
-    let render = build_render(bgp_pop_i, obp0_pop_i, obp1_pop_i, bg_enable_i);
+    let render = build_render(bgp_pop_i, obp0_pop_i, obp1_pop_i, bg_enable_i, obj_enable_i);
     let _ = mix_bg_pixel(bg_pixel, render, x_i, y_i);
     let mixed = mix_bg_obj_pixel(bg_pixel, obj_valid_i, obj_pixel, render, x_i, y_i);
     let event = emit_mixed_scanout(pixel_valid_i, bg_pixel, obj_valid_i, obj_pixel, render, x_i, y_i);
@@ -73,4 +80,5 @@ pub entity mixer_test_top(
         | (zext(lib::util::bit(bg_from_window_i)) << 27)
         | (zext(lib::util::bit(obj_bg_over_obj_i)) << 28)
         | (zext(lib::util::bit(obj_valid_i)) << 29)
+        | (zext(lib::util::bit(obj_enable_i)) << 30)
 }

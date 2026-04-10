@@ -47,7 +47,7 @@ pub fn mix_bg_obj_pixel(
     y: uint<8>,
 ) -> PixelEmit {
     let bg_emit = mix_bg_pixel(bg_pixel, render, x, y);
-    let obj_opaque = obj_pixel_valid && obj_pixel.color != 0u2;
+    let obj_opaque = render.lcdc_fetch.obj_enable && obj_pixel_valid && obj_pixel.color != 0u2;
     let bg_blocks_obj = bg_pixel_enabled(render.lcdc_fetch) && bg_pixel.shade != 0u2 && obj_pixel.bg_over_obj;
     if !obj_opaque || bg_blocks_obj {
         bg_emit

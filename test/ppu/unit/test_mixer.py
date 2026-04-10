@@ -39,6 +39,7 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "bg_from_window": bool((value >> 27) & 0x1),
         "obj_bg_over_obj": bool((value >> 28) & 0x1),
         "obj_valid": bool((value >> 29) & 0x1),
+        "obj_enabled": bool((value >> 30) & 0x1),
     }
 
 
@@ -50,6 +51,7 @@ async def sample(
     obp0_pop: int = 0xE4,
     obp1_pop: int = 0x1B,
     bg_enable: bool = True,
+    obj_enable: bool = True,
     pixel_valid: bool = True,
     obj_valid: bool = False,
     obj_color: int = 0,
@@ -67,6 +69,7 @@ async def sample(
     dut.obp0_pop_i.value = obp0_pop & 0xFF
     dut.obp1_pop_i.value = obp1_pop & 0xFF
     dut.bg_enable_i.value = int(bg_enable)
+    dut.obj_enable_i.value = int(obj_enable)
     dut.pixel_valid_i.value = int(pixel_valid)
     dut.obj_valid_i.value = int(obj_valid)
     dut.obj_color_i.value = obj_color & 0x3
@@ -166,6 +169,33 @@ async def test_opaque_object_uses_selected_obj_palette_when_bg_does_not_block(du
             "obj_color": 2,
             "mixed_shade": 1,
             "source": 2,
+            "event_valid": True,
+            "event_matches_mix": True,
+        },
+    )
+
+
+@cocotb.test()
+async def test_obj_disable_blocks_queued_object_pixels(dut):
+    logger = case_logger("test_obj_disable_blocks_queued_object_pixels")
+    snapshot = await sample(
+        dut,
+        bg_color_idx=0,
+        bgp_pop=0xE4,
+        obj_enable=False,
+        obj_valid=True,
+        obj_color=3,
+        obj_palette_sel=True,
+        obp1_pop=0b00_01_11_10,
+    )
+    require(
+        logger,
+        snapshot,
+        expected={
+            "obj_enabled": False,
+            "obj_valid": True,
+            "mixed_shade": 0,
+            "source": 0,
             "event_valid": True,
             "event_matches_mix": True,
         },
