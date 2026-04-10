@@ -338,7 +338,7 @@ async def test_oam_dma_blocks_non_io_hram_accesses_and_preserves_existing_conten
 
 
 @cocotb.test()
-async def test_oam_dma_keeps_io_and_hram_accessible(dut):
+async def test_oam_dma_keeps_only_hram_accessible(dut):
     clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
@@ -352,8 +352,30 @@ async def test_oam_dma_keeps_io_and_hram_accessible(dut):
     io_snapshot = await sample(dut, req_kind=REQ_READ, addr=0xFF04, oam_dma_active=True)
     assert io_snapshot["data"] == 0xFF
     assert io_snapshot["region"] == REGION_IO
-    assert io_snapshot["owner"] == OWNER_CPU
-    assert io_snapshot["blocked"] is False
+    assert io_snapshot["owner"] == OWNER_OAM_DMA
+    assert io_snapshot["blocked"] is True
+
+    _, io_after_write = await write_then_read(dut, addr=0xFF04, value=0x12, oam_dma_active=True)
+    assert io_after_write["data"] == 0xFF
+    assert io_after_write["region"] == REGION_IO
+    assert io_after_write["owner"] == OWNER_OAM_DMA
+    assert io_after_write["blocked"] is True
+
+    for addr, region in [
+        (0x0150, REGION_ROM),
+        (0x8000, REGION_VRAM),
+        (0xA000, REGION_CART_RAM),
+        (0xC123, REGION_WRAM),
+        (0xE123, REGION_ECHO),
+        (0xFE00, REGION_OAM),
+        (0xFEA0, REGION_NOT_USABLE),
+        (0xFF00, REGION_IO),
+        (0xFFFF, REGION_IE),
+    ]:
+        snapshot = await sample(dut, req_kind=REQ_READ, addr=addr, oam_dma_active=True)
+        assert snapshot["region"] == region, (hex(addr), snapshot)
+        assert snapshot["owner"] == OWNER_OAM_DMA, (hex(addr), snapshot)
+        assert snapshot["blocked"] is True, (hex(addr), snapshot)
 
 
 @cocotb.test()
@@ -373,8 +395,10 @@ async def test_ff46_write_starts_internal_dma_copy_for_160_mcycles(dut):
 
     start = await sample(dut, req_kind=REQ_WRITE, addr=0xFF46, data=0xC1)
     assert start["region"] == REGION_IO
-    assert start["owner"] == OWNER_CPU
-    assert start["blocked"] is False
+    # The sample is taken after the transfer-start edge, so ownership already reflects
+    # the latched DMA-active phase even though this FF46 write is what triggered it.
+    assert start["owner"] == OWNER_OAM_DMA
+    assert start["blocked"] is True
 
     for cycle in range(159):
         blocked = await sample(dut, req_kind=REQ_READ, addr=0xC100)

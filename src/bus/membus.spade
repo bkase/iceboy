@@ -70,7 +70,6 @@ fn region_owner(region: BusRegion, oam_dma_active: bool, ppu_vram_active: bool, 
     if oam_dma_active
         && !match region {
             BusRegion::Hram => true,
-            BusRegion::Io => true,
             _ => false,
         } {
         BusOwner::OamDma

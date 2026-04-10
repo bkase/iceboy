@@ -248,7 +248,7 @@ async def test_ppu_oam_search_blocks_oam_reads_and_writes(dut):
 
 
 @cocotb.test()
-async def test_oam_dma_restricts_cpu_access_to_io_and_hram(dut):
+async def test_oam_dma_restricts_cpu_access_to_hram_only(dut):
     clock = Clock(dut.clk_i, 10, units="ns")
     cocotb.start_soon(clock.start())
     await prepare_dut(dut)
@@ -293,5 +293,5 @@ async def test_oam_dma_restricts_cpu_access_to_io_and_hram(dut):
     )
     assert io_reg["data"] == 0xFF
     assert io_reg["region"] == REGION_IO
-    assert io_reg["owner"] == OWNER_CPU
-    assert io_reg["blocked"] is False
+    assert io_reg["owner"] == OWNER_OAM_DMA
+    assert io_reg["blocked"] is True
