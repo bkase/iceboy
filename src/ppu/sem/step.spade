@@ -161,6 +161,7 @@ fn update_render_state(
     regs: PpuRegs,
     sampled: lib::ppu::sem::types::PpuSamplingState,
     mem_resp: PpuMemResp,
+    dma_active: bool,
     next_run: LcdRunState,
     next_phase: PpuPhase,
     frame_start: bool,
@@ -171,7 +172,7 @@ fn update_render_state(
         if line_start {
             (lib::ppu::sem::types::empty_oam_scan_state(), lib::ppu::sem::types::empty_line_obj_list())
         } else {
-            advance_live_oam_scan(render, status_phase, visible_ly, regs, mem_resp)
+            advance_live_oam_scan(render, status_phase, visible_ly, regs, mem_resp, dma_active)
         };
     let next_dot =
         if line_start {
@@ -414,34 +415,48 @@ fn advance_live_oam_scan(
     visible_ly: uint<8>,
     regs: PpuRegs,
     mem_resp: PpuMemResp,
+    dma_active: bool,
 ) -> (OamScanState, LineObjList) {
     match status_phase {
         PpuPhase::OamScan$(index: _, found: _) =>
             if matching_oam_scan_resp(render.oam_scan, mem_resp) {
                 let data = oam_scan_resp_data(mem_resp);
                 if render.oam_scan.pending_y_valid {
-                    let step = step_oam_scan_entry(
-                        lib::ppu::sem::types::OamScanState$(
-                            index: render.oam_scan.index,
-                            found: render.oam_scan.found,
-                            pending_y_valid: false,
-                            pending_y: 0u8,
-                        ),
-                        render.line_objs,
-                        visible_ly,
-                        regs.lcdc,
-                        render.oam_scan.pending_y,
-                        data,
-                    );
-                    (
-                        lib::ppu::sem::types::OamScanState$(
-                            index: step.next_scan.index,
-                            found: step.next_scan.found,
-                            pending_y_valid: false,
-                            pending_y: 0u8,
-                        ),
-                        step.next_list,
-                    )
+                    if dma_active {
+                        // DMG mode-2 DMA/OAM contention hides objects for this scan cadence.
+                        (
+                            lib::ppu::sem::types::OamScanState$(
+                                index: trunc(render.oam_scan.index + 1u6),
+                                found: render.oam_scan.found,
+                                pending_y_valid: false,
+                                pending_y: 0u8,
+                            ),
+                            render.line_objs,
+                        )
+                    } else {
+                        let step = step_oam_scan_entry(
+                            lib::ppu::sem::types::OamScanState$(
+                                index: render.oam_scan.index,
+                                found: render.oam_scan.found,
+                                pending_y_valid: false,
+                                pending_y: 0u8,
+                            ),
+                            render.line_objs,
+                            visible_ly,
+                            regs.lcdc,
+                            render.oam_scan.pending_y,
+                            data,
+                        );
+                        (
+                            lib::ppu::sem::types::OamScanState$(
+                                index: step.next_scan.index,
+                                found: step.next_scan.found,
+                                pending_y_valid: false,
+                                pending_y: 0u8,
+                            ),
+                            step.next_list,
+                        )
+                    }
                 } else {
                     (
                         lib::ppu::sem::types::OamScanState$(
@@ -1608,6 +1623,7 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
                         next_regs,
                         next_sampled,
                         input.mem_resp,
+                        input.dma_state.active,
                         next_run,
                         next_phase,
                         frame_start,

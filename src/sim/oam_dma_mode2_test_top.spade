@@ -1,0 +1,100 @@
+use lib::ppu::sem::events::{DotInput, OamDmaState, idle_timed_ppu_event};
+use lib::ppu::sem::memory::{MemClient, MemRegion, MemTxnTag, PpuMemResp, PpuMemResult};
+use lib::ppu::sem::step::step_dot;
+use lib::ppu::sem::types::{
+    LcdRunState,
+    OamScanState,
+    PpuPhase,
+    PpuRenderState,
+    PpuState,
+    PpuStatusState,
+    PpuVisibleState,
+    empty_line_obj_list,
+    initial_ppu_state,
+};
+use lib::sim::ppu_support::build_test_lcdc;
+
+fn build_mem_resp(obj_x_i: uint<8>) -> PpuMemResp {
+    PpuMemResp$(
+        tag: MemTxnTag$(region: MemRegion::Oam, client: MemClient::OamScanner, id: 1u4),
+        result: PpuMemResult::Ok$(data: obj_x_i),
+    )
+}
+
+fn build_state(ly_i: uint<8>, obj_y_i: uint<8>) -> PpuState {
+    let base = initial_ppu_state();
+    let regs = base.visible.regs;
+    PpuState$(
+        visible: PpuVisibleState$(
+            regs: lib::ppu::sem::types::PpuRegs$(
+                lcdc: build_test_lcdc(false, false, true, false, false, true, true),
+                stat_sel: regs.stat_sel,
+                scy: regs.scy,
+                scx: regs.scx,
+                lyc: regs.lyc,
+                wy: regs.wy,
+                wx: regs.wx,
+                bgp: regs.bgp,
+                obp0: regs.obp0,
+                obp1: regs.obp1,
+            ),
+            ly: ly_i,
+        ),
+        status: PpuStatusState$(
+            run: LcdRunState::Running,
+            phase: PpuPhase::OamScan$(index: 0u6, found: 0u4),
+            stat_irq: base.status.stat_irq,
+            lyc_match_flag: base.status.lyc_match_flag,
+        ),
+        sampled: base.sampled,
+        render: PpuRenderState$(
+            dot_in_line: base.render.dot_in_line,
+            x_out: base.render.x_out,
+            stall_dots: base.render.stall_dots,
+            transfer_event_count: base.render.transfer_event_count,
+            transfer_event_hash: base.render.transfer_event_hash,
+            transfer_window_restart_count: base.render.transfer_window_restart_count,
+            transfer_obj_fetch_count: base.render.transfer_obj_fetch_count,
+            window_state: base.render.window_state,
+            window_line: base.render.window_line,
+            oam_scan: OamScanState$(index: 0u6, found: 0u4, pending_y_valid: true, pending_y: obj_y_i),
+            line_objs: empty_line_obj_list(),
+            line_obj_fetch_index: base.render.line_obj_fetch_index,
+            line_obj_fetched_mask: base.render.line_obj_fetched_mask,
+            obj_fetch_ticket: base.render.obj_fetch_ticket,
+            obj_fetch_flags: base.render.obj_fetch_flags,
+            bg_fetcher_resume: base.render.bg_fetcher_resume,
+            fetcher: base.render.fetcher,
+            bg_fifo: base.render.bg_fifo,
+            obj_fifo: base.render.obj_fifo,
+            last_obj_penalty_tile: base.render.last_obj_penalty_tile,
+            first_frame_blank: base.render.first_frame_blank,
+        ),
+    )
+}
+
+pub entity oam_dma_mode2_test_top(
+    ly_i: uint<8>,
+    obj_y_i: uint<8>,
+    obj_x_i: uint<8>,
+    dma_active_i: bool,
+) -> uint<38> {
+    let output = step_dot(
+        build_state(ly_i, obj_y_i),
+        DotInput$(
+            bus_events: [idle_timed_ppu_event(); 4],
+            bus_event_count: 0u4,
+            mem_resp: build_mem_resp(obj_x_i),
+            dma_state: OamDmaState$(active: dma_active_i, source_high: 0u8),
+        ),
+    );
+    let next_state = output.next_state;
+    let slot0 = next_state.render.line_objs.slots[0];
+    zext(next_state.render.line_objs.count)
+        | (zext(next_state.render.oam_scan.index) << 4)
+        | (zext(next_state.render.oam_scan.found) << 10)
+        | (zext(slot0.oam_index) << 14)
+        | (zext(slot0.x) << 20)
+        | (zext(slot0.y) << 28)
+        | (zext(slot0.selection_rank) << 36)
+}

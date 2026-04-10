@@ -48,6 +48,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/ppu/unit/test_bg_transfer_live.py"
     "test/ppu/unit/test_bg_fifo.py"
     "test/ppu/unit/test_line_summary.py"
+    "test/ppu/unit/test_oam_dma_mode2.py"
     "test/ppu/unit/test_oam_scan.py"
     "test/ppu/unit/test_scanout_blank.py"
     "test/ppu/unit/test_transfer_penalty.py"

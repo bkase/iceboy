@@ -3,6 +3,7 @@ pub mod backend_diff_ppu_test_top;
 pub mod backend_diff_trace_top;
 pub mod encode;
 pub mod line_summary_test_top;
+pub mod oam_dma_mode2_test_top;
 pub mod ppu_power_top;
 pub mod ppu_state_top;
 pub mod ppu_support;
