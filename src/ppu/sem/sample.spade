@@ -13,14 +13,29 @@ pub struct PpuRenderInputs {
     lyc_eq_live: bool,
 }
 
-// Mode-2 boundary sampling captures the state that should remain fixed for the
-// scanline start: SCX low discard bits, WY arming, and window-enable-at-start.
-pub fn sample_mode2_state(visible: PpuVisibleState, sampled: PpuSamplingState) -> PpuSamplingState {
+// Mode-2 boundary sampling captures the line-scoped state that must freeze at
+// the start of scanline evaluation. SCX low discard bits are included here and
+// do not track live mid-line writes.
+fn sample_mode2_line_state(visible: PpuVisibleState, sampled: PpuSamplingState) -> PpuSamplingState {
     PpuSamplingState$(
         scx_low3_line: trunc(visible.regs.scx),
+        wy_triggered_this_frame: sampled.wy_triggered_this_frame,
+        window_enable_at_mode2_start: sampled.window_enable_at_mode2_start,
+    )
+}
+
+// Window-related control is allowed to settle throughout mode 2 so line-based
+// renderers can still observe late LY=LYC-triggered writes before transfer.
+pub fn sample_mode2_window_state(visible: PpuVisibleState, sampled: PpuSamplingState) -> PpuSamplingState {
+    PpuSamplingState$(
+        scx_low3_line: sampled.scx_low3_line,
         wy_triggered_this_frame: sampled.wy_triggered_this_frame || visible.ly == visible.regs.wy,
         window_enable_at_mode2_start: visible.regs.lcdc.win_enable,
     )
+}
+
+pub fn sample_mode2_state(visible: PpuVisibleState, sampled: PpuSamplingState) -> PpuSamplingState {
+    sample_mode2_window_state(visible, sample_mode2_line_state(visible, sampled))
 }
 
 // Fetch/pop sampling keeps the live-read registers separate from mode-2 sampled

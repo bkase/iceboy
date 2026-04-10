@@ -41,6 +41,7 @@ use lib::ppu::sem::types::{
     PpuStatusState,
     PpuVisibleState,
     SelectedObjTicket,
+    WindowState,
     empty_obj_fifo,
     idle_ppu_irq_req,
     visible_mode,
@@ -52,15 +53,17 @@ use lib::ppu::rtl::fetcher::{
     capture_bg_fetcher_resume_state,
     initial_bg_fetcher_state,
     next_fetcher_epoch,
+    restart_window_fetcher,
     start_bg_fetcher,
 };
-use lib::ppu::rtl::fifo::{advance_bg_pipe, bg_fifo_has_room_for_row, clear_bg_fifo, note_window_tile_push};
+use lib::ppu::rtl::fifo::{advance_bg_pipe, bg_fifo_has_room_for_row, clear_bg_fifo, line_start_window_state, note_window_tile_push};
 use lib::ppu::rtl::irq::irq_req;
 use lib::ppu::rtl::obj_fetch::{
     decode_obj_flags,
     decode_obj_row,
     ObjFifoPopResult,
     pop_obj_fifo,
+    obj_fetch_fits_fifo_horizon,
     obj_fifo_left_clip,
     obj_fifo_overlay_row_clipped,
     obj_fifo_start_offset,
@@ -141,9 +144,11 @@ fn update_render_state(
     status_phase: PpuPhase,
     visible_ly: uint<8>,
     regs: PpuRegs,
+    sampled: lib::ppu::sem::types::PpuSamplingState,
     mem_resp: PpuMemResp,
     next_run: LcdRunState,
     next_phase: PpuPhase,
+    frame_start: bool,
     line_start: bool,
 ) -> PpuRenderState {
     let (next_scan, next_list) =
@@ -158,6 +163,8 @@ fn update_render_state(
         } else {
             next_dot_in_line(next_run, render.dot_in_line)
         };
+    let next_window_state = line_start_window_state(render.window_state, sampled, frame_start, line_start);
+    let next_window_line = if frame_start { 0u8 } else { render.window_line };
     let next_x_out = match next_phase {
         PpuPhase::Transfer$(x_out, discard_scx: _) => x_out,
         _ => 0u8,
@@ -165,11 +172,12 @@ fn update_render_state(
     PpuRenderState$(
         dot_in_line: next_dot,
         x_out: next_x_out,
-        window_state: render.window_state,
-        window_line: render.window_line,
+        window_state: next_window_state,
+        window_line: next_window_line,
         oam_scan: next_scan,
         line_objs: next_list,
         line_obj_fetch_index: if line_start { 0u4 } else { render.line_obj_fetch_index },
+        line_obj_fetched_mask: if line_start { 0u10 } else { render.line_obj_fetched_mask },
         obj_fetch_ticket: if line_start { zero_selected_obj_ticket() } else { render.obj_fetch_ticket },
         obj_fetch_flags: if line_start { zero_obj_flags() } else { render.obj_fetch_flags },
         bg_fetcher_resume: if line_start { initial_bg_fetcher_state() } else { render.bg_fetcher_resume },
@@ -441,15 +449,106 @@ fn line_obj_ticket_at(line_objs: LineObjList, index: uint<4>) -> SelectedObjTick
     }
 }
 
-fn has_pending_line_obj(render: PpuRenderState) -> bool {
-    render.line_obj_fetch_index < render.line_objs.count
+fn line_obj_slot_bit(slot: uint<4>) -> uint<10> {
+    match slot {
+        0u4 => 0x001u10,
+        1u4 => 0x002u10,
+        2u4 => 0x004u10,
+        3u4 => 0x008u10,
+        4u4 => 0x010u10,
+        5u4 => 0x020u10,
+        6u4 => 0x040u10,
+        7u4 => 0x080u10,
+        8u4 => 0x100u10,
+        _ => 0x200u10,
+    }
+}
+
+fn line_obj_slot_fetched(mask: uint<10>, slot: uint<4>) -> bool {
+    (mask & line_obj_slot_bit(slot)) != 0u10
+}
+
+fn mark_line_obj_slot_fetched(mask: uint<10>, slot: uint<4>) -> uint<10> {
+    mask | line_obj_slot_bit(slot)
+}
+
+fn line_obj_ticket_precedes(lhs: SelectedObjTicket, rhs: SelectedObjTicket) -> bool {
+    lhs.x < rhs.x || (lhs.x == rhs.x && lhs.selection_rank < rhs.selection_rank)
+}
+
+fn candidate_line_obj_ticket(render: PpuRenderState, slot: uint<4>, x_out: uint<8>) -> Option<SelectedObjTicket> {
+    if slot < render.line_objs.count {
+        let ticket = line_obj_ticket_at(render.line_objs, slot);
+        if !line_obj_slot_fetched(render.line_obj_fetched_mask, slot) && x_out >= obj_trigger_x(ticket) {
+            Option::Some(ticket)
+        } else {
+            Option::None
+        }
+    } else {
+        Option::None
+    }
+}
+
+fn earlier_line_obj_ticket(lhs: Option<SelectedObjTicket>, rhs: Option<SelectedObjTicket>) -> Option<SelectedObjTicket> {
+    match lhs {
+        Option::Some(lhs_ticket) =>
+            match rhs {
+                Option::Some(rhs_ticket) =>
+                    if line_obj_ticket_precedes(rhs_ticket, lhs_ticket) {
+                        Option::Some(rhs_ticket)
+                    } else {
+                        Option::Some(lhs_ticket)
+                    },
+                Option::None => Option::Some(lhs_ticket),
+            },
+        Option::None => rhs,
+    }
+}
+
+fn next_due_line_obj_ticket(render: PpuRenderState, x_out: uint<8>) -> Option<SelectedObjTicket> {
+    let best0 = candidate_line_obj_ticket(render, 0u4, x_out);
+    let best1 = earlier_line_obj_ticket(best0, candidate_line_obj_ticket(render, 1u4, x_out));
+    let best2 = earlier_line_obj_ticket(best1, candidate_line_obj_ticket(render, 2u4, x_out));
+    let best3 = earlier_line_obj_ticket(best2, candidate_line_obj_ticket(render, 3u4, x_out));
+    let best4 = earlier_line_obj_ticket(best3, candidate_line_obj_ticket(render, 4u4, x_out));
+    let best5 = earlier_line_obj_ticket(best4, candidate_line_obj_ticket(render, 5u4, x_out));
+    let best6 = earlier_line_obj_ticket(best5, candidate_line_obj_ticket(render, 6u4, x_out));
+    let best7 = earlier_line_obj_ticket(best6, candidate_line_obj_ticket(render, 7u4, x_out));
+    let best8 = earlier_line_obj_ticket(best7, candidate_line_obj_ticket(render, 8u4, x_out));
+    earlier_line_obj_ticket(best8, candidate_line_obj_ticket(render, 9u4, x_out))
+}
+
+fn line_obj_slot_for_ticket(line_objs: LineObjList, ticket: SelectedObjTicket) -> uint<4> {
+    if line_objs.slots[0].oam_index == ticket.oam_index {
+        0u4
+    } else if line_objs.slots[1].oam_index == ticket.oam_index {
+        1u4
+    } else if line_objs.slots[2].oam_index == ticket.oam_index {
+        2u4
+    } else if line_objs.slots[3].oam_index == ticket.oam_index {
+        3u4
+    } else if line_objs.slots[4].oam_index == ticket.oam_index {
+        4u4
+    } else if line_objs.slots[5].oam_index == ticket.oam_index {
+        5u4
+    } else if line_objs.slots[6].oam_index == ticket.oam_index {
+        6u4
+    } else if line_objs.slots[7].oam_index == ticket.oam_index {
+        7u4
+    } else if line_objs.slots[8].oam_index == ticket.oam_index {
+        8u4
+    } else {
+        9u4
+    }
 }
 
 fn should_start_live_obj_fetch(render: PpuRenderState, regs: PpuRegs, x_out: uint<8>) -> bool {
     regs.lcdc.obj_enable
-        && has_pending_line_obj(render)
         && !fetcher_source_is_object(render)
-        && x_out >= obj_trigger_x(line_obj_ticket_at(render.line_objs, render.line_obj_fetch_index))
+        && match next_due_line_obj_ticket(render, x_out) {
+            Option::Some(ticket) => obj_fetch_fits_fifo_horizon(ticket, x_out),
+            Option::None => false,
+        }
 }
 
 fn obj_fetch_with_req(render: PpuRenderState, step: FetcherStep, req: PpuMemReq) -> (PpuRenderState, PpuMemReqs) {
@@ -477,6 +576,7 @@ fn obj_fetch_with_req(render: PpuRenderState, step: FetcherStep, req: PpuMemReq)
             oam_scan: render.oam_scan,
             line_objs: render.line_objs,
             line_obj_fetch_index: render.line_obj_fetch_index,
+            line_obj_fetched_mask: render.line_obj_fetched_mask,
             obj_fetch_ticket: render.obj_fetch_ticket,
             obj_fetch_flags: render.obj_fetch_flags,
             bg_fetcher_resume: render.bg_fetcher_resume,
@@ -491,6 +591,10 @@ fn obj_fetch_with_req(render: PpuRenderState, step: FetcherStep, req: PpuMemReq)
 
 fn start_live_obj_fetch(render: PpuRenderState, mem_resp: PpuMemResp) -> PpuRenderState {
     let fetcher = render.fetcher;
+    let ticket = match next_due_line_obj_ticket(render, render.x_out) {
+        Option::Some(ticket) => ticket,
+        Option::None => zero_selected_obj_ticket(),
+    };
     PpuRenderState$(
         dot_in_line: render.dot_in_line,
         x_out: render.x_out,
@@ -499,7 +603,8 @@ fn start_live_obj_fetch(render: PpuRenderState, mem_resp: PpuMemResp) -> PpuRend
         oam_scan: render.oam_scan,
         line_objs: render.line_objs,
         line_obj_fetch_index: render.line_obj_fetch_index,
-        obj_fetch_ticket: line_obj_ticket_at(render.line_objs, render.line_obj_fetch_index),
+        line_obj_fetched_mask: render.line_obj_fetched_mask,
+        obj_fetch_ticket: ticket,
         obj_fetch_flags: zero_obj_flags(),
         bg_fetcher_resume: capture_bg_fetcher_resume_state(render.fetcher, mem_resp_valid(mem_resp), mem_resp),
         fetcher: lib::ppu::sem::types::FetcherState$(
@@ -552,6 +657,7 @@ fn complete_live_obj_fetch(
     let row = decode_obj_row(meta, render.fetcher.tile_lo, render.fetcher.tile_hi);
     let offset = obj_fifo_start_offset(render.obj_fetch_ticket, x_out);
     let left_clip = obj_fifo_left_clip(render.obj_fetch_ticket, x_out);
+    let fetched_slot = line_obj_slot_for_ticket(render.line_objs, render.obj_fetch_ticket);
     PpuRenderState$(
         dot_in_line: render.dot_in_line,
         x_out: render.x_out,
@@ -560,6 +666,7 @@ fn complete_live_obj_fetch(
         oam_scan: render.oam_scan,
         line_objs: render.line_objs,
         line_obj_fetch_index: trunc(render.line_obj_fetch_index + 1u4),
+        line_obj_fetched_mask: mark_line_obj_slot_fetched(render.line_obj_fetched_mask, fetched_slot),
         obj_fetch_ticket: zero_selected_obj_ticket(),
         obj_fetch_flags: zero_obj_flags(),
         bg_fetcher_resume: render.bg_fetcher_resume,
@@ -568,6 +675,13 @@ fn complete_live_obj_fetch(
         obj_fifo: obj_fifo_overlay_row_clipped(render.obj_fifo, row, offset, left_clip),
         first_frame_blank: render.first_frame_blank,
     )
+}
+
+fn window_fetch_line_for_restart(state: WindowState, next_window_line: uint<8>) -> uint<8> {
+    match state {
+        WindowState::ActiveOnLine$(win_x: _, win_line: win_line) => win_line,
+        _ => next_window_line,
+    }
 }
 
 fn advance_live_obj_fetch(
@@ -589,6 +703,7 @@ fn advance_live_obj_fetch(
                     oam_scan: render.oam_scan,
                     line_objs: render.line_objs,
                     line_obj_fetch_index: render.line_obj_fetch_index,
+                    line_obj_fetched_mask: render.line_obj_fetched_mask,
                     obj_fetch_ticket: zero_selected_obj_ticket(),
                     obj_fetch_flags: zero_obj_flags(),
                     bg_fetcher_resume: render.bg_fetcher_resume,
@@ -610,6 +725,7 @@ fn advance_live_obj_fetch(
                         oam_scan: render.oam_scan,
                         line_objs: render.line_objs,
                         line_obj_fetch_index: render.line_obj_fetch_index,
+                        line_obj_fetched_mask: render.line_obj_fetched_mask,
                         obj_fetch_ticket: render.obj_fetch_ticket,
                         obj_fetch_flags: render.obj_fetch_flags,
                         bg_fetcher_resume: render.bg_fetcher_resume,
@@ -642,6 +758,7 @@ fn advance_live_obj_fetch(
                         oam_scan: render.oam_scan,
                         line_objs: render.line_objs,
                         line_obj_fetch_index: render.line_obj_fetch_index,
+                        line_obj_fetched_mask: render.line_obj_fetched_mask,
                         obj_fetch_ticket: render.obj_fetch_ticket,
                         obj_fetch_flags: decode_obj_flags(data),
                         bg_fetcher_resume: render.bg_fetcher_resume,
@@ -674,6 +791,7 @@ fn advance_live_obj_fetch(
                         oam_scan: render.oam_scan,
                         line_objs: render.line_objs,
                         line_obj_fetch_index: render.line_obj_fetch_index,
+                        line_obj_fetched_mask: render.line_obj_fetched_mask,
                         obj_fetch_ticket: render.obj_fetch_ticket,
                         obj_fetch_flags: render.obj_fetch_flags,
                         bg_fetcher_resume: render.bg_fetcher_resume,
@@ -706,6 +824,7 @@ fn advance_live_obj_fetch(
                         oam_scan: render.oam_scan,
                         line_objs: render.line_objs,
                         line_obj_fetch_index: render.line_obj_fetch_index,
+                        line_obj_fetched_mask: render.line_obj_fetched_mask,
                         obj_fetch_ticket: render.obj_fetch_ticket,
                         obj_fetch_flags: render.obj_fetch_flags,
                         bg_fetcher_resume: render.bg_fetcher_resume,
@@ -755,6 +874,7 @@ fn apply_live_transfer(
     state: PpuState,
     candidate_state: PpuState,
     mem_resp: PpuMemResp,
+    line_start: bool,
     frame_start: bool,
 ) -> (PpuState, PpuMemReqs, Option<ScanoutEvent>) {
     let was_transfer = match state.status.phase {
@@ -766,7 +886,7 @@ fn apply_live_transfer(
         _ => false,
     };
     if !was_transfer && !next_is_transfer {
-        (candidate_state, live_mem_reqs(state), Option::None)
+        (candidate_state, live_mem_reqs(candidate_state), Option::None)
     } else {
         let entering_transfer = !was_transfer && next_is_transfer;
         let next_discard_seed = match candidate_state.status.phase {
@@ -818,6 +938,7 @@ fn apply_live_transfer(
                         oam_scan: candidate_state.render.oam_scan,
                         line_objs: candidate_state.render.line_objs,
                         line_obj_fetch_index: next_obj_render.line_obj_fetch_index,
+                        line_obj_fetched_mask: next_obj_render.line_obj_fetched_mask,
                         obj_fetch_ticket: next_obj_render.obj_fetch_ticket,
                         obj_fetch_flags: next_obj_render.obj_fetch_flags,
                         bg_fetcher_resume: next_obj_render.bg_fetcher_resume,
@@ -835,6 +956,7 @@ fn apply_live_transfer(
                         oam_scan: candidate_state.render.oam_scan,
                         line_objs: candidate_state.render.line_objs,
                         line_obj_fetch_index: 0u4,
+                        line_obj_fetched_mask: 0u10,
                         obj_fetch_ticket: zero_selected_obj_ticket(),
                         obj_fetch_flags: zero_obj_flags(),
                         bg_fetcher_resume: initial_bg_fetcher_state(),
@@ -884,17 +1006,27 @@ fn apply_live_transfer(
             render_inputs,
             base_x_out,
             frame_start,
-            false,
+            line_start,
             base_discard_scx,
             fetcher_output.push_valid,
             fetcher_output.push_row,
             render_inputs.bgp_pop,
         );
         let next_window_state =
-            if fetcher_output.push_valid {
+            if fetcher_output.push_valid && !pipe_output.restart_fetcher {
                 note_window_tile_push(pipe_output.next_window_state)
             } else {
                 pipe_output.next_window_state
+            };
+        let restart_window_line = window_fetch_line_for_restart(
+            pipe_output.next_window_state,
+            pipe_output.next_window_line,
+        );
+        let next_fetcher =
+            if pipe_output.restart_fetcher {
+                restart_window_fetcher(fetcher_output.next_state, restart_window_line)
+            } else {
+                fetcher_output.next_state
             };
         let obj_popped =
             if pipe_output.pixel_valid {
@@ -941,16 +1073,21 @@ fn apply_live_transfer(
                     oam_scan: candidate_state.render.oam_scan,
                     line_objs: candidate_state.render.line_objs,
                     line_obj_fetch_index: candidate_state.render.line_obj_fetch_index,
+                    line_obj_fetched_mask: candidate_state.render.line_obj_fetched_mask,
                     obj_fetch_ticket: if next_is_transfer { candidate_state.render.obj_fetch_ticket } else { zero_selected_obj_ticket() },
                     obj_fetch_flags: if next_is_transfer { candidate_state.render.obj_fetch_flags } else { zero_obj_flags() },
                     bg_fetcher_resume: if next_is_transfer { candidate_state.render.bg_fetcher_resume } else { initial_bg_fetcher_state() },
-                    fetcher: if next_is_transfer { fetcher_output.next_state } else { initial_bg_fetcher_state() },
+                    fetcher: if next_is_transfer { next_fetcher } else { initial_bg_fetcher_state() },
                     bg_fifo: if next_is_transfer { pipe_output.next_fifo } else { clear_bg_fifo() },
                     obj_fifo: if next_is_transfer { obj_popped.next_fifo } else { empty_obj_fifo() },
                     first_frame_blank: candidate_state.render.first_frame_blank,
                 ),
             ),
-            fetcher_mem_reqs(fetcher_output.req_valid, fetcher_output.req),
+            if pipe_output.restart_fetcher {
+                idle_ppu_mem_reqs()
+            } else {
+                fetcher_mem_reqs(fetcher_output.req_valid, fetcher_output.req)
+            },
             pixel_scanout,
         )
         }
@@ -1035,9 +1172,11 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
                         state.status.phase,
                         state.visible.ly,
                         next_regs,
+                        next_sampled,
                         input.mem_resp,
                         next_run,
                         next_phase,
+                        frame_start,
                         line_start,
                     ),
                 ),
@@ -1102,7 +1241,7 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
         sampled: candidate_state.sampled,
         render: candidate_state.render,
     );
-    let (final_state, mem_reqs, pixel_scanout) = apply_live_transfer(state, final_state, input.mem_resp, frame_start);
+    let (final_state, mem_reqs, pixel_scanout) = apply_live_transfer(state, final_state, input.mem_resp, line_start, frame_start);
     let line_summary = completed_line_summary(state, final_state);
     let scanout = live_scanout_event(final_state, line_start, frame_start, pixel_scanout);
     let semantic = PpuSemanticCommit$(

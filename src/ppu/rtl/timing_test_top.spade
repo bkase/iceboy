@@ -22,10 +22,11 @@ fn decode_phase(
     line_i: uint<8>,
     dots_left_i: uint<9>,
     sampled_scx_low3_i: uint<3>,
+    x_out_i: uint<8>,
 ) -> PpuPhase {
     match phase_i {
         1u3 => PpuPhase::OamScan$(index: 0u6, found: 0u4),
-        2u3 => PpuPhase::Transfer$(x_out: 0u8, discard_scx: sampled_scx_low3_i),
+        2u3 => PpuPhase::Transfer$(x_out: x_out_i, discard_scx: sampled_scx_low3_i),
         3u3 => PpuPhase::HBlank$(dots_left: dots_left_i),
         4u3 => PpuPhase::VBlank$(line: line_i, dots_left: dots_left_i),
         _ => PpuPhase::LcdOff,
@@ -105,10 +106,11 @@ pub entity timing_test_top(
     win_enable_i: bool,
     old_lcdc_enable_i: bool,
     new_lcdc_enable_i: bool,
+    x_out_i: uint<8>,
 ) -> uint<34> {
     let regs = build_regs(old_lcdc_enable_i, scx_i, wy_i, win_enable_i);
     let next_regs = build_next_regs(new_lcdc_enable_i, scx_i, wy_i, win_enable_i);
-    let phase = decode_phase(phase_i, line_i, dots_left_i, sampled_scx_low3_i);
+    let phase = decode_phase(phase_i, line_i, dots_left_i, sampled_scx_low3_i, x_out_i);
     let state = PpuState$(
         visible: PpuVisibleState$(regs: regs, ly: ly_i),
         status: PpuStatusState$(
@@ -124,12 +126,13 @@ pub entity timing_test_top(
         ),
         render: lib::ppu::sem::types::PpuRenderState$(
             dot_in_line: dot_in_line_i,
-            x_out: 0u8,
+            x_out: x_out_i,
             window_state: lib::ppu::sem::types::WindowState::Inactive,
             window_line: 0u8,
             oam_scan: lib::ppu::sem::types::empty_oam_scan_state(),
             line_objs: lib::ppu::sem::types::empty_line_obj_list(),
             line_obj_fetch_index: 0u4,
+            line_obj_fetched_mask: 0u10,
             obj_fetch_ticket: lib::ppu::sem::types::zero_selected_obj_ticket(),
             obj_fetch_flags: lib::ppu::sem::types::zero_obj_flags(),
             bg_fetcher_resume: lib::ppu::sem::types::initial_fetcher_state(),

@@ -21,16 +21,28 @@ RUN_WARMUP = 1
 RUN_RUNNING = 2
 
 FETCHER_BG = 0
+FETCHER_WINDOW = 1
 FETCHER_GET_TILE = 0
 MEM_REGION_VRAM = 0
 MEM_REGION_OAM = 1
 MEM_CLIENT_CPU = 0
+MEM_CLIENT_BG_FETCHER = 1
 MEM_CLIENT_OAM_SCANNER = 3
 
 LCDC_TARGET = 0
+WY_TARGET = 5
+WX_TARGET = 6
 LCDC_OFF = 0x11
 LCDC_ON = 0x81
 LCDC_OBJ_ON = 0x83
+LCDC_OBJ_8X16_ON = 0x87
+LCDC_WINDOW_ON = 0xA1
+LCDC_BG_MAP_HI_ON = 0x89
+LCDC_BG_DATA_HI_ON = 0x91
+
+WINDOW_INACTIVE = 0
+WINDOW_ARMED = 1
+WINDOW_ACTIVE = 2
 
 
 def decode_output(value: int) -> dict[str, int | bool]:
@@ -66,6 +78,10 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "req_client": (value >> 121) & 0x7,
         "req_id": (value >> 124) & 0xF,
         "resp_valid": bool((value >> 128) & 0x1),
+        "window_state": (value >> 129) & 0x3,
+        "window_line_nonzero": bool((value >> 131) & 0x1),
+        "window_visible_state": bool((value >> 132) & 0x1),
+        "fetcher_row": (value >> 133) & 0x7,
     }
 
 
@@ -214,3 +230,147 @@ async def test_obj_observe_one_dot_responder_exposes_live_request_metadata_and_s
     assert saw_bg_fifo, transfer
     assert saw_pending, transfer
     assert saw_line_obj, transfer
+
+
+@cocotb.test()
+async def test_obj_observe_live_scan_accumulates_ten_overlapping_8x16_objects(dut):
+    await reset_dut(dut)
+    await step(dut, write_target=LCDC_TARGET, write_value=LCDC_OBJ_8X16_ON)
+
+    max_line_obj_count = 0
+    max_oam_found = 0
+    last = decode_output(int(dut.output__.value))
+    for _ in range(96):
+        last = await step(dut)
+        max_line_obj_count = max(max_line_obj_count, int(last["line_obj_count"]))
+        max_oam_found = max(max_oam_found, int(last["oam_found"]))
+        if last["phase"] == PHASE_TRANSFER:
+            break
+
+    assert last["phase"] == PHASE_TRANSFER, last
+    assert max_line_obj_count == 10, last
+    assert max_oam_found == 10, last
+    assert last["line_obj_count"] == 10, last
+
+
+@cocotb.test()
+async def test_obj_observe_live_scan_reaches_oam_index_40_before_transfer(dut):
+    await reset_dut(dut)
+    await step(dut, write_target=LCDC_TARGET, write_value=LCDC_OBJ_8X16_ON)
+
+    last = decode_output(int(dut.output__.value))
+    for _ in range(128):
+        last = await step(dut)
+        if last["phase"] == PHASE_TRANSFER:
+            break
+
+    assert last["phase"] == PHASE_TRANSFER, last
+    # The one-dot responder reaches transfer with one final OAM advance still
+    # pending in the same cycle; the real native soc_rom_top path settles at
+    # 40 by the time the line is rendered.
+    assert last["oam_index"] >= 39, last
+    assert last["oam_found"] == 10, last
+    assert last["line_obj_count"] == 10, last
+
+
+@cocotb.test()
+async def test_obj_observe_window_arms_on_line_start_and_switches_to_window_fetch(dut):
+    await reset_dut(dut)
+    await step(dut, write_target=LCDC_TARGET, write_value=LCDC_OFF)
+    await step(dut, write_target=WY_TARGET, write_value=0)
+    await step(dut, write_target=WX_TARGET, write_value=15)
+    await step(dut, write_target=LCDC_TARGET, write_value=LCDC_WINDOW_ON)
+
+    saw_window_arm = False
+    saw_window_fetch = False
+    saw_window_visible = False
+    last = decode_output(int(dut.output__.value))
+
+    for _ in range(456 * 2):
+        last = await step(dut)
+        saw_window_arm = saw_window_arm or last["window_state"] in {WINDOW_ARMED, WINDOW_ACTIVE}
+        saw_window_fetch = saw_window_fetch or last["fetcher_source"] == FETCHER_WINDOW
+        saw_window_visible = saw_window_visible or last["window_visible_state"]
+        if saw_window_arm and saw_window_fetch and saw_window_visible:
+            break
+
+    assert saw_window_arm, last
+    assert saw_window_fetch, last
+    assert saw_window_visible, last
+
+
+@cocotb.test()
+async def test_obj_observe_first_window_fetch_uses_current_window_row_zero(dut):
+    await reset_dut(dut)
+    await step(dut, write_target=LCDC_TARGET, write_value=LCDC_OFF)
+    await step(dut, write_target=WY_TARGET, write_value=0)
+    await step(dut, write_target=WX_TARGET, write_value=15)
+    await step(dut, write_target=LCDC_TARGET, write_value=LCDC_WINDOW_ON)
+
+    for _ in range(456 * 2):
+        snapshot = await step(dut)
+        if snapshot["fetcher_source"] == FETCHER_WINDOW:
+            assert snapshot["window_line"] == 1, snapshot
+            assert snapshot["fetcher_row"] == 0, snapshot
+            return
+
+    assert False, "window fetch never started"
+
+
+@cocotb.test()
+async def test_obj_observe_mode2_obj_size_write_affects_current_line_selection(dut):
+    await reset_dut(dut)
+    await step(dut, write_target=LCDC_TARGET, write_value=LCDC_OBJ_ON)
+
+    while True:
+        snapshot = await step(dut)
+        if snapshot["ly"] == 8 and snapshot["phase"] == PHASE_OAM:
+            break
+
+    selected_same_line = False
+    await step(dut, write_target=LCDC_TARGET, write_value=LCDC_OBJ_8X16_ON)
+    for _ in range(12):
+        snapshot = await step(dut)
+        if snapshot["ly"] != 8:
+            break
+        selected_same_line = selected_same_line or snapshot["line_obj_count"] > 0
+
+    assert selected_same_line, snapshot
+
+
+@cocotb.test()
+async def test_obj_observe_mode2_bg_map_write_affects_same_line_fetch_addr(dut):
+    await reset_dut(dut)
+
+    await step(dut, write_target=LCDC_TARGET, write_value=LCDC_BG_MAP_HI_ON)
+    for _ in range(160):
+        snapshot = await step(dut)
+        if (
+            snapshot["phase"] == PHASE_TRANSFER
+            and snapshot["req_region"] == MEM_REGION_VRAM
+            and snapshot["req_client"] == MEM_CLIENT_BG_FETCHER
+            and snapshot["req_id"] == 0
+        ):
+            assert snapshot["req_addr"] == 0x9C00, snapshot
+            return
+
+    assert False, "same-line BG map fetch did not appear"
+
+
+@cocotb.test()
+async def test_obj_observe_mode2_bg_data_write_affects_same_line_fetch_addr(dut):
+    await reset_dut(dut)
+
+    await step(dut, write_target=LCDC_TARGET, write_value=LCDC_BG_DATA_HI_ON)
+    for _ in range(192):
+        snapshot = await step(dut)
+        if (
+            snapshot["phase"] == PHASE_TRANSFER
+            and snapshot["req_region"] == MEM_REGION_VRAM
+            and snapshot["req_client"] == MEM_CLIENT_BG_FETCHER
+            and snapshot["req_id"] == 2
+        ):
+            assert snapshot["req_addr"] in {0x85A0, 0x85A1}, snapshot
+            return
+
+    assert False, "same-line BG tile-data fetch did not appear"

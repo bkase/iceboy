@@ -83,7 +83,7 @@ def drive_defaults(dut) -> None:
     dut.line_obj_count_i.value = 0
     dut.slot0_i.value = 0
     dut.slot1_i.value = 0
-    dut.x_out_i.value = 0
+    dut.x_out_i.value = 160
     dut.discard_scx_i.value = 0
     dut.first_frame_blank_i.value = 0
 
@@ -156,7 +156,30 @@ async def test_non_boundary_transfer_step_emits_no_summary(dut):
     dut.phase_i.value = PHASE_TRANSFER
     dut.ly_i.value = 12
     dut.dot_in_line_i.value = 200
+    dut.x_out_i.value = 100
 
     snapshot = await observe(dut)
     assert snapshot["summary_valid"] is False
     assert snapshot["next_phase"] == PHASE_TRANSFER
+
+
+@cocotb.test()
+async def test_late_transfer_boundary_reports_dynamic_mode3_len(dut):
+    drive_defaults(dut)
+    dut.phase_i.value = PHASE_TRANSFER
+    dut.ly_i.value = 52
+    dut.dot_in_line_i.value = 300
+    dut.x_out_i.value = 160
+
+    snapshot = await observe(dut)
+    assert snapshot["summary_valid"] is True
+    assert snapshot["next_phase"] == PHASE_HBLANK
+    assert snapshot["mode3_len"] == 221
+    assert snapshot["line_hash"] == expected_hash(
+        ly=52,
+        mode3_len=221,
+        window_start_x=None,
+        window_line_after=0,
+        obj_count=0,
+        selected_objs=[None, None, None, None, None, None, None, None, None, None],
+    )

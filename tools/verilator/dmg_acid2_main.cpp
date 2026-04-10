@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -64,6 +65,17 @@ enum class PpuMode : uint8_t {
 };
 
 struct Observation {
+    uint8_t ppu_oam_scan_index = 0;
+    uint8_t ppu_oam_scan_found = 0;
+    uint8_t ppu_slot0_oam_index = 0;
+    uint8_t ppu_slot0_x = 0;
+    uint8_t ppu_slot0_y = 0;
+    uint8_t ppu_line_obj_count = 0;
+    uint8_t ppu_line_obj_fetch_index = 0;
+    uint8_t ppu_fetcher_source = 0;
+    uint8_t ppu_fetcher_row = 0;
+    uint8_t ppu_bg_fifo_count = 0;
+    uint8_t ppu_obj_fifo_count = 0;
     bool ppu_vblank_req_window = false;
     bool ppu_stat_req_window = false;
     bool ppu_scanout_valid = false;
@@ -116,6 +128,37 @@ bool dump_mem_debug_enabled() {
     return value != nullptr && std::string(value) != "0" && std::string(value) != "";
 }
 
+bool debug_mmio_writes_enabled() {
+    const char* value = std::getenv("ICEBOY_TRACE_PPU_MMIO_WRITES");
+    return value != nullptr && std::string(value) != "0" && std::string(value) != "";
+}
+
+bool debug_mmio_write_addr(uint16_t addr) {
+    return addr >= LCDC_ADDR && addr <= WX_ADDR;
+}
+
+std::set<int> acid2_debug_final_ly_targets() {
+    std::set<int> targets;
+    const char* value = std::getenv("ICEBOY_DMG_ACID2_DEBUG_FINAL_LY");
+    if (value == nullptr || *value == '\0') {
+        return targets;
+    }
+    std::string text(value);
+    size_t start = 0;
+    while (start < text.size()) {
+        const size_t comma = text.find(',', start);
+        const std::string token = text.substr(start, comma == std::string::npos ? std::string::npos : (comma - start));
+        if (!token.empty()) {
+            targets.insert(std::stoi(token));
+        }
+        if (comma == std::string::npos) {
+            break;
+        }
+        start = comma + 1;
+    }
+    return targets;
+}
+
 void dump_mem_debug(Vsoc_rom_top_verilator_wrapper& top) {
     auto* root = top.rootp;
     const auto& vram = root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__vram_mem;
@@ -140,6 +183,75 @@ void dump_mem_debug(Vsoc_rom_top_verilator_wrapper& top) {
               << " oam[5]=0x" << static_cast<int>(oam[0x05])
               << " oam[6]=0x" << static_cast<int>(oam[0x06])
               << " oam[7]=0x" << static_cast<int>(oam[0x07])
+              << " mouth_tile12="
+              << std::hex
+              << static_cast<int>(vram[0x00c0]) << "," << static_cast<int>(vram[0x00c1]) << ","
+              << static_cast<int>(vram[0x00c2]) << "," << static_cast<int>(vram[0x00c3]) << ","
+              << static_cast<int>(vram[0x00c4]) << "," << static_cast<int>(vram[0x00c5]) << ","
+              << static_cast<int>(vram[0x00c6]) << "," << static_cast<int>(vram[0x00c7]) << ","
+              << static_cast<int>(vram[0x00c8]) << "," << static_cast<int>(vram[0x00c9]) << ","
+              << static_cast<int>(vram[0x00ca]) << "," << static_cast<int>(vram[0x00cb]) << ","
+              << static_cast<int>(vram[0x00cc]) << "," << static_cast<int>(vram[0x00cd]) << ","
+              << static_cast<int>(vram[0x00ce]) << "," << static_cast<int>(vram[0x00cf])
+              << " mouth_tile13="
+              << static_cast<int>(vram[0x00d0]) << "," << static_cast<int>(vram[0x00d1]) << ","
+              << static_cast<int>(vram[0x00d2]) << "," << static_cast<int>(vram[0x00d3]) << ","
+              << static_cast<int>(vram[0x00d4]) << "," << static_cast<int>(vram[0x00d5]) << ","
+              << static_cast<int>(vram[0x00d6]) << "," << static_cast<int>(vram[0x00d7]) << ","
+              << static_cast<int>(vram[0x00d8]) << "," << static_cast<int>(vram[0x00d9]) << ","
+              << static_cast<int>(vram[0x00da]) << "," << static_cast<int>(vram[0x00db]) << ","
+              << static_cast<int>(vram[0x00dc]) << "," << static_cast<int>(vram[0x00dd]) << ","
+              << static_cast<int>(vram[0x00de]) << "," << static_cast<int>(vram[0x00df])
+              << " mouth_oam="
+              << static_cast<int>(oam[0x4c]) << "," << static_cast<int>(oam[0x4d]) << ","
+              << static_cast<int>(oam[0x4e]) << "," << static_cast<int>(oam[0x4f]) << ","
+              << static_cast<int>(oam[0x50]) << "," << static_cast<int>(oam[0x51]) << ","
+              << static_cast<int>(oam[0x52]) << "," << static_cast<int>(oam[0x53]) << ","
+              << static_cast<int>(oam[0x54]) << "," << static_cast<int>(oam[0x55]) << ","
+              << static_cast<int>(oam[0x56]) << "," << static_cast<int>(oam[0x57]) << ","
+              << static_cast<int>(oam[0x58]) << "," << static_cast<int>(oam[0x59]) << ","
+              << static_cast<int>(oam[0x5a]) << "," << static_cast<int>(oam[0x5b]) << ","
+              << static_cast<int>(oam[0x5c]) << "," << static_cast<int>(oam[0x5d]) << ","
+              << static_cast<int>(oam[0x5e]) << "," << static_cast<int>(oam[0x5f]) << ","
+              << static_cast<int>(oam[0x60]) << "," << static_cast<int>(oam[0x61]) << ","
+              << static_cast<int>(oam[0x62]) << "," << static_cast<int>(oam[0x63]) << ","
+              << static_cast<int>(oam[0x64]) << "," << static_cast<int>(oam[0x65]) << ","
+              << static_cast<int>(oam[0x66]) << "," << static_cast<int>(oam[0x67]) << ","
+              << static_cast<int>(oam[0x68]) << "," << static_cast<int>(oam[0x69]) << ","
+              << static_cast<int>(oam[0x6a]) << "," << static_cast<int>(oam[0x6b])
+              << " signed_tiles_a0_a3="
+              << static_cast<int>(vram[0x0a00]) << "," << static_cast<int>(vram[0x0a01]) << ","
+              << static_cast<int>(vram[0x0a02]) << "," << static_cast<int>(vram[0x0a03]) << ","
+              << static_cast<int>(vram[0x0a04]) << "," << static_cast<int>(vram[0x0a05]) << ","
+              << static_cast<int>(vram[0x0a06]) << "," << static_cast<int>(vram[0x0a07]) << ","
+              << static_cast<int>(vram[0x0a08]) << "," << static_cast<int>(vram[0x0a09]) << ","
+              << static_cast<int>(vram[0x0a0a]) << "," << static_cast<int>(vram[0x0a0b]) << ","
+              << static_cast<int>(vram[0x0a0c]) << "," << static_cast<int>(vram[0x0a0d]) << ","
+              << static_cast<int>(vram[0x0a0e]) << "," << static_cast<int>(vram[0x0a0f]) << ","
+              << static_cast<int>(vram[0x0a10]) << "," << static_cast<int>(vram[0x0a11]) << ","
+              << static_cast<int>(vram[0x0a12]) << "," << static_cast<int>(vram[0x0a13]) << ","
+              << static_cast<int>(vram[0x0a14]) << "," << static_cast<int>(vram[0x0a15]) << ","
+              << static_cast<int>(vram[0x0a16]) << "," << static_cast<int>(vram[0x0a17]) << ","
+              << static_cast<int>(vram[0x0a18]) << "," << static_cast<int>(vram[0x0a19]) << ","
+              << static_cast<int>(vram[0x0a1a]) << "," << static_cast<int>(vram[0x0a1b]) << ","
+              << static_cast<int>(vram[0x0a1c]) << "," << static_cast<int>(vram[0x0a1d]) << ","
+              << static_cast<int>(vram[0x0a1e]) << "," << static_cast<int>(vram[0x0a1f]) << ","
+              << static_cast<int>(vram[0x0a20]) << "," << static_cast<int>(vram[0x0a21]) << ","
+              << static_cast<int>(vram[0x0a22]) << "," << static_cast<int>(vram[0x0a23]) << ","
+              << static_cast<int>(vram[0x0a24]) << "," << static_cast<int>(vram[0x0a25]) << ","
+              << static_cast<int>(vram[0x0a26]) << "," << static_cast<int>(vram[0x0a27]) << ","
+              << static_cast<int>(vram[0x0a28]) << "," << static_cast<int>(vram[0x0a29]) << ","
+              << static_cast<int>(vram[0x0a2a]) << "," << static_cast<int>(vram[0x0a2b]) << ","
+              << static_cast<int>(vram[0x0a2c]) << "," << static_cast<int>(vram[0x0a2d]) << ","
+              << static_cast<int>(vram[0x0a2e]) << "," << static_cast<int>(vram[0x0a2f]) << ","
+              << static_cast<int>(vram[0x0a30]) << "," << static_cast<int>(vram[0x0a31]) << ","
+              << static_cast<int>(vram[0x0a32]) << "," << static_cast<int>(vram[0x0a33]) << ","
+              << static_cast<int>(vram[0x0a34]) << "," << static_cast<int>(vram[0x0a35]) << ","
+              << static_cast<int>(vram[0x0a36]) << "," << static_cast<int>(vram[0x0a37]) << ","
+              << static_cast<int>(vram[0x0a38]) << "," << static_cast<int>(vram[0x0a39]) << ","
+              << static_cast<int>(vram[0x0a3a]) << "," << static_cast<int>(vram[0x0a3b]) << ","
+              << static_cast<int>(vram[0x0a3c]) << "," << static_cast<int>(vram[0x0a3d]) << ","
+              << static_cast<int>(vram[0x0a3e]) << "," << static_cast<int>(vram[0x0a3f])
               << std::dec
               << "\n";
 }
@@ -205,6 +317,17 @@ Observation observe(const Vsoc_rom_top_verilator_wrapper& top) {
     };
 
     Observation obs;
+    obs.ppu_oam_scan_index = static_cast<uint8_t>(extract_bits(236, 6));
+    obs.ppu_oam_scan_found = static_cast<uint8_t>(extract_bits(232, 4));
+    obs.ppu_slot0_oam_index = static_cast<uint8_t>(extract_bits(226, 6));
+    obs.ppu_slot0_x = static_cast<uint8_t>(extract_bits(218, 8));
+    obs.ppu_slot0_y = static_cast<uint8_t>(extract_bits(210, 8));
+    obs.ppu_line_obj_count = static_cast<uint8_t>(extract_bits(206, 4));
+    obs.ppu_line_obj_fetch_index = static_cast<uint8_t>(extract_bits(202, 4));
+    obs.ppu_fetcher_source = static_cast<uint8_t>(extract_bits(200, 2));
+    obs.ppu_fetcher_row = static_cast<uint8_t>(extract_bits(197, 3));
+    obs.ppu_bg_fifo_count = static_cast<uint8_t>(extract_bits(192, 5));
+    obs.ppu_obj_fifo_count = static_cast<uint8_t>(extract_bits(187, 5));
     obs.ppu_vblank_req_window = extract_bits(186, 1) != 0;
     obs.ppu_stat_req_window = extract_bits(185, 1) != 0;
     obs.ppu_scanout_valid = extract_bits(184, 1) != 0;
@@ -645,6 +768,60 @@ class BusModel {
     bool integrated_ppu_stat_window_high_ = false;
 };
 
+void dump_final_line_debug(
+    int target_ly,
+    uint64_t completed_mcycles,
+    uint64_t completed_frames,
+    const Observation& observation,
+    const BusModel& memory,
+    const Vsoc_rom_top_verilator_wrapper& top
+) {
+    const auto regs = memory.ppu_debug_regs();
+    auto* root = top.rootp;
+    const auto& dut_oam = root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__oam_mem;
+    std::cout << "acid2-final-line-debug"
+              << " completed_frames=" << completed_frames
+              << " mcycles=" << completed_mcycles
+              << " ly=" << target_ly
+              << " lcdc=0x" << std::hex << static_cast<int>(regs[0])
+              << " stat=0x" << static_cast<int>(regs[1])
+              << " scy=0x" << static_cast<int>(regs[2])
+              << " scx=0x" << static_cast<int>(regs[3])
+              << " lyc=0x" << static_cast<int>(regs[5])
+              << " bgp=0x" << static_cast<int>(regs[6])
+              << " obp0=0x" << static_cast<int>(regs[7])
+              << " obp1=0x" << static_cast<int>(regs[8])
+              << " wy=0x" << static_cast<int>(regs[9])
+              << " wx=0x" << static_cast<int>(regs[10])
+              << std::dec
+              << " line_obj_count=" << static_cast<int>(observation.ppu_line_obj_count)
+              << " oam_scan_index=" << static_cast<int>(observation.ppu_oam_scan_index)
+              << " oam_scan_found=" << static_cast<int>(observation.ppu_oam_scan_found)
+              << " slot0_oam_index=" << static_cast<int>(observation.ppu_slot0_oam_index)
+              << " slot0_x=" << static_cast<int>(observation.ppu_slot0_x)
+              << " slot0_y=" << static_cast<int>(observation.ppu_slot0_y)
+              << " line_obj_fetch_index=" << static_cast<int>(observation.ppu_line_obj_fetch_index)
+              << " fetcher_source=" << static_cast<int>(observation.ppu_fetcher_source)
+              << " fetcher_row=" << static_cast<int>(observation.ppu_fetcher_row)
+              << " bg_fifo_count=" << static_cast<int>(observation.ppu_bg_fifo_count)
+              << " obj_fifo_count=" << static_cast<int>(observation.ppu_obj_fifo_count)
+              << " shadow_mouth_oam=";
+    for (uint16_t addr = 0xfe4c; addr <= 0xfe6b; ++addr) {
+        if (addr != 0xfe4c) {
+            std::cout << ",";
+        }
+        std::cout << std::hex << static_cast<int>(memory.read(addr));
+    }
+    std::cout << " dut_mouth_oam=";
+    for (size_t index = 0x4c; index <= 0x6b; ++index) {
+        if (index != 0x4c) {
+            std::cout << ",";
+        }
+        std::cout << std::hex << static_cast<int>(dut_oam[index]);
+    }
+    std::cout << std::dec << "\n";
+}
+
 void eval_step(Vsoc_rom_top_verilator_wrapper& top) {
     top.eval();
 }
@@ -840,6 +1017,17 @@ void write_trace_line(std::ofstream& trace, uint64_t cycle, const Observation& o
           << "\"ppu_mode\":" << static_cast<int>(observation.ppu_mode) << ","
           << "\"ppu_ly\":" << static_cast<int>(observation.ppu_ly) << ","
           << "\"ppu_stat\":" << static_cast<int>(observation.ppu_stat) << ","
+          << "\"oam_scan_index\":" << static_cast<int>(observation.ppu_oam_scan_index) << ","
+          << "\"oam_scan_found\":" << static_cast<int>(observation.ppu_oam_scan_found) << ","
+          << "\"slot0_oam_index\":" << static_cast<int>(observation.ppu_slot0_oam_index) << ","
+          << "\"slot0_x\":" << static_cast<int>(observation.ppu_slot0_x) << ","
+          << "\"slot0_y\":" << static_cast<int>(observation.ppu_slot0_y) << ","
+          << "\"line_obj_count\":" << static_cast<int>(observation.ppu_line_obj_count) << ","
+          << "\"line_obj_fetch_index\":" << static_cast<int>(observation.ppu_line_obj_fetch_index) << ","
+          << "\"fetcher_source\":" << static_cast<int>(observation.ppu_fetcher_source) << ","
+          << "\"fetcher_row\":" << static_cast<int>(observation.ppu_fetcher_row) << ","
+          << "\"bg_fifo_count\":" << static_cast<int>(observation.ppu_bg_fifo_count) << ","
+          << "\"obj_fifo_count\":" << static_cast<int>(observation.ppu_obj_fifo_count) << ","
           << "\"scanout_kind\":" << static_cast<int>(observation.ppu_scanout_kind) << ","
           << "\"scanout_valid\":" << (observation.ppu_scanout_valid ? "true" : "false") << ","
           << "\"scanout_x\":" << static_cast<int>(observation.ppu_scanout_x) << ","
@@ -879,6 +1067,8 @@ int main(int argc, char** argv) {
     uint64_t completed_mcycles = 0;
     uint64_t completed_frames = 0;
     Observation last_post{};
+    const std::set<int> debug_final_ly_targets = acid2_debug_final_ly_targets();
+    std::set<int> dumped_final_ly_targets;
 
     std::ofstream trace;
     if (!cfg.trace_path.empty()) {
@@ -895,6 +1085,16 @@ int main(int argc, char** argv) {
         const bool write_en = step.post.bus_req_kind == BUS_REQ_WRITE;
         const uint16_t write_addr = write_en ? step.post.bus_req_addr : 0;
         const uint8_t write_data = write_en ? step.post.bus_req_data : 0;
+        if (write_en && debug_mmio_writes_enabled() && debug_mmio_write_addr(write_addr)) {
+            std::cout << "ppu-mmio-write"
+                      << " cycle=" << completed_mcycles
+                      << " pc=0x" << std::hex << step.post.pc
+                      << " ly=0x" << static_cast<int>(step.post.ppu_ly)
+                      << " addr=0x" << write_addr
+                      << " data=0x" << static_cast<int>(write_data)
+                      << std::dec
+                      << "\n";
+        }
         if (write_en && !(write_addr >= DIV_ADDR && write_addr <= TAC_ADDR) && write_addr != IF_ADDR && write_addr != IE_ADDR) {
             if (step.write_allowed_valid) {
                 if (step.write_allowed) {
@@ -915,6 +1115,20 @@ int main(int argc, char** argv) {
 
         for (const Observation& observation : step.scanout_observations) {
             write_trace_line(trace, completed_mcycles, observation);
+            if (!debug_final_ly_targets.empty() &&
+                cfg.completed_frames != 0 &&
+                completed_frames + 1 == cfg.completed_frames &&
+                observation.ppu_scanout_valid &&
+                observation.ppu_mode == 2 &&
+                observation.ppu_scanout_kind == 0 &&
+                observation.ppu_scanout_x == 0) {
+                const int target_ly = static_cast<int>(observation.ppu_ly);
+                if (debug_final_ly_targets.count(target_ly) != 0 &&
+                    dumped_final_ly_targets.count(target_ly) == 0) {
+                    dump_final_line_debug(target_ly, completed_mcycles, completed_frames + 1, observation, memory, top);
+                    dumped_final_ly_targets.insert(target_ly);
+                }
+            }
             if (!observation.ppu_scanout_valid) {
                 continue;
             }

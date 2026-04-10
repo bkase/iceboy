@@ -199,14 +199,14 @@ pub fn line_start_window_state(
     frame_start: bool,
     line_start: bool,
 ) -> WindowState {
-    if frame_start {
-        WindowState::Inactive
-    } else if line_start {
+    if line_start {
         if window_enabled_for_line(sampled) {
             WindowState::ArmedThisFrame
         } else {
             WindowState::Inactive
         }
+    } else if frame_start {
+        WindowState::Inactive
     } else {
         state
     }
@@ -229,17 +229,18 @@ pub fn step_window_state(
     line_start: bool,
 ) -> WindowStepOutput {
     let armed = line_start_window_state(state, sampled, frame_start, line_start);
+    let base_window_line = if frame_start { 0u8 } else { window_line };
     if window_triggered(render.wx_live, x_out) {
         match armed {
             WindowState::ArmedThisFrame => WindowStepOutput$(
-                next_state: WindowState::ActiveOnLine$(win_x: 0u5, win_line: window_line),
-                next_window_line: trunc(window_line + 1u8),
+                next_state: WindowState::ActiveOnLine$(win_x: 0u5, win_line: base_window_line),
+                next_window_line: trunc(base_window_line + 1u8),
                 restart_fetcher: true,
                 clear_bg_fifo: true,
             ),
             _ => WindowStepOutput$(
                 next_state: armed,
-                next_window_line: if frame_start { 0u8 } else { window_line },
+                next_window_line: base_window_line,
                 restart_fetcher: false,
                 clear_bg_fifo: false,
             ),
@@ -247,7 +248,7 @@ pub fn step_window_state(
     } else {
         WindowStepOutput$(
             next_state: armed,
-            next_window_line: if frame_start { 0u8 } else { window_line },
+            next_window_line: base_window_line,
             restart_fetcher: false,
             clear_bg_fifo: false,
         )
@@ -270,8 +271,9 @@ pub fn advance_bg_pipe(
 ) -> BgPipeOutput {
     let window_step = step_window_state(window_state, window_line, sampled, render, x_out, frame_start, line_start);
     let pre_push_fifo = if window_step.clear_bg_fifo { clear_bg_fifo() } else { fifo };
+    let accept_push = push_valid && !window_step.restart_fetcher;
     let next_fifo =
-        if push_valid && bg_fifo_has_room_for_row(pre_push_fifo) {
+        if accept_push && bg_fifo_has_room_for_row(pre_push_fifo) {
             push_bg_row(pre_push_fifo, push_row, push_palette)
         } else {
             pre_push_fifo

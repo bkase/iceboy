@@ -1,5 +1,5 @@
 use lib::ppu::sem::events::idle_dot_input;
-use lib::ppu::sem::sample::sample_mode2_state;
+use lib::ppu::sem::sample::{sample_mode2_state, sample_mode2_window_state};
 use lib::ppu::sem::types::{
     LcdRunState,
     PpuPhase,
@@ -23,8 +23,8 @@ fn warmup_line0_dots_left(next_dot_in_line: uint<9>) -> uint<9> {
     trunc(444u10 - zext(next_dot_in_line))
 }
 
-fn visible_transfer_complete(dot_in_line: uint<9>) -> bool {
-    dot_in_line == 255u9
+fn visible_transfer_complete(x_out: uint<8>) -> bool {
+    x_out >= 160u8
 }
 
 fn visible_oam_complete(dot_in_line: uint<9>) -> bool {
@@ -94,11 +94,11 @@ fn oam_complete(is_warmup_line0: bool, dot_in_line: uint<9>) -> bool {
     }
 }
 
-fn transfer_complete(is_warmup_line0: bool, dot_in_line: uint<9>) -> bool {
+fn transfer_complete(is_warmup_line0: bool, dot_in_line: uint<9>, x_out: uint<8>) -> bool {
     if is_warmup_line0 {
         warmup_line0_transfer_complete(dot_in_line)
     } else {
-        visible_transfer_complete(dot_in_line)
+        visible_transfer_complete(x_out)
     }
 }
 
@@ -182,20 +182,22 @@ fn advance_oam_phase(
     ly: uint<8>,
     sampled: PpuSamplingState,
     dot_in_line: uint<9>,
+    next_regs: PpuRegs,
     index: uint<6>,
     found: uint<4>,
     is_warmup_line0: bool,
 ) -> (PpuPhase, uint<8>, PpuSamplingState, bool, bool) {
+    let next_sampled = sample_mode2_window_state(PpuVisibleState$(regs: next_regs, ly: ly), sampled);
     if oam_complete(is_warmup_line0, dot_in_line) {
         (
-            PpuPhase::Transfer$(x_out: 0u8, discard_scx: sampled.scx_low3_line),
+            PpuPhase::Transfer$(x_out: 0u8, discard_scx: next_sampled.scx_low3_line),
             ly,
-            sampled,
+            next_sampled,
             false,
             false,
         )
     } else {
-        (PpuPhase::OamScan$(index: index, found: found), ly, sampled, false, false)
+        (PpuPhase::OamScan$(index: index, found: found), ly, next_sampled, false, false)
     }
 }
 
@@ -207,7 +209,7 @@ fn advance_transfer_phase(
     discard_scx: uint<3>,
     is_warmup_line0: bool,
 ) -> (PpuPhase, uint<8>, PpuSamplingState, bool, bool) {
-    if transfer_complete(is_warmup_line0, dot_in_line) {
+    if transfer_complete(is_warmup_line0, dot_in_line, x_out) {
         (hblank_with_remaining(is_warmup_line0, dot_in_line), ly, sampled, false, false)
     } else {
         (
@@ -294,7 +296,7 @@ fn advance_phase(
         PpuPhase::LcdOff =>
             advance_lcd_off_phase(ly, sampled, dot_in_line, next_regs, is_warmup_line0, warmup_blank_frame),
         PpuPhase::OamScan$(index, found) =>
-            advance_oam_phase(ly, sampled, dot_in_line, index, found, is_warmup_line0),
+            advance_oam_phase(ly, sampled, dot_in_line, next_regs, index, found, is_warmup_line0),
         PpuPhase::Transfer$(x_out, discard_scx) =>
             advance_transfer_phase(ly, sampled, dot_in_line, x_out, discard_scx, is_warmup_line0),
         PpuPhase::HBlank$(dots_left: _) => {

@@ -43,6 +43,8 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "scanout_x": (value >> 79) & 0xFF,
         "scanout_shade": (value >> 87) & 0x3,
         "phase_x_out": (value >> 89) & 0xFF,
+        "active_obj_oam_index": (value >> 97) & 0x3F,
+        "active_obj_x": (value >> 103) & 0xFF,
     }
 
 
@@ -52,8 +54,14 @@ async def reset_dut(
     line_obj_count: int = 1,
     ticket0_x: int = 9,
     ticket1_x: int = 17,
+    ticket2_x: int = 25,
+    ticket_y: int = 16,
+    visible_ly: int = 0,
+    obj_size_8x16: bool = False,
     start_x_out: int = 1,
     start_dot_in_line: int = 80,
+    tile_id: int = 0x01,
+    flags: int = 0x00,
     tile_lo: int = 0x50,
     tile_hi: int = 0x30,
 ) -> None:
@@ -62,8 +70,14 @@ async def reset_dut(
     dut.line_obj_count_i.value = line_obj_count & 0xF
     dut.ticket0_x_i.value = ticket0_x & 0xFF
     dut.ticket1_x_i.value = ticket1_x & 0xFF
+    dut.ticket2_x_i.value = ticket2_x & 0xFF
+    dut.ticket_y_i.value = ticket_y & 0xFF
+    dut.visible_ly_i.value = visible_ly & 0xFF
+    dut.obj_size_8x16_i.value = int(obj_size_8x16)
     dut.start_x_out_i.value = start_x_out & 0xFF
     dut.start_dot_in_line_i.value = start_dot_in_line & 0x1FF
+    dut.tile_id_i.value = tile_id & 0xFF
+    dut.flags_i.value = flags & 0xFF
     dut.tile_lo_i.value = tile_lo & 0xFF
     dut.tile_hi_i.value = tile_hi & 0xFF
     dut.rst_i.value = 1
@@ -206,7 +220,7 @@ async def test_late_object_fetch_keeps_phase_x_out_aligned(dut):
 async def test_single_object_fetch_imposes_visible_transfer_penalty_before_x_advances(dut):
     await reset_dut(dut, line_obj_count=1, ticket0_x=9, start_x_out=1, start_dot_in_line=80)
 
-    snapshots = await run_steps(dut, 24)
+    snapshots = await run_steps(dut, 48)
 
     assert snapshots[0]["fetcher_source"] == FETCHER_OBJ, snapshots[0]
     assert snapshots[0]["x_out"] == 1, snapshots[0]
@@ -260,6 +274,54 @@ async def test_overlapping_objects_start_second_fetch_before_obj_fifo_drains(dut
 
 
 @cocotb.test()
+async def test_smaller_x_object_fetches_before_earlier_oam_entry(dut):
+    await reset_dut(dut, line_obj_count=2, ticket0_x=64, ticket1_x=50, start_x_out=42, start_dot_in_line=121)
+
+    snapshots = await run_steps(dut, 24)
+    first_obj_fetch = next(
+        (
+            s for s in snapshots
+            if s["fetcher_source"] == FETCHER_OBJ
+            and s["mem_req_count"] > 0
+            and s["req_region"] == MEM_REGION_OAM
+            and s["req_client"] == MEM_CLIENT_OBJ_FETCHER
+        ),
+        None,
+    )
+
+    assert first_obj_fetch is not None, snapshots
+    assert first_obj_fetch["active_obj_oam_index"] == 1, first_obj_fetch
+    assert first_obj_fetch["active_obj_x"] == 50, first_obj_fetch
+
+
+@cocotb.test()
+async def test_three_contiguous_objects_reach_the_third_object_pixels(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=3,
+        ticket0_x=9,
+        ticket1_x=17,
+        ticket2_x=25,
+        start_x_out=1,
+        start_dot_in_line=80,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+    )
+
+    snapshots = await run_steps(dut, 96)
+    object_pixels = [
+        s for s in snapshots
+        if s["scanout_valid"]
+        and s["scanout_kind"] == SCANOUT_PIXEL
+        and s["scanout_source"] == PIXEL_SOURCE_OBJECT
+    ]
+
+    assert object_pixels, snapshots
+    xs = {int(s["scanout_x"]) for s in object_pixels}
+    assert all(x in xs for x in range(17, 25)), sorted(xs)
+
+
+@cocotb.test()
 async def test_overlapping_second_object_tail_pixels_reach_scanout(dut):
     await reset_dut(
         dut,
@@ -293,7 +355,7 @@ async def test_overlapping_second_object_tail_pixels_reach_scanout(dut):
 async def test_object_fetch_cancels_cleanly_when_transfer_ends(dut):
     await reset_dut(dut, line_obj_count=1, ticket0_x=159, start_x_out=151, start_dot_in_line=252)
 
-    snapshots = await run_steps(dut, 12)
+    snapshots = await run_steps(dut, 48)
 
     saw_obj_fetch = any(s["fetcher_source"] == FETCHER_OBJ for s in snapshots)
     saw_hblank = any(s["phase"] == PHASE_HBLANK for s in snapshots)
@@ -303,3 +365,67 @@ async def test_object_fetch_cancels_cleanly_when_transfer_ends(dut):
     assert saw_hblank, snapshots
     assert hblank["fetcher_source"] == FETCHER_BG, hblank
     assert hblank["obj_fifo_count"] == 0, hblank
+
+
+@cocotb.test()
+async def test_flipped_8x16_odd_tile_lower_half_uses_expected_addr_and_emits_pixels(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=1,
+        ticket0_x=56,
+        ticket_y=32,
+        visible_ly=31,
+        obj_size_8x16=True,
+        start_x_out=48,
+        start_dot_in_line=140,
+        tile_id=0x03,
+        flags=0x40,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+    )
+
+    snapshots = await run_steps(dut, 48)
+    vram_req_addrs = [
+        int(s["req_addr"])
+        for s in snapshots
+        if s["mem_req_count"] > 0
+        and s["req_region"] == MEM_REGION_VRAM
+        and s["req_client"] == MEM_CLIENT_OBJ_FETCHER
+    ]
+    assert 0x8020 in vram_req_addrs, vram_req_addrs
+    assert 0x8021 in vram_req_addrs, vram_req_addrs
+
+    object_pixels = [
+        s for s in snapshots
+        if s["scanout_valid"]
+        and s["scanout_kind"] == SCANOUT_PIXEL
+        and s["scanout_source"] == PIXEL_SOURCE_OBJECT
+    ]
+    assert object_pixels, snapshots
+
+
+@cocotb.test()
+async def test_eight_contiguous_objects_reach_late_object_pixels(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=8,
+        ticket0_x=48,
+        ticket1_x=56,
+        ticket2_x=64,
+        start_x_out=40,
+        start_dot_in_line=120,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+    )
+
+    snapshots = await run_steps(dut, 192)
+    object_pixels = [
+        s for s in snapshots
+        if s["scanout_valid"]
+        and s["scanout_kind"] == SCANOUT_PIXEL
+        and s["scanout_source"] == PIXEL_SOURCE_OBJECT
+    ]
+
+    assert object_pixels, snapshots
+    xs = {int(s["scanout_x"]) for s in object_pixels}
+    assert all(x in xs for x in range(88, 104)), sorted(xs)

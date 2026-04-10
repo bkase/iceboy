@@ -167,6 +167,19 @@ pub fn obj_fifo_left_clip(ticket: SelectedObjTicket, x_out: uint<8>) -> uint<4> 
     if clip_raw > 8u9 { 8u4 } else { trunc(clip_raw) }
 }
 
+pub fn obj_fetch_fits_fifo_horizon(ticket: SelectedObjTicket, x_out: uint<8>) -> bool {
+    let offset: uint<9> = zext(obj_fifo_start_offset(ticket, x_out));
+    let left_clip: uint<8> = zext(obj_fifo_left_clip(ticket, x_out));
+    let visible_width: uint<9> =
+        if left_clip >= 8u8 {
+            0u9
+        } else {
+            let remaining: uint<8> = trunc(8u9 - zext(left_clip));
+            zext(remaining)
+        };
+    trunc(offset + visible_width) <= 16u10
+}
+
 pub fn obj_fifo_overlay_row_clipped(fifo: ObjFifo, row: [ObjPixel; 8], offset: uint<4>, left_clip: uint<4>) -> ObjFifo {
     ObjFifo$(
         count: overlay_count_clipped(fifo, offset, left_clip),

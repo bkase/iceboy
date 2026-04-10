@@ -7,7 +7,7 @@ module soc_rom_top_verilator_wrapper (
     input [4:0] if_reg_i,
     input [4:0] ie_reg_i,
     input [4:0] irq_pending_i,
-    output [186:0] output__
+    output [241:0] output__
 );
     \iceboy::sim::soc_rom_top::soc_rom_top  impl (
         .clk_i(clk_i),

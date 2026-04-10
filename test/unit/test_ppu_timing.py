@@ -59,6 +59,7 @@ async def sample(
     win_enable: bool = False,
     old_lcdc_enable: bool = True,
     new_lcdc_enable: bool = True,
+    x_out: int = 0,
 ) -> dict[str, int | bool]:
     dut.run_i.value = run
     dut.phase_i.value = phase
@@ -74,6 +75,7 @@ async def sample(
     dut.win_enable_i.value = int(win_enable)
     dut.old_lcdc_enable_i.value = int(old_lcdc_enable)
     dut.new_lcdc_enable_i.value = int(new_lcdc_enable)
+    dut.x_out_i.value = x_out
     await ReadOnly()
     snapshot = decode_output(int(dut.output__.value))
     await Timer(1, units="ps")
@@ -92,11 +94,39 @@ async def test_visible_line_mode_sequence_transitions(dut):
     assert to_transfer["next_ly"] == 12
     assert not to_transfer["line_start"]
 
-    transfer_hold = await sample(dut, run=RUN_RUNNING, phase=PHASE_TRANSFER, ly=12, dot_in_line=250, sampled_scx_low3=5)
+    transfer_hold = await sample(
+        dut,
+        run=RUN_RUNNING,
+        phase=PHASE_TRANSFER,
+        ly=12,
+        dot_in_line=250,
+        sampled_scx_low3=5,
+        x_out=150,
+    )
     assert transfer_hold["next_phase"] == PHASE_TRANSFER
     assert transfer_hold["next_ly"] == 12
 
-    to_hblank = await sample(dut, run=RUN_RUNNING, phase=PHASE_TRANSFER, ly=12, dot_in_line=255, sampled_scx_low3=5)
+    still_transfer = await sample(
+        dut,
+        run=RUN_RUNNING,
+        phase=PHASE_TRANSFER,
+        ly=12,
+        dot_in_line=255,
+        sampled_scx_low3=5,
+        x_out=159,
+    )
+    assert still_transfer["next_phase"] == PHASE_TRANSFER
+    assert still_transfer["next_ly"] == 12
+
+    to_hblank = await sample(
+        dut,
+        run=RUN_RUNNING,
+        phase=PHASE_TRANSFER,
+        ly=12,
+        dot_in_line=255,
+        sampled_scx_low3=5,
+        x_out=160,
+    )
     assert to_hblank["next_phase"] == PHASE_HBLANK
     assert to_hblank["next_ly"] == 12
     assert not to_hblank["line_start"]
@@ -122,6 +152,27 @@ async def test_line_wrap_enters_next_visible_line_and_samples_mode2_inputs(dut):
     assert snapshot["next_scx_low3"] == 0x1D & 0x7
     assert snapshot["next_wy_triggered"] is True
     assert snapshot["next_window_enable"] is True
+
+
+@cocotb.test()
+async def test_mode2_refreshes_window_enable_without_resampling_scx_low3(dut):
+    snapshot = await sample(
+        dut,
+        run=RUN_RUNNING,
+        phase=PHASE_OAM,
+        ly=42,
+        dot_in_line=12,
+        sampled_scx_low3=3,
+        sampled_wy_triggered=False,
+        sampled_window_enable=True,
+        scx=0x1D,
+        wy=42,
+        win_enable=False,
+    )
+    assert snapshot["next_phase"] == PHASE_OAM
+    assert snapshot["next_scx_low3"] == 3
+    assert snapshot["next_wy_triggered"] is True
+    assert snapshot["next_window_enable"] is False
 
 
 @cocotb.test()

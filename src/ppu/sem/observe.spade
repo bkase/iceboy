@@ -113,6 +113,7 @@ pub struct PpuDebugTrace {
     window_line: uint<8>,
     oam_scan: OamScanState,
     line_objs: LineObjList,
+    line_obj_fetch_index: uint<4>,
     fetcher: FetcherState,
     bg_fifo: BgFifo,
     obj_fifo: ObjFifo,
@@ -171,22 +172,26 @@ fn selected_obj_ids(line_objs: LineObjList) -> [Option<uint<6>>; 10] {
     ]
 }
 
-fn fixed_mode3_len(state_before: PpuState) -> uint<9> {
+fn transfer_start_dot(state_before: PpuState) -> uint<9> {
     match state_before.status.run {
         LcdRunState::WarmupBlankFrame =>
             if state_before.visible.ly == 0u8 {
-                160u9
+                83u9
             } else {
-                176u9
+                79u9
             },
-        _ => 176u9,
+        _ => 79u9,
     }
+}
+
+fn mode3_len_at_boundary(state_before: PpuState) -> uint<9> {
+    trunc(state_before.render.dot_in_line - transfer_start_dot(state_before))
 }
 
 pub fn basic_line_summary(state_before: PpuState, state_after: PpuState) -> LineSummary {
     let window_start_x = summary_window_start_x(state_after.visible.regs, state_after.render.window_state);
     let selected_objs = selected_obj_ids(state_after.render.line_objs);
-    let mode3_len = fixed_mode3_len(state_before);
+    let mode3_len = mode3_len_at_boundary(state_before);
     let hash0 = mix_hash64(0u64, zext(state_after.visible.ly));
     let hash1 = mix_hash64(hash0, zext(mode3_len));
     let hash2 = mix_hash64(hash1, option_u8_hash_sample(window_start_x));
@@ -293,6 +298,7 @@ pub fn idle_ppu_debug_trace() -> PpuDebugTrace {
         window_line: state.render.window_line,
         oam_scan: empty_oam_scan_state(),
         line_objs: empty_line_obj_list(),
+        line_obj_fetch_index: 0u4,
         fetcher: initial_fetcher_state(),
         bg_fifo: state.render.bg_fifo,
         obj_fifo: state.render.obj_fifo,

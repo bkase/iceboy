@@ -141,6 +141,36 @@ async def test_window_activation_basic_at_x0(dut):
 
 
 @cocotb.test()
+async def test_window_trigger_drops_stale_bg_push_on_restart(dut):
+    logger = case_logger("test_window_trigger_drops_stale_bg_push_on_restart")
+    logger.step("When the window triggers on the same dot as a BG push, the stale BG row must be discarded")
+    snapshot = await sample(
+        dut,
+        fifo_count=0,
+        push_valid=True,
+        push_row=[3] * 8,
+        window_state=WINDOW_INACTIVE,
+        window_line=0,
+        wy_triggered=True,
+        window_enable_at_mode2_start=True,
+        wx_live=15,
+        x_out=8,
+        line_start=True,
+    )
+    require(
+        logger,
+        snapshot,
+        expected={
+            "window_state": WINDOW_ACTIVE,
+            "next_window_line": 1,
+            "restart_fetcher": True,
+            "next_fifo_count": 0,
+            "pixel_valid": False,
+        },
+    )
+
+
+@cocotb.test()
 async def test_window_requires_wy_and_mode2_enable_to_arm(dut):
     logger = case_logger("test_window_requires_wy_and_mode2_enable_to_arm")
 
@@ -315,7 +345,7 @@ async def test_window_midframe_disable_resume_and_vblank_reset(dut):
         },
     )
 
-    logger.step("Frame start resets the window state and line counter")
+    logger.step("Frame start still arms line 0 immediately when WY already matched and WX is on-screen")
     reset = await sample(
         dut,
         window_state=WINDOW_ACTIVE,
@@ -333,8 +363,10 @@ async def test_window_midframe_disable_resume_and_vblank_reset(dut):
         logger,
         reset,
         expected={
-            "window_state": WINDOW_INACTIVE,
-            "next_window_line": 0,
-            "restart_fetcher": False,
+            "window_state": WINDOW_ACTIVE,
+            "window_win_x": 0,
+            "window_win_line": 0,
+            "next_window_line": 1,
+            "restart_fetcher": True,
         },
     )

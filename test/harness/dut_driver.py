@@ -296,6 +296,17 @@ class SoCRomObservation:
 
 @dataclass(frozen=True)
 class SoCRomTopObservation:
+    ppu_oam_scan_index: int = 0
+    ppu_oam_scan_found: int = 0
+    ppu_slot0_oam_index: int = 0
+    ppu_slot0_x: int = 0
+    ppu_slot0_y: int = 0
+    ppu_line_obj_count: int = 0
+    ppu_line_obj_fetch_index: int = 0
+    ppu_fetcher_source: int = 0
+    ppu_fetcher_row: int = 0
+    ppu_bg_fifo_count: int = 0
+    ppu_obj_fifo_count: int = 0
     ppu_vblank_req_window: bool = False
     ppu_stat_req_window: bool = False
     ppu_scanout_valid: bool = False
@@ -335,6 +346,17 @@ class SoCRomTopObservation:
     @classmethod
     def from_output(cls, output_value: int) -> "SoCRomTopObservation":
         return cls(
+            ppu_oam_scan_index=(output_value >> 236) & 0x3F,
+            ppu_oam_scan_found=(output_value >> 232) & 0xF,
+            ppu_slot0_oam_index=(output_value >> 226) & 0x3F,
+            ppu_slot0_x=(output_value >> 218) & 0xFF,
+            ppu_slot0_y=(output_value >> 210) & 0xFF,
+            ppu_line_obj_count=(output_value >> 206) & 0xF,
+            ppu_line_obj_fetch_index=(output_value >> 202) & 0xF,
+            ppu_fetcher_source=(output_value >> 200) & 0x3,
+            ppu_fetcher_row=(output_value >> 197) & 0x7,
+            ppu_bg_fifo_count=(output_value >> 192) & 0x1F,
+            ppu_obj_fifo_count=(output_value >> 187) & 0x1F,
             ppu_vblank_req_window=bool((output_value >> 186) & 0x1),
             ppu_stat_req_window=bool((output_value >> 185) & 0x1),
             ppu_scanout_valid=bool((output_value >> 184) & 0x1),

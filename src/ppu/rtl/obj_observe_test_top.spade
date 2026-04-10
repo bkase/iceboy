@@ -30,6 +30,21 @@ fn encode_fetcher_source(source: FetcherSource) -> uint<2> {
     }
 }
 
+fn encode_window_state(state: lib::ppu::sem::types::WindowState) -> uint<2> {
+    match state {
+        lib::ppu::sem::types::WindowState::Inactive => 0u2,
+        lib::ppu::sem::types::WindowState::ArmedThisFrame => 1u2,
+        lib::ppu::sem::types::WindowState::ActiveOnLine$(win_x: _, win_line: _) => 2u2,
+    }
+}
+
+fn window_state_nonidle(state: lib::ppu::sem::types::WindowState) -> bool {
+    match state {
+        lib::ppu::sem::types::WindowState::Inactive => false,
+        _ => true,
+    }
+}
+
 fn encode_fetcher_step(step: FetcherStep) -> uint<3> {
     match step {
         FetcherStep::GetTile => 0u3,
@@ -85,7 +100,7 @@ pub entity obj_observe_test_top(
     write_valid_i: bool,
     write_target_i: uint<4>,
     write_value_i: uint<8>,
-) -> uint<129> {
+) -> uint<136> {
     let write =
         if write_valid_i {
             Option::Some(MmioWrite$(target: decode_mmio_reg(write_target_i), value: write_value_i))
@@ -146,4 +161,8 @@ pub entity obj_observe_test_top(
         | (zext(encode_mem_client(next_pending_req.tag.client)) << 121)
         | (zext(next_pending_req.tag.id) << 124)
         | (zext(lib::util::bit(pending_resp_valid_reg)) << 128)
+        | (zext(encode_window_state(trace.window_state)) << 129)
+        | (zext(lib::util::bit(trace.window_line != 0u8)) << 131)
+        | (zext(lib::util::bit(window_state_nonidle(trace.window_state))) << 132)
+        | (zext(trace.fetcher.row) << 133)
 }
