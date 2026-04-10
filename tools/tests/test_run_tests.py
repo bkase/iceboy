@@ -88,6 +88,7 @@ class RunTestsTest(unittest.TestCase):
         rom_labels = [suite.label for suite in suites_for_tier("rom", nightly=False)]
         self.assertIn("test_cpu_instrs_blargg.py", rom_labels)
         self.assertIn("test_dma_mode2_hide.py", rom_labels)
+        self.assertIn("test_obj_dma_metadata_corrupt.py", rom_labels)
         self.assertIn("test_ppu_wave_a.py", rom_labels)
         self.assertIn("test_ppu_wave_a_mooneye.py", rom_labels)
         self.assertIn("test_ppu_wave_b.py", rom_labels)
@@ -105,6 +106,9 @@ class RunTestsTest(unittest.TestCase):
         dma_mode2_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_dma_mode2_hide.py")
         self.assertEqual(dma_mode2_suite.runner, "shell")
         self.assertEqual(dma_mode2_suite.target, "tools/run_dma_mode2_hide_verilator.sh")
+        obj_dma_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_obj_dma_metadata_corrupt.py")
+        self.assertEqual(obj_dma_suite.runner, "shell")
+        self.assertEqual(obj_dma_suite.target, "tools/run_obj_dma_metadata_corrupt_verilator.sh")
         checker_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_ppu_checker_ball.py")
         self.assertEqual(checker_suite.runner, "shell")
         self.assertEqual(checker_suite.target, "tools/run_ppu_checker_ball_verilator.sh")
@@ -140,6 +144,11 @@ class RunTestsTest(unittest.TestCase):
     def test_dma_mode2_hide_native_runner_sources_exist(self) -> None:
         self.assertTrue((ROOT / "tools" / "run_dma_mode2_hide_verilator.sh").is_file())
         self.assertTrue((ROOT / "bench" / "roms" / "DMA_MODE2_HIDE.asm").is_file())
+        self.assertTrue((ROOT / "tools" / "run_ppu_wave_c_verilator.sh").is_file())
+
+    def test_obj_dma_metadata_corrupt_native_runner_sources_exist(self) -> None:
+        self.assertTrue((ROOT / "tools" / "run_obj_dma_metadata_corrupt_verilator.sh").is_file())
+        self.assertTrue((ROOT / "bench" / "roms" / "OBJ_DMA_METADATA_CORRUPT.asm").is_file())
         self.assertTrue((ROOT / "tools" / "run_ppu_wave_c_verilator.sh").is_file())
 
     def test_power_tier_includes_ppu_quiescence_suite(self) -> None:

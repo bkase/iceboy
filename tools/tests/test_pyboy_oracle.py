@@ -38,6 +38,7 @@ OBJ_BASIC_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_BASIC.gb"
 OBJ_X_HIDDEN_STILL_COUNTS_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_X_HIDDEN_STILL_COUNTS.gb"
 OAM_DMA_ISOLATION_ROM = ROOT / "bench" / "roms" / "out" / "OAM_DMA_ISOLATION.gb"
 DMA_MODE2_HIDE_ROM = ROOT / "bench" / "roms" / "out" / "DMA_MODE2_HIDE.gb"
+OBJ_DMA_METADATA_CORRUPT_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_DMA_METADATA_CORRUPT.gb"
 CHECKER_BALL_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL.gb"
 CHECKER_BALL_CANCEL_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL_CANCEL.gb"
 CHECKER_BALL_CANCEL_OVERLAP_ROM = ROOT / "bench" / "roms" / "out" / "CHECKER_BALL_CANCEL_OVERLAP.gb"
@@ -248,6 +249,15 @@ class PyBoyOracleTest(unittest.TestCase):
         self.assertEqual(actual[(1 * 160) + 40], 0xFF)
         self.assertEqual(actual[(2 * 160) + 40], 0xFF)
         self.assertEqual(actual[(7 * 160) + 40], 0xFF)
+
+    def test_obj_dma_metadata_corrupt_frame_shows_gray_sprite_after_mode3_dma(self) -> None:
+        actual = capture_checkpoint_frame_dmg_shades(
+            OBJ_DMA_METADATA_CORRUPT_ROM,
+            sym_path=OBJ_DMA_METADATA_CORRUPT_ROM.with_suffix(".sym"),
+            settle_rendered_frames=2,
+        )
+        self.assertEqual(actual[(143 * 160) + 120], 0xAA)
+        self.assertEqual(actual[(143 * 160) + 127], 0xAA)
 
     def test_checkpoint_frame_capture_tracks_checker_ball_motion(self) -> None:
         frame1 = capture_checkpoint_frame_dmg_shades(

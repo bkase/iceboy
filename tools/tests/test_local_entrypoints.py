@@ -250,6 +250,17 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("--checkpoint-completed-frames=3", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
+    def test_obj_dma_metadata_corrupt_verilator_wrapper_dry_run_uses_native_soc_rom_runner(self) -> None:
+        completed = self.run_script("run_obj_dma_metadata_corrupt_verilator.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("rom ids: OBJ_DMA_METADATA_CORRUPT", completed.stdout)
+        self.assertIn("--stable-frames=1", completed.stdout)
+        self.assertIn("--checkpoint-completed-frames=3", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+
     def test_ppu_checker_ball_verilator_wrapper_can_include_overlap_reducer(self) -> None:
         env = dict(self.env)
         env["ICEBOY_PPU_CHECKER_BALL_INCLUDE_RED"] = "1"
@@ -364,6 +375,15 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"tools/run_dma_mode2_hide_verilator.sh"', hook_text)
         self.assertTrue((TOOLS / "run_dma_mode2_hide_verilator.sh").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "DMA_MODE2_HIDE.asm").exists())
+
+    def test_obj_dma_metadata_corrupt_live_suite_assets_exist(self) -> None:
+        run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
+        hook_text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
+        self.assertIn('"test_obj_dma_metadata_corrupt.py"', run_tests_text)
+        self.assertIn('"tools/run_obj_dma_metadata_corrupt_verilator.sh"', run_tests_text)
+        self.assertIn('"tools/run_obj_dma_metadata_corrupt_verilator.sh"', hook_text)
+        self.assertTrue((TOOLS / "run_obj_dma_metadata_corrupt_verilator.sh").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "OBJ_DMA_METADATA_CORRUPT.asm").exists())
 
     def test_obj_observe_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
@@ -564,6 +584,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/rom/test_mbc3_switch.py"', text)
         self.assertIn('"tools/run_cpu_instrs_blargg_verilator.sh"', text)
         self.assertIn('"tools/run_dma_mode2_hide_verilator.sh"', text)
+        self.assertIn('"tools/run_obj_dma_metadata_corrupt_verilator.sh"', text)
         self.assertIn('"test/rom/test_ppu_wave_a.py"', text)
         self.assertIn('"test/rom/test_ppu_wave_b.py"', text)
         self.assertIn('"tools/run_ppu_wave_c_verilator.sh"', text)
