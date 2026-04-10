@@ -82,6 +82,7 @@ async def sample(
     line_start: bool = False,
     note_window_tile_push: bool = False,
     win_enable: bool = True,
+    current_stall_dots: int = 0,
 ) -> dict[str, int | bool | list[int]]:
     fifo_shades = fifo_shades or [0] * 16
     push_row = push_row or [0] * 8
@@ -105,6 +106,7 @@ async def sample(
     dut.line_start_i.value = int(line_start)
     dut.note_window_tile_push_i.value = int(note_window_tile_push)
     dut.win_enable_i.value = int(win_enable)
+    dut.current_stall_dots_i.value = current_stall_dots & 0x1F
     await ReadOnly()
     snapshot = decode_output(int(dut.output__.value))
     await Timer(1, units="ps")

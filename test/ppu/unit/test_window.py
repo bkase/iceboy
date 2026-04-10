@@ -48,6 +48,8 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "next_window_line": (value >> 67) & 0xFF,
         "restart_fetcher": bool((value >> 75) & 0x1),
         "stall_dots_added": (value >> 76) & 0x1F,
+        "next_stall_dots": (value >> 82) & 0x1F,
+        "current_stall_dots": (value >> 87) & 0x1F,
     }
 
 
@@ -74,6 +76,7 @@ async def sample(
     line_start: bool = False,
     note_window_tile_push: bool = False,
     win_enable: bool = True,
+    current_stall_dots: int = 0,
 ) -> dict[str, int | bool]:
     fifo_shades = fifo_shades or [0] * 16
     push_row = push_row or [0] * 8
@@ -97,6 +100,7 @@ async def sample(
     dut.line_start_i.value = int(line_start)
     dut.note_window_tile_push_i.value = int(note_window_tile_push)
     dut.win_enable_i.value = int(win_enable)
+    dut.current_stall_dots_i.value = current_stall_dots & 0x1F
     await ReadOnly()
     snapshot = decode_output(int(dut.output__.value))
     await Timer(1, units="ps")
@@ -169,6 +173,62 @@ async def test_window_trigger_drops_stale_bg_push_on_restart(dut):
             "stall_dots_added": 6,
             "next_fifo_count": 0,
             "pixel_valid": False,
+        },
+    )
+
+
+@cocotb.test()
+async def test_window_restart_enqueues_fixed_six_dot_stall(dut):
+    logger = case_logger("test_window_restart_enqueues_fixed_six_dot_stall")
+
+    logger.step("The triggering dot must enqueue exactly 6 stall dots once for the window takeover")
+    triggered = await sample(
+        dut,
+        fifo_count=1,
+        fifo_shades=[1] + [0] * 15,
+        window_state=WINDOW_INACTIVE,
+        window_line=0,
+        wy_triggered=True,
+        window_enable_at_mode2_start=True,
+        wx_live=7,
+        x_out=0,
+        line_start=True,
+        current_stall_dots=0,
+    )
+    require(
+        logger,
+        triggered,
+        expected={
+            "restart_fetcher": True,
+            "stall_dots_added": 6,
+            "next_stall_dots": 6,
+            "window_state": WINDOW_ACTIVE,
+        },
+    )
+
+    logger.step("On the next dot, the same takeover must only decrement 6 -> 5 instead of charging another 6")
+    next_dot = await sample(
+        dut,
+        fifo_count=0,
+        window_state=WINDOW_ACTIVE,
+        active_win_x=0,
+        active_win_line=0,
+        window_line=1,
+        wy_triggered=True,
+        window_enable_at_mode2_start=True,
+        wx_live=7,
+        x_out=0,
+        current_stall_dots=6,
+    )
+    require(
+        logger,
+        next_dot,
+        expected={
+            "restart_fetcher": False,
+            "stall_dots_added": 0,
+            "current_stall_dots": 6,
+            "next_stall_dots": 5,
+            "window_state": WINDOW_ACTIVE,
         },
     )
 

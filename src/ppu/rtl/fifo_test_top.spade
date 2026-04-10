@@ -1,5 +1,6 @@
 use lib::ppu::rtl::fifo::{advance_bg_pipe, bg_fifo_has_room_for_row, note_window_tile_push};
 use lib::ppu::sem::sample::PpuRenderInputs;
+use lib::ppu::sem::step::add_stall_dots;
 use lib::ppu::sem::types::{BgFifo, BgPixel, PpuSamplingState, WindowState, zero_bg_pixel};
 use lib::sim::ppu_support::build_test_lcdc;
 
@@ -154,7 +155,8 @@ pub entity fifo_test_top(
     line_start_i: bool,
     note_window_tile_push_i: bool,
     win_enable_i: bool,
-) -> uint<82> {
+    current_stall_dots_i: uint<5>,
+) -> uint<92> {
     let output = advance_bg_pipe(
         decode_fifo(fifo_count_i, fifo_shades_i, fifo_palette_i),
         decode_window_state(window_state_i, active_win_x_i, active_win_line_i),
@@ -172,6 +174,12 @@ pub entity fifo_test_top(
     let window_after =
         if note_window_tile_push_i { note_window_tile_push(output.next_window_state) } else { output.next_window_state };
     let pixel = if output.pixel_valid || output.discard_applied { output.pixel } else { zero_bg_pixel() };
+    let next_stall_dots =
+        if current_stall_dots_i > 0u5 {
+            trunc(current_stall_dots_i - 1u5)
+        } else {
+            add_stall_dots(current_stall_dots_i, output.stall_dots_added)
+        };
 
     zext(pack_fifo_shades(output.next_fifo))
         | (zext(output.next_fifo.count) << 32)
@@ -187,4 +195,6 @@ pub entity fifo_test_top(
         | (zext(lib::util::bit(output.restart_fetcher)) << 75)
         | (zext(output.stall_dots_added) << 76)
         | (zext(lib::util::bit(bg_fifo_has_room_for_row(decode_fifo(fifo_count_i, fifo_shades_i, fifo_palette_i)))) << 81)
+        | (zext(next_stall_dots) << 82)
+        | (zext(current_stall_dots_i) << 87)
 }
