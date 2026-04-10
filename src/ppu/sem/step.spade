@@ -46,6 +46,7 @@ use lib::ppu::sem::types::{
     idle_ppu_irq_req,
     visible_mode,
     zero_obj_flags,
+    zero_obj_pixel,
     zero_selected_obj_ticket,
 };
 use lib::ppu::rtl::fetcher::{
@@ -677,6 +678,31 @@ fn complete_live_obj_fetch(
     )
 }
 
+fn cancel_live_obj_fetch(
+    render: PpuRenderState,
+    render_inputs: lib::ppu::sem::sample::PpuRenderInputs,
+    visible_ly: uint<8>,
+    x_out: uint<8>,
+) -> PpuRenderState {
+    PpuRenderState$(
+        dot_in_line: render.dot_in_line,
+        x_out: render.x_out,
+        window_state: render.window_state,
+        window_line: render.window_line,
+        oam_scan: render.oam_scan,
+        line_objs: render.line_objs,
+        line_obj_fetch_index: render.line_obj_fetch_index,
+        line_obj_fetched_mask: render.line_obj_fetched_mask,
+        obj_fetch_ticket: zero_selected_obj_ticket(),
+        obj_fetch_flags: zero_obj_flags(),
+        bg_fetcher_resume: render.bg_fetcher_resume,
+        fetcher: resume_bg_fetcher(render, render_inputs, visible_ly, x_out),
+        bg_fifo: render.bg_fifo,
+        obj_fifo: empty_obj_fifo(),
+        first_frame_blank: render.first_frame_blank,
+    )
+}
+
 fn window_fetch_line_for_restart(state: WindowState, next_window_line: uint<8>) -> uint<8> {
     match state {
         WindowState::ActiveOnLine$(win_x: _, win_line: win_line) => win_line,
@@ -899,15 +925,18 @@ fn apply_live_transfer(
             _ => next_discard_seed,
         };
         let render_inputs = sample_render_inputs(candidate_state.visible, candidate_state.sampled, candidate_state.status.phase);
-        let obj_render =
-            if next_is_transfer && should_start_live_obj_fetch(state.render, candidate_state.visible.regs, base_x_out) {
+        let obj_enabled = candidate_state.visible.regs.lcdc.obj_enable;
+        let transfer_render =
+            if next_is_transfer && !obj_enabled && fetcher_source_is_object(state.render) {
+                cancel_live_obj_fetch(state.render, render_inputs, candidate_state.visible.ly, base_x_out)
+            } else if next_is_transfer && should_start_live_obj_fetch(state.render, candidate_state.visible.regs, base_x_out) {
                 start_live_obj_fetch(state.render, mem_resp)
             } else {
                 state.render
             };
-        if fetcher_source_is_object(obj_render) {
+        if obj_enabled && fetcher_source_is_object(transfer_render) {
             let (next_obj_render, obj_mem_reqs) = advance_live_obj_fetch(
-                obj_render,
+                transfer_render,
                 render_inputs,
                 candidate_state.visible.ly,
                 base_x_out,
@@ -979,17 +1008,17 @@ fn apply_live_transfer(
         } else {
         let base_fetcher =
             if entering_transfer {
-                start_bg_fetcher(state.render.fetcher, render_inputs, candidate_state.visible.ly, 0u5)
+                start_bg_fetcher(transfer_render.fetcher, render_inputs, candidate_state.visible.ly, 0u5)
             } else {
-                state.render.fetcher
+                transfer_render.fetcher
             };
-        let base_bg_fifo = if entering_transfer { clear_bg_fifo() } else { state.render.bg_fifo };
+        let base_bg_fifo = if entering_transfer { clear_bg_fifo() } else { transfer_render.bg_fifo };
         let fetcher_output = advance_bg_fetcher(
             base_fetcher,
             render_inputs,
             candidate_state.visible.ly,
             trunc(base_x_out >> 3),
-            state.render.window_line,
+            transfer_render.window_line,
             bg_fifo_has_room_for_row(base_bg_fifo),
             mem_resp_valid(mem_resp),
             mem_resp,
@@ -1029,10 +1058,12 @@ fn apply_live_transfer(
                 fetcher_output.next_state
             };
         let obj_popped =
-            if pipe_output.pixel_valid {
-                pop_obj_fifo(state.render.obj_fifo)
+            if !obj_enabled {
+                ObjFifoPopResult$(next_fifo: empty_obj_fifo(), pixel_valid: false, pixel: zero_obj_pixel())
+            } else if pipe_output.pixel_valid {
+                pop_obj_fifo(transfer_render.obj_fifo)
             } else {
-                ObjFifoPopResult$(next_fifo: state.render.obj_fifo, pixel_valid: false, pixel: lib::ppu::sem::types::zero_obj_pixel())
+                ObjFifoPopResult$(next_fifo: transfer_render.obj_fifo, pixel_valid: false, pixel: zero_obj_pixel())
             };
         let next_x_out =
             if pipe_output.pixel_valid {

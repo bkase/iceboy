@@ -44,9 +44,9 @@ fn configured_line_objs(line_obj_count_i: uint<4>, ticket0_x_i: uint<8>, ticket1
     )
 }
 
-fn seeded_regs(obj_size_8x16_i: bool) -> PpuRegs {
+fn seeded_regs(obj_size_8x16_i: bool, obj_enable_i: bool) -> PpuRegs {
     PpuRegs$(
-        lcdc: build_test_lcdc(false, false, true, false, obj_size_8x16_i, true, true),
+        lcdc: build_test_lcdc(false, false, true, false, obj_size_8x16_i, obj_enable_i, true),
         stat_sel: lib::ppu::sem::types::zero_stat_select(),
         scy: 0u8,
         scx: 0u8,
@@ -67,11 +67,12 @@ fn seeded_state(
     ticket_y_i: uint<8>,
     visible_ly_i: uint<8>,
     obj_size_8x16_i: bool,
+    obj_enable_i: bool,
     start_x_out_i: uint<8>,
     start_dot_in_line_i: uint<9>,
 ) -> PpuState {
     PpuState$(
-        visible: PpuVisibleState$(regs: seeded_regs(obj_size_8x16_i), ly: visible_ly_i),
+        visible: PpuVisibleState$(regs: seeded_regs(obj_size_8x16_i, obj_enable_i), ly: visible_ly_i),
         status: PpuStatusState$(
             run: LcdRunState::Running,
             phase: PpuPhase::Transfer$(x_out: start_x_out_i, discard_scx: 0u3),
@@ -220,6 +221,7 @@ pub entity obj_transfer_live_test_top(
     ticket_y_i: uint<8>,
     visible_ly_i: uint<8>,
     obj_size_8x16_i: bool,
+    obj_enable_i: bool,
     start_x_out_i: uint<8>,
     start_dot_in_line_i: uint<9>,
     tile_id_i: uint<8>,
@@ -231,11 +233,20 @@ pub entity obj_transfer_live_test_top(
     decl pending_req_reg;
     decl pending_resp_valid_reg;
     let mem_resp_now = if pending_resp_valid_reg { ok_mem_resp(pending_req_reg, tile_id_i, flags_i, tile_lo_i, tile_hi_i) } else { idle_ppu_mem_resp() };
+    let state_now = PpuState$(
+        visible: PpuVisibleState$(
+            regs: seeded_regs(obj_size_8x16_i, obj_enable_i),
+            ly: state_reg.visible.ly,
+        ),
+        status: state_reg.status,
+        sampled: state_reg.sampled,
+        render: state_reg.render,
+    );
     let step = step_dot(
-        state_reg,
+        state_now,
         DotInput$(bus_events: [idle_timed_ppu_event(); 4], bus_event_count: 0u4, mem_resp: mem_resp_now, dma_state: idle_oam_dma_state()),
     );
-    let visible = held_dot_output(state_reg, dot_ce_i, step);
+    let visible = held_dot_output(state_now, dot_ce_i, step);
     let trace = ppu_debug_trace(zero_video_coord(), visible);
     let next_pending_req = if visible.mem_reqs.count != 0u3 { visible.mem_reqs.slots[0] } else { idle_ppu_mem_req() };
     let scanout_valid = match visible.scanout {
@@ -267,6 +278,7 @@ pub entity obj_transfer_live_test_top(
         ticket_y_i,
         visible_ly_i,
         obj_size_8x16_i,
+        obj_enable_i,
         start_x_out_i,
         start_dot_in_line_i,
     )) =

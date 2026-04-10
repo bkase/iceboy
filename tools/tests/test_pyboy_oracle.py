@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DMG_ACID2_ROM = ROOT / "bench" / "external" / "dmg-acid2" / "dmg-acid2.gb"
 DMG_ACID2_EXPECTED = ROOT / "bench" / "expected" / "suite_owned" / "dmg-acid2" / "reference-dmg.png"
 OBJ_BASIC_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_BASIC.gb"
+OBJ_FETCH_CANCEL_LCDC1_ROM = ROOT / "bench" / "roms" / "out" / "OBJ_FETCH_CANCEL_LCDC1.gb"
 
 
 class PyBoyOracleTest(unittest.TestCase):
@@ -184,6 +185,19 @@ class PyBoyOracleTest(unittest.TestCase):
         self.assertEqual(len(actual), 144 * 160)
         self.assertTrue(set(actual))
         self.assertTrue(set(actual).issubset({0x00, 0x55, 0xAA, 0xFF}))
+
+    def test_checkpoint_frame_capture_matches_obj_fetch_cancel_lcdc1_scene(self) -> None:
+        actual = capture_checkpoint_frame_dmg_shades(
+            OBJ_FETCH_CANCEL_LCDC1_ROM,
+            sym_path=OBJ_FETCH_CANCEL_LCDC1_ROM.with_suffix(".sym"),
+        )
+        self.assertEqual(len(actual), 144 * 160)
+        self.assertEqual(actual[(40 * 160) + 120], 0xFF)
+        self.assertEqual(actual[(41 * 160) + 120], 0x00)
+        self.assertEqual(actual[(41 * 160) + 128], 0xFF)
+        self.assertEqual(actual[(41 * 160) + 136], 0x00)
+        self.assertEqual(actual[(41 * 160) + 144], 0xFF)
+        self.assertEqual(actual[(41 * 160) + 152], 0x00)
 
 
 if __name__ == "__main__":

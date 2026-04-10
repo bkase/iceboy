@@ -287,6 +287,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_BG_MASK.asm").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_10_PER_LINE.asm").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_X_HIDDEN_STILL_COUNTS.asm").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "OBJ_FETCH_CANCEL_LCDC1.asm").exists())
 
     def test_ppu_wave_c_live_suite_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")

@@ -58,6 +58,7 @@ async def reset_dut(
     ticket_y: int = 16,
     visible_ly: int = 0,
     obj_size_8x16: bool = False,
+    obj_enable: bool = True,
     start_x_out: int = 1,
     start_dot_in_line: int = 80,
     tile_id: int = 0x01,
@@ -74,6 +75,7 @@ async def reset_dut(
     dut.ticket_y_i.value = ticket_y & 0xFF
     dut.visible_ly_i.value = visible_ly & 0xFF
     dut.obj_size_8x16_i.value = int(obj_size_8x16)
+    dut.obj_enable_i.value = int(obj_enable)
     dut.start_x_out_i.value = start_x_out & 0xFF
     dut.start_dot_in_line_i.value = start_dot_in_line & 0x1FF
     dut.tile_id_i.value = tile_id & 0xFF
@@ -429,3 +431,51 @@ async def test_eight_contiguous_objects_reach_late_object_pixels(dut):
     assert object_pixels, snapshots
     xs = {int(s["scanout_x"]) for s in object_pixels}
     assert all(x in xs for x in range(88, 104)), sorted(xs)
+
+
+@cocotb.test()
+async def test_object_enable_low_cancels_active_fetch_and_reenable_restarts_it(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=1,
+        ticket0_x=9,
+        start_x_out=1,
+        start_dot_in_line=80,
+        tile_lo=0xFF,
+        tile_hi=0xFF,
+    )
+
+    armed = []
+    for _ in range(4):
+        snapshot = await step(dut)
+        armed.append(snapshot)
+        if snapshot["fetcher_source"] == FETCHER_OBJ:
+            break
+
+    assert any(s["fetcher_source"] == FETCHER_OBJ for s in armed), armed
+
+    dut.obj_enable_i.value = 0
+    disabled = await run_steps(dut, 8)
+    assert all(s["fetcher_source"] != FETCHER_OBJ for s in disabled), disabled
+    assert all(s["obj_fifo_count"] == 0 for s in disabled), disabled
+    assert not any(
+        s["scanout_valid"]
+        and s["scanout_kind"] == SCANOUT_PIXEL
+        and s["scanout_source"] == PIXEL_SOURCE_OBJECT
+        for s in disabled
+    ), disabled
+
+    dut.obj_enable_i.value = 1
+    resumed = await run_steps(dut, 32)
+    assert any(
+        s["fetcher_source"] == FETCHER_OBJ
+        and s["mem_req_count"] > 0
+        and s["req_client"] == MEM_CLIENT_OBJ_FETCHER
+        for s in resumed
+    ), resumed
+    assert any(
+        s["scanout_valid"]
+        and s["scanout_kind"] == SCANOUT_PIXEL
+        and s["scanout_source"] == PIXEL_SOURCE_OBJECT
+        for s in resumed
+    ), resumed
