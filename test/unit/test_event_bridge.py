@@ -17,6 +17,7 @@ KIND_POWER = 3
 
 TARGET_LCDC = 0
 TARGET_SCY = 2
+TARGET_BGP = 7
 TARGET_OBP1 = 9
 
 
@@ -209,6 +210,40 @@ async def test_seq_is_monotonic_for_same_dot_events_across_cycles(dut):
     assert first["frame"] == second["frame"] == 0
     assert first["line"] == second["line"] == 9
     assert first["dot"] == second["dot"] == 88
+    assert first["event0"]["seq"] == 0
+    assert second["event0"]["seq"] == 1
+
+
+@cocotb.test()
+async def test_repeated_same_value_mmio_writes_emit_distinct_events(dut):
+    await reset_dut(dut)
+    await step(dut, frame_start=False, line_index=0, dot_in_line=1, m_ce=False)
+
+    first = await step(
+        dut,
+        req_kind=REQ_WRITE,
+        addr=0xFF47,
+        data=0xE4,
+        frame_start=False,
+        line_index=12,
+        dot_in_line=33,
+    )
+    second = await step(
+        dut,
+        req_kind=REQ_WRITE,
+        addr=0xFF47,
+        data=0xE4,
+        frame_start=False,
+        line_index=12,
+        dot_in_line=34,
+    )
+
+    assert first["count"] == 1
+    assert second["count"] == 1
+    assert first["event0"]["kind"] == KIND_MMIO
+    assert second["event0"]["kind"] == KIND_MMIO
+    assert first["event0"]["target"] == second["event0"]["target"] == TARGET_BGP
+    assert first["event0"]["payload"] == second["event0"]["payload"] == 0xE4
     assert first["event0"]["seq"] == 0
     assert second["event0"]["seq"] == 1
 
