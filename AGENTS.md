@@ -68,6 +68,7 @@ git push                # Push to remote
 - Use descriptive titles and set appropriate priority/type
 - Always sync before ending session
 - Do not run the full precommit script manually right before commit unless explicitly requested; the commit hook already runs it
+- Prefer the native C++/Verilator harness over cocotb for longer-running ROM or raster tests. As a default rule, if a test is expected to run for more than `50_000` M-cycles, use the C++ harness unless there is a concrete reason not to.
 - Use `Scripts/swiftpm-cache.sh` wrappers instead of raw `swift build`, `swift test`, or `swift run` in repo scripts and repeated local workflows
 - Debug/test/run cache: `.build/apus-debug`
 - Release/benchmark cache: `.build/apus-release`

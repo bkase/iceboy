@@ -212,6 +212,19 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("--completed-frames=84", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
+    def test_gate_ppu_composition_dry_run_lists_milestone_d_criteria(self) -> None:
+        completed = self.run_script("gate_ppu_composition.sh", "--dry-run")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("=== PPU COMPOSITION GATE: Milestone D Ready ===", completed.stdout)
+        self.assertIn("Criterion 1: Wave C owned ROM differential bundle", completed.stdout)
+        self.assertIn("tools/run_ppu_wave_c_verilator.sh", completed.stdout)
+        self.assertIn("ICEBOY_PPU_WAVE_C_INCLUDE_RED=1", completed.stdout)
+        self.assertIn("tools/run_dma_mode2_hide_verilator.sh", completed.stdout)
+        self.assertIn("tools/run_obj_dma_metadata_corrupt_verilator.sh", completed.stdout)
+        self.assertIn("tools/run_dmg_acid2_verilator.sh", completed.stdout)
+        self.assertIn("tools.tests.test_ppu_wave_c_reference", completed.stdout)
+        self.assertIn("tools.tests.test_ppu_spatial_oracle_wave_c", completed.stdout)
+
     def test_ppu_wave_c_verilator_wrapper_dry_run_uses_native_soc_rom_runner(self) -> None:
         completed = self.run_script("run_ppu_wave_c_verilator.sh", "--dry-run", "--skip-build")
         self.assertEqual(completed.returncode, 0, completed.stderr)
