@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
 from compare_row_loop_timing import compare_row_loop_timing, main
-from bench.pyboy.oracle import HookTimingCapture
+from bench.pyboy.oracle import HookTimingCapture, LineModeTimingCapture
 
 
 class CompareRowLoopTimingTest(unittest.TestCase):
@@ -27,6 +27,8 @@ class CompareRowLoopTimingTest(unittest.TestCase):
             trace.write_text("", encoding="utf-8")
 
             with patch("compare_row_loop_timing.capture_checkpoint_hook_timings") as capture, patch(
+                "compare_row_loop_timing.capture_checkpoint_line_mode_timing"
+            ) as line_timing, patch(
                 "compare_row_loop_timing.summarize_rom_trace"
             ) as summarize:
                 capture.return_value = (
@@ -57,9 +59,19 @@ class CompareRowLoopTimingTest(unittest.TestCase):
                         wy=0,
                     ),
                 )
+                line_timing.return_value = LineModeTimingCapture(
+                    line=80,
+                    mode2_len_dots=80,
+                    mode3_len_dots=170,
+                    hblank_len_dots=206,
+                )
                 summarize.return_value = {
                     "label_stats": {"WaitForMode3": {"count": 2}},
                     "milestones": {"first_lcdc_write": {"scanout_x": 106}},
+                    "spans": {
+                        "mode3": {"scanout_width": 57, "cycle_width": 61},
+                        "object_scanout": {"scanout_width": 8, "cycle_width": 11},
+                    },
                 }
 
                 summary = compare_row_loop_timing(
@@ -75,11 +87,17 @@ class CompareRowLoopTimingTest(unittest.TestCase):
         self.assertEqual(summary["write_pc"], "0x01d5")
         self.assertEqual(summary["labels"], ["WaitForMode3", "DelayCancel"])
         self.assertEqual(summary["pyboy"][0]["label"], "WaitForMode3")
+        self.assertEqual(summary["pyboy_line_timing"]["mode3_len_dots"], 170)
         self.assertEqual(summary["pyboy_label_stats"]["WaitForMode3"]["count"], 1)
         self.assertEqual(summary["pyboy_label_stats"]["WriteObjOff"]["first"]["pc"], 0x01D5)
         self.assertEqual(summary["native"]["label_stats"]["WaitForMode3"]["count"], 2)
         self.assertEqual(summary["native"]["milestones"]["first_lcdc_write"]["scanout_x"], 106)
+        self.assertEqual(summary["native_gap_analysis"]["mode3_scanout_width"], 57)
+        self.assertEqual(summary["native_gap_analysis"]["mode3_cycle_width"], 61)
+        self.assertEqual(summary["native_gap_analysis"]["object_scanout_width"], 8)
+        self.assertEqual(summary["native_gap_analysis"]["object_scanout_cycle_width"], 11)
         capture.assert_called_once()
+        line_timing.assert_called_once()
         summarize.assert_called_once()
 
     def test_main_prints_json_summary(self) -> None:

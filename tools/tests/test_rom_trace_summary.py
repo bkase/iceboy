@@ -51,7 +51,7 @@ class RomTraceSummaryTest(unittest.TestCase):
                                 "cycle": 20,
                                 "pc": 0x0246,
                                 "ppu_ly": 40,
-                                "ppu_mode": 2,
+                                "ppu_mode": 3,
                                 "line_obj_count": 1,
                                 "slot0_x": 128,
                                 "slot0_oam_index": 0,
@@ -69,7 +69,7 @@ class RomTraceSummaryTest(unittest.TestCase):
                                 "cycle": 21,
                                 "pc": 0x0250,
                                 "ppu_ly": 40,
-                                "ppu_mode": 2,
+                                "ppu_mode": 3,
                                 "line_obj_count": 1,
                                 "slot0_x": 128,
                                 "slot0_oam_index": 0,
@@ -106,6 +106,11 @@ class RomTraceSummaryTest(unittest.TestCase):
             self.assertEqual(summary["milestones"]["first_object_scanout"]["scanout_x"], 120)
             self.assertEqual(summary["milestones"]["first_lcdc_write"]["bus_req_addr"], "0xff40")
             self.assertEqual(summary["milestones"]["first_lcdc_preview_write"]["preview_bus_req_data"], "0x91")
+            self.assertEqual(summary["spans"]["mode3"]["scanout_width"], 5)
+            self.assertEqual(summary["spans"]["mode3"]["min_scanout_x"], 120)
+            self.assertEqual(summary["spans"]["mode3"]["max_scanout_x"], 124)
+            self.assertEqual(summary["spans"]["mode3"]["cycle_width"], 2)
+            self.assertEqual(summary["spans"]["object_scanout"]["count"], 2)
 
     def test_cli_emits_json_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -119,7 +124,7 @@ class RomTraceSummaryTest(unittest.TestCase):
                         "cycle": 10,
                         "pc": 0x0246,
                         "ppu_ly": 40,
-                        "ppu_mode": 2,
+                        "ppu_mode": 3,
                         "line_obj_count": 1,
                         "scanout_y": 40,
                         "scanout_x": 120,
@@ -151,6 +156,8 @@ class RomTraceSummaryTest(unittest.TestCase):
             self.assertEqual(parsed["labels"]["WaitForMode3"]["pc"], "0x0246")
             self.assertEqual(parsed["label_stats"]["WaitForMode3"]["count"], 1)
             self.assertEqual(parsed["milestones"]["first_lcdc_write"]["bus_req_data"], "0x91")
+            self.assertEqual(parsed["spans"]["mode3"]["scanout_width"], 1)
+            self.assertEqual(parsed["spans"]["mode3"]["cycle_width"], 1)
 
 
 if __name__ == "__main__":

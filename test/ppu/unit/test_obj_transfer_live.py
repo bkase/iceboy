@@ -11,6 +11,7 @@ REQ_READ = 1
 REQ_WRITE = 2
 FETCHER_BG = 0
 FETCHER_OBJ = 2
+FETCHER_GET_HI = 2
 FETCHER_PUSH = 4
 
 MEM_REGION_VRAM = 0
@@ -68,6 +69,9 @@ async def reset_dut(
     obj_enable: bool = True,
     start_x_out: int = 1,
     start_dot_in_line: int = 80,
+    seed_fetcher_valid: bool = False,
+    seed_fetcher_source: int = FETCHER_BG,
+    seed_fetcher_step: int = 0,
     tile_id: int = 0x01,
     flags: int = 0x00,
     tile_lo: int = 0x50,
@@ -94,6 +98,9 @@ async def reset_dut(
     dut.obj_enable_i.value = int(obj_enable)
     dut.start_x_out_i.value = start_x_out & 0xFF
     dut.start_dot_in_line_i.value = start_dot_in_line & 0x1FF
+    dut.seed_fetcher_valid_i.value = int(seed_fetcher_valid)
+    dut.seed_fetcher_source_i.value = seed_fetcher_source & 0x3
+    dut.seed_fetcher_step_i.value = seed_fetcher_step & 0x7
     dut.tile_id_i.value = tile_id & 0xFF
     dut.flags_i.value = flags & 0xFF
     dut.tile_lo_i.value = tile_lo & 0xFF
@@ -527,6 +534,29 @@ async def test_object_enable_low_cancels_active_fetch_and_reenable_restarts_it(d
         and s["scanout_source"] == PIXEL_SOURCE_OBJECT
         for s in resumed
     ), resumed
+
+
+@cocotb.test()
+async def test_object_cancel_hard_restarts_bg_fetcher_instead_of_resuming_mid_step(dut):
+    await reset_dut(
+        dut,
+        line_obj_count=1,
+        ticket0_x=105,
+        start_x_out=97,
+        start_dot_in_line=176,
+        seed_fetcher_valid=True,
+        seed_fetcher_source=FETCHER_BG,
+        seed_fetcher_step=FETCHER_GET_HI,
+    )
+
+    armed = await step(dut)
+    assert armed["fetcher_source"] == FETCHER_OBJ, armed
+    assert armed["active_obj_x"] == 105, armed
+
+    cancelled = await step_with_bridge_lcdc_write(dut, lcdc_with_obj_enable(False, False))
+    assert cancelled["fetcher_source"] == FETCHER_BG, cancelled
+    assert cancelled["obj_fifo_count"] == 0, cancelled
+    assert cancelled["fetcher_step"] in (0, 1), cancelled
 
 
 @cocotb.test()

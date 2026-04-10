@@ -11,6 +11,7 @@ from bench.pyboy.oracle import (
     CommitPoint,
     PyBoyOracle,
     capture_checkpoint_hook_timings,
+    capture_checkpoint_line_mode_timing,
     _normalize_rgba_to_dmg_shades,
     capture_checkpoint_frame_dmg_shades,
     capture_rendered_frame_dmg_shades,
@@ -277,6 +278,18 @@ class PyBoyOracleTest(unittest.TestCase):
         self.assertLess(wait.seq, delay.seq)
         self.assertLess(delay.seq, write.seq)
         self.assertEqual(write.pc, 0x01D5)
+
+    def test_capture_checkpoint_line_mode_timing_reports_dmg_lengths(self) -> None:
+        timing = capture_checkpoint_line_mode_timing(
+            CHECKER_BALL_CANCEL_OVERLAP_ROM,
+            sym_path=CHECKER_BALL_CANCEL_OVERLAP_ROM.with_suffix(".sym"),
+            settle_rendered_frames=2,
+            target_line=80,
+        )
+        self.assertEqual(timing.line, 80)
+        self.assertEqual(timing.mode2_len_dots, 80)
+        self.assertEqual(timing.mode3_len_dots, 170)
+        self.assertEqual(timing.hblank_len_dots, 206)
 
     def test_resolve_checkpoint_pc_finds_wave_c_scene_ready_label(self) -> None:
         self.assertEqual(

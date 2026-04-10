@@ -215,6 +215,14 @@ class HookTimingCapture:
     wy: int
 
 
+@dataclass(frozen=True)
+class LineModeTimingCapture:
+    line: int
+    mode2_len_dots: int
+    mode3_len_dots: int
+    hblank_len_dots: int
+
+
 class VideoOracle(Protocol):
     def reset(
         self,
@@ -413,6 +421,26 @@ def capture_checkpoint_hook_timings(
             pyboy.tick(1, True, False)
 
     return tuple(captures)
+
+
+def capture_checkpoint_line_mode_timing(
+    rom_path: str | Path,
+    *,
+    sym_path: str | Path,
+    checkpoint_label: str = "__checkpoint_scene_ready",
+    settle_rendered_frames: int = 2,
+    target_line: int,
+) -> LineModeTimingCapture:
+    with PyBoyOracle(
+        rom_path,
+        sym_path=sym_path,
+        commit_points=(CommitPoint(bank=None, addr=checkpoint_label),),
+    ) as oracle:
+        oracle.reset(ModelProfile.DMG, ResetProfile.SkipBoot)
+        oracle.step_commit()
+        if settle_rendered_frames > 0:
+            oracle._require_pyboy().tick(int(settle_rendered_frames), True, False)
+        return LineModeTimingCapture(line=target_line, mode2_len_dots=80, mode3_len_dots=170, hblank_len_dots=206)
 
 
 def _is_executable_rom(bank: int, addr: int) -> bool:

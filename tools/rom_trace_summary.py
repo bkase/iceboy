@@ -87,6 +87,52 @@ def _matching_records(
     return matches
 
 
+def _segment_matches(matches: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    if not matches:
+        return []
+    groups: list[list[dict[str, Any]]] = [[matches[0]]]
+    for match in matches[1:]:
+        prev = groups[-1][-1]
+        prev_cycle = prev.get("cycle")
+        cycle = match.get("cycle")
+        if prev_cycle is not None and cycle is not None and int(cycle) <= int(prev_cycle) + 1:
+            groups[-1].append(match)
+        else:
+            groups.append([match])
+    return groups
+
+
+def _span_summary(
+    records: Iterable[dict[str, Any]],
+    predicate,
+    labels_by_addr: dict[int, tuple[str, ...]],
+    *,
+    anchor_cycle: int | None = None,
+) -> dict[str, Any] | None:
+    matches = _matching_records(records, predicate, labels_by_addr)
+    if not matches:
+        return None
+    if anchor_cycle is not None:
+        segments = _segment_matches(matches)
+        matches = min(
+            segments,
+            key=lambda segment: min(abs(int(item["cycle"]) - anchor_cycle) for item in segment if item.get("cycle") is not None),
+        )
+    x_values = [int(match["scanout_x"]) for match in matches if match.get("scanout_x") is not None]
+    cycle_values = [int(match["cycle"]) for match in matches if match.get("cycle") is not None]
+    return {
+        "count": len(matches),
+        "first": matches[0],
+        "last": matches[-1],
+        "min_scanout_x": min(x_values) if x_values else None,
+        "max_scanout_x": max(x_values) if x_values else None,
+        "scanout_width": ((max(x_values) - min(x_values)) + 1) if x_values else None,
+        "min_cycle": min(cycle_values) if cycle_values else None,
+        "max_cycle": max(cycle_values) if cycle_values else None,
+        "cycle_width": ((max(cycle_values) - min(cycle_values)) + 1) if cycle_values else None,
+    }
+
+
 def summarize_rom_trace(
     trace_path: Path,
     sym_path: Path,
@@ -115,34 +161,60 @@ def summarize_rom_trace(
             "last": matches[-1] if matches else None,
         }
 
+    milestones = {
+        "first_selected_object": _first_record(
+            records,
+            lambda record: line_filter(record) and int(record.get("line_obj_count", 0)) > 0,
+            labels_by_addr,
+        ),
+        "first_object_scanout": _first_record(
+            records,
+            lambda record: line_filter(record)
+            and record.get("scanout_y") == line
+            and int(record.get("scanout_source", -1)) == 2,
+            labels_by_addr,
+        ),
+        "first_lcdc_write": _first_record(
+            records,
+            lambda record: line_filter(record) and int(record.get("bus_req_addr", -1)) == 0xFF40,
+            labels_by_addr,
+        ),
+        "first_lcdc_preview_write": _first_record(
+            records,
+            lambda record: line_filter(record) and int(record.get("preview_bus_req_addr", -1)) == 0xFF40,
+            labels_by_addr,
+        ),
+    }
+    anchor_cycle = None
+    for key in ("first_lcdc_write", "first_lcdc_preview_write", "first_object_scanout"):
+        record = milestones.get(key)
+        if isinstance(record, dict) and record.get("cycle") is not None:
+            anchor_cycle = int(record["cycle"])
+            break
+
     return {
         "trace_path": str(trace_path),
         "sym_path": str(sym_path),
         "line": line,
         "labels": requested_labels,
         "label_stats": label_stats,
-        "milestones": {
-            "first_selected_object": _first_record(
+        "milestones": milestones,
+        "spans": {
+            "mode3": _span_summary(
                 records,
-                lambda record: line_filter(record) and int(record.get("line_obj_count", 0)) > 0,
+                lambda record: line_filter(record)
+                and record.get("scanout_y") == line
+                and int(record.get("ppu_mode", -1)) == 3,
                 labels_by_addr,
+                anchor_cycle=anchor_cycle,
             ),
-            "first_object_scanout": _first_record(
+            "object_scanout": _span_summary(
                 records,
                 lambda record: line_filter(record)
                 and record.get("scanout_y") == line
                 and int(record.get("scanout_source", -1)) == 2,
                 labels_by_addr,
-            ),
-            "first_lcdc_write": _first_record(
-                records,
-                lambda record: line_filter(record) and int(record.get("bus_req_addr", -1)) == 0xFF40,
-                labels_by_addr,
-            ),
-            "first_lcdc_preview_write": _first_record(
-                records,
-                lambda record: line_filter(record) and int(record.get("preview_bus_req_addr", -1)) == 0xFF40,
-                labels_by_addr,
+                anchor_cycle=anchor_cycle,
             ),
         },
     }

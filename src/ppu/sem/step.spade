@@ -645,6 +645,18 @@ fn resume_bg_fetcher(
     render.bg_fetcher_resume
 }
 
+fn restart_bg_fetcher_after_cancel(
+    render: PpuRenderState,
+    render_inputs: lib::ppu::sem::sample::PpuRenderInputs,
+    visible_ly: uint<8>,
+    x_out: uint<8>,
+) -> lib::ppu::sem::types::FetcherState {
+    match render.bg_fetcher_resume.source {
+        FetcherSource::Window => restart_window_fetcher(render.bg_fetcher_resume, render.window_line),
+        _ => start_bg_fetcher(render.bg_fetcher_resume, render_inputs, visible_ly, trunc(x_out >> 3)),
+    }
+}
+
 fn matching_obj_resp(render: PpuRenderState, resp: PpuMemResp) -> bool {
     render.fetcher.pending_valid && same_mem_tag(render.fetcher.pending_read.tag, resp.tag)
 }
@@ -704,7 +716,7 @@ fn cancel_live_obj_fetch(
         obj_fetch_ticket: zero_selected_obj_ticket(),
         obj_fetch_flags: zero_obj_flags(),
         bg_fetcher_resume: render.bg_fetcher_resume,
-        fetcher: resume_bg_fetcher(render, render_inputs, visible_ly, x_out),
+        fetcher: restart_bg_fetcher_after_cancel(render, render_inputs, visible_ly, x_out),
         bg_fifo: render.bg_fifo,
         obj_fifo: empty_obj_fifo(),
         first_frame_blank: render.first_frame_blank,

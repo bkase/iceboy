@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from bench.pyboy.oracle import CommitPoint, capture_checkpoint_hook_timings
+from bench.pyboy.oracle import CommitPoint, capture_checkpoint_hook_timings, capture_checkpoint_line_mode_timing
 from tools.rom_trace_summary import summarize_rom_trace
 
 
@@ -24,6 +24,34 @@ def _hook_stats(captures: list[dict[str, object]], labels: tuple[str, ...]) -> d
             "last": matches[-1] if matches else None,
         }
     return stats
+
+
+def _native_gap_analysis(native: dict[str, object]) -> dict[str, object]:
+    milestones = native.get("milestones", {})
+    spans = native.get("spans", {})
+    first_object = milestones.get("first_object_scanout") if isinstance(milestones, dict) else None
+    first_preview = milestones.get("first_lcdc_preview_write") if isinstance(milestones, dict) else None
+    first_write = milestones.get("first_lcdc_write") if isinstance(milestones, dict) else None
+    mode3_span = spans.get("mode3") if isinstance(spans, dict) else None
+    object_span = spans.get("object_scanout") if isinstance(spans, dict) else None
+
+    def gap(lhs: object, rhs: object) -> int | None:
+        if not isinstance(lhs, dict) or not isinstance(rhs, dict):
+            return None
+        lhs_x = lhs.get("scanout_x")
+        rhs_x = rhs.get("scanout_x")
+        if lhs_x is None or rhs_x is None:
+            return None
+        return int(rhs_x) - int(lhs_x)
+
+    return {
+        "mode3_scanout_width": mode3_span.get("scanout_width") if isinstance(mode3_span, dict) else None,
+        "mode3_cycle_width": mode3_span.get("cycle_width") if isinstance(mode3_span, dict) else None,
+        "object_scanout_width": object_span.get("scanout_width") if isinstance(object_span, dict) else None,
+        "object_scanout_cycle_width": object_span.get("cycle_width") if isinstance(object_span, dict) else None,
+        "preview_write_minus_first_object_x": gap(first_object, first_preview),
+        "write_minus_first_object_x": gap(first_object, first_write),
+    }
 
 
 def compare_row_loop_timing(
@@ -48,6 +76,13 @@ def compare_row_loop_timing(
         settle_rendered_frames=settle_rendered_frames,
         target_line=line,
     )
+    pyboy_line_timing = capture_checkpoint_line_mode_timing(
+        rom_path,
+        sym_path=sym_path,
+        checkpoint_label=checkpoint_label,
+        settle_rendered_frames=settle_rendered_frames,
+        target_line=line,
+    )
     native = summarize_rom_trace(trace_path, sym_path, line=line, labels=labels)
     pyboy_records = [asdict(capture) for capture in pyboy]
     return {
@@ -60,8 +95,10 @@ def compare_row_loop_timing(
         "labels": list(labels),
         "write_pc": f"0x{write_pc:04x}",
         "pyboy": pyboy_records,
+        "pyboy_line_timing": asdict(pyboy_line_timing),
         "pyboy_label_stats": _hook_stats(pyboy_records, tuple(label for label in labels) + ("WriteObjOff",)),
         "native": native,
+        "native_gap_analysis": _native_gap_analysis(native),
     }
 
 

@@ -65,6 +65,8 @@ enum class PpuMode : uint8_t {
 };
 
 struct Observation {
+    bool ppu_line_summary_valid = false;
+    uint16_t ppu_line_summary_mode3_len = 0;
     uint8_t ppu_oam_scan_index = 0;
     uint8_t ppu_oam_scan_found = 0;
     uint8_t ppu_slot0_oam_index = 0;
@@ -324,6 +326,8 @@ Observation observe(const Vsoc_rom_top_verilator_wrapper& top) {
     };
 
     Observation obs;
+    obs.ppu_line_summary_valid = extract_bits(251, 1) != 0;
+    obs.ppu_line_summary_mode3_len = static_cast<uint16_t>(extract_bits(242, 9));
     obs.ppu_oam_scan_index = static_cast<uint8_t>(extract_bits(236, 6));
     obs.ppu_oam_scan_found = static_cast<uint8_t>(extract_bits(232, 4));
     obs.ppu_slot0_oam_index = static_cast<uint8_t>(extract_bits(226, 6));
@@ -951,6 +955,12 @@ StepResult step_to_commit(Vsoc_rom_top_verilator_wrapper& top, BusModel& memory)
             if (result.preview_addr == IF_ADDR) {
                 bus_read_data = static_cast<uint8_t>((memory.if_reg() | memory.integrated_ppu_if_bits()) & 0x1F);
             } else if (result.preview_addr >= LCDC_ADDR && result.preview_addr <= WX_ADDR) {
+                // Keep LCDC/STAT/LY shadow reads pinned to obs_t0.
+                // I tried switching this to the later preview observation while chasing the
+                // overlap cancel bug, but it did not move the native canary at all. The CPU
+                // side still diverged by the same 52 pixels, so this path is not the seam.
+                // Using obs_t0 here preserves the established integrated MMIO contract and
+                // avoids reintroducing that dead-end hypothesis.
                 bus_read_data = memory.integrated_ppu_mmio_read_from_observation(obs_t0, result.preview_addr);
             } else if ((result.preview_addr >= VRAM_BASE && result.preview_addr < VRAM_BASE + VRAM_SIZE) ||
                        (result.preview_addr >= OAM_BASE && result.preview_addr < OAM_BASE + OAM_SIZE)) {
@@ -1025,6 +1035,8 @@ void write_trace_line(std::ofstream& trace, uint64_t cycle, const Observation& o
           << "\"ppu_mode\":" << static_cast<int>(observation.ppu_mode) << ","
           << "\"ppu_ly\":" << static_cast<int>(observation.ppu_ly) << ","
           << "\"ppu_stat\":" << static_cast<int>(observation.ppu_stat) << ","
+          << "\"line_summary_valid\":" << (observation.ppu_line_summary_valid ? "true" : "false") << ","
+          << "\"line_summary_mode3_len\":" << static_cast<int>(observation.ppu_line_summary_mode3_len) << ","
           << "\"oam_scan_index\":" << static_cast<int>(observation.ppu_oam_scan_index) << ","
           << "\"oam_scan_found\":" << static_cast<int>(observation.ppu_oam_scan_found) << ","
           << "\"slot0_oam_index\":" << static_cast<int>(observation.ppu_slot0_oam_index) << ","

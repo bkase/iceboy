@@ -64,6 +64,45 @@ fn seeded_regs(obj_size_8x16_i: bool, obj_enable_i: bool) -> PpuRegs {
     )
 }
 
+fn decode_fetcher_source(source_i: uint<2>) -> FetcherSource {
+    match source_i {
+        1u2 => FetcherSource::Window,
+        2u2 => FetcherSource::Object,
+        _ => FetcherSource::Background,
+    }
+}
+
+fn decode_fetcher_step(step_i: uint<3>) -> FetcherStep {
+    match step_i {
+        1u3 => FetcherStep::GetLo,
+        2u3 => FetcherStep::GetHi,
+        3u3 => FetcherStep::Sleep,
+        4u3 => FetcherStep::Push,
+        _ => FetcherStep::GetTile,
+    }
+}
+
+fn seeded_fetcher(seed_fetcher_valid_i: bool, seed_fetcher_source_i: uint<2>, seed_fetcher_step_i: uint<3>) -> lib::ppu::sem::types::FetcherState {
+    if seed_fetcher_valid_i {
+        lib::ppu::sem::types::FetcherState$(
+            epoch: 0u4,
+            source: decode_fetcher_source(seed_fetcher_source_i),
+            step: decode_fetcher_step(seed_fetcher_step_i),
+            tile_id: 0u8,
+            tile_lo: 0u8,
+            tile_hi: 0u8,
+            map_x: 0u5,
+            map_y: 0u5,
+            row: 0u3,
+            pending_push: false,
+            pending_valid: false,
+            pending_read: initial_fetcher_state().pending_read,
+        )
+    } else {
+        initial_fetcher_state()
+    }
+}
+
 fn seeded_state(
     line_obj_count_i: uint<4>,
     ticket0_x_i: uint<8>,
@@ -75,8 +114,12 @@ fn seeded_state(
     obj_enable_i: bool,
     start_x_out_i: uint<8>,
     start_dot_in_line_i: uint<9>,
+    seed_fetcher_valid_i: bool,
+    seed_fetcher_source_i: uint<2>,
+    seed_fetcher_step_i: uint<3>,
     start_in_oam_scan_i: bool,
 ) -> PpuState {
+    let seeded_fetcher_state = seeded_fetcher(seed_fetcher_valid_i, seed_fetcher_source_i, seed_fetcher_step_i);
     PpuState$(
         visible: PpuVisibleState$(regs: seeded_regs(obj_size_8x16_i, obj_enable_i), ly: visible_ly_i),
         status: PpuStatusState$(
@@ -107,7 +150,7 @@ fn seeded_state(
             obj_fetch_ticket: lib::ppu::sem::types::zero_selected_obj_ticket(),
             obj_fetch_flags: lib::ppu::sem::types::zero_obj_flags(),
             bg_fetcher_resume: initial_fetcher_state(),
-            fetcher: initial_fetcher_state(),
+            fetcher: seeded_fetcher_state,
             bg_fifo: empty_bg_fifo(),
             obj_fifo: empty_obj_fifo(),
             first_frame_blank: false,
@@ -258,6 +301,9 @@ pub entity obj_transfer_live_test_top(
     obj_enable_i: bool,
     start_x_out_i: uint<8>,
     start_dot_in_line_i: uint<9>,
+    seed_fetcher_valid_i: bool,
+    seed_fetcher_source_i: uint<2>,
+    seed_fetcher_step_i: uint<3>,
     tile_id_i: uint<8>,
     flags_i: uint<8>,
     tile_lo_i: uint<8>,
@@ -346,6 +392,9 @@ pub entity obj_transfer_live_test_top(
         obj_enable_i,
         start_x_out_i,
         start_dot_in_line_i,
+        seed_fetcher_valid_i,
+        seed_fetcher_source_i,
+        seed_fetcher_step_i,
         start_in_oam_scan_i,
     )) =
         if dot_ce_i { visible.next_state } else { state_reg };
