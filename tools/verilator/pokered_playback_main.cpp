@@ -47,6 +47,9 @@ constexpr uint16_t HRAM_BASE = 0xFF80;
 constexpr uint16_t HRAM_SIZE = 0x007F;
 constexpr uint16_t CART_RAM_BASE = 0xA000;
 constexpr uint16_t CART_RAM_SIZE = 0x2000;
+constexpr uint16_t WTEXT_BOX_ID_ADDR = 0xCF94;
+constexpr uint16_t WJOY_IGNORE_ADDR = 0xCFBE;
+constexpr uint16_t WCURRENT_MENU_ITEM_ADDR = 0xCC26;
 
 constexpr uint8_t BUS_REQ_IDLE = 0;
 constexpr uint8_t BUS_REQ_READ = 1;
@@ -119,6 +122,10 @@ struct Config {
     uint64_t max_mcycles = 11000000ULL;
     uint64_t target_frames = 600;
     uint64_t progress_interval = 0;
+    uint64_t joyp_trace_limit = 0;
+    uint64_t mmio_trace_limit = 0;
+    std::string dump_wram_path;
+    std::string dump_hram_path;
 };
 
 struct RestoreImage {
@@ -164,6 +171,9 @@ struct RestoreImage {
     uint8_t timer_tima = 0;
     uint8_t timer_tma = 0;
     uint8_t timer_tac = 0;
+    uint64_t lcd_clock = 0;
+    uint64_t lcd_clock_target = 0;
+    uint8_t next_stat_mode = 0;
     uint8_t serial_sb = 0xFF;
     uint8_t serial_sc = 0;
     uint8_t rombank_selected = 1;
@@ -326,6 +336,9 @@ RestoreImage load_restore_image(const std::string& manifest_path) {
     image.timer_tima = static_cast<uint8_t>(parse_int_value(values, "timer_tima"));
     image.timer_tma = static_cast<uint8_t>(parse_int_value(values, "timer_tma"));
     image.timer_tac = static_cast<uint8_t>(parse_int_value(values, "timer_tac"));
+    image.lcd_clock = static_cast<uint64_t>(std::stoull(parse_string_value(values, "lcd_clock"), nullptr, 0));
+    image.lcd_clock_target = static_cast<uint64_t>(std::stoull(parse_string_value(values, "lcd_clock_target"), nullptr, 0));
+    image.next_stat_mode = static_cast<uint8_t>(parse_int_value(values, "next_stat_mode"));
     image.serial_sb = static_cast<uint8_t>(parse_int_value(values, "serial_sb"));
     image.serial_sc = static_cast<uint8_t>(parse_int_value(values, "serial_sc"));
     image.rombank_selected = static_cast<uint8_t>(parse_int_value(values, "rombank_selected"));
@@ -393,6 +406,14 @@ Config parse_args(int argc, char** argv) {
             cfg.target_frames = std::stoull(arg.substr(sizeof("--target-frames=") - 1));
         } else if (arg.rfind("--progress-interval=", 0) == 0) {
             cfg.progress_interval = std::stoull(arg.substr(sizeof("--progress-interval=") - 1));
+        } else if (arg.rfind("--joyp-trace-limit=", 0) == 0) {
+            cfg.joyp_trace_limit = std::stoull(arg.substr(sizeof("--joyp-trace-limit=") - 1));
+        } else if (arg.rfind("--mmio-trace-limit=", 0) == 0) {
+            cfg.mmio_trace_limit = std::stoull(arg.substr(sizeof("--mmio-trace-limit=") - 1));
+        } else if (arg.rfind("--dump-wram=", 0) == 0) {
+            cfg.dump_wram_path = arg.substr(sizeof("--dump-wram=") - 1);
+        } else if (arg.rfind("--dump-hram=", 0) == 0) {
+            cfg.dump_hram_path = arg.substr(sizeof("--dump-hram=") - 1);
         } else {
             throw std::runtime_error("unsupported argument: " + arg);
         }
@@ -480,10 +501,41 @@ void apply_restore_visible_ppu_regs(VlWide<36>& state_reg, const RestoreImage& i
     constexpr int SCY_LSB = 1128;
     constexpr int STAT_SEL_LSB = 1136;
     constexpr int LCDC_LSB = 1140;
+    constexpr int STATUS_LSB = 1040;
+    constexpr int SAMPLED_LSB = 1035;
 
-    // PyBoy v9 does not restore the per-scanline LCD restart parameters on load.
-    // For savestate playback we want the live MMIO viewport PyBoy exposes after load.
-    set_wide_bits(state_reg, LY_LSB, 8, 0);
+    const bool window_enabled = (image.lcdc & 0x20U) != 0;
+    const bool lyc_match = image.ly == image.lyc;
+    const bool stat_lyc_sel = (image.stat & 0x40U) != 0;
+    const bool stat_mode2_sel = (image.stat & 0x20U) != 0;
+    const bool stat_mode1_sel = (image.stat & 0x10U) != 0;
+    const bool stat_mode0_sel = (image.stat & 0x08U) != 0;
+    const uint8_t sampled_scx_low3 = static_cast<uint8_t>(image.scx & 0x7U);
+    const bool wy_triggered_this_frame = image.ly >= image.wy;
+    const bool stat_line_high =
+        (stat_lyc_sel && lyc_match) ||
+        (stat_mode2_sel && ((image.stat & 0x3U) == 2U)) ||
+        (stat_mode1_sel && ((image.stat & 0x3U) == 1U)) ||
+        (stat_mode0_sel && ((image.stat & 0x3U) == 0U));
+    const uint32_t vblank_phase =
+        (4U << 17) |
+        (static_cast<uint32_t>(image.ly) << 9) |
+        456U;
+    const uint32_t status_bits =
+        (2U << 22) |
+        (vblank_phase << 2) |
+        (static_cast<uint32_t>(stat_line_high) << 1) |
+        static_cast<uint32_t>(lyc_match);
+    const uint32_t sampled_bits =
+        (static_cast<uint32_t>(sampled_scx_low3) << 2) |
+        (static_cast<uint32_t>(wy_triggered_this_frame) << 1) |
+        static_cast<uint32_t>(window_enabled);
+
+    // Savestate playback needs the live LY exposed by the loaded state, not a
+    // synthetic line-0 restart. Resetting this to 0 keeps the first frame
+    // looking plausible but drives the CPU/PPU control loop off a different
+    // interrupt schedule almost immediately.
+    set_wide_bits(state_reg, LY_LSB, 8, image.ly);
     set_wide_bits(state_reg, OBP1_LSB, 8, image.obp1);
     set_wide_bits(state_reg, OBP0_LSB, 8, image.obp0);
     set_wide_bits(state_reg, BGP_LSB, 8, image.bgp);
@@ -494,6 +546,8 @@ void apply_restore_visible_ppu_regs(VlWide<36>& state_reg, const RestoreImage& i
     set_wide_bits(state_reg, SCY_LSB, 8, image.scy);
     set_wide_bits(state_reg, STAT_SEL_LSB, 4, static_cast<uint64_t>((image.stat >> 3) & 0x0FU));
     set_wide_bits(state_reg, LCDC_LSB, 8, image.lcdc);
+    set_wide_bits(state_reg, STATUS_LSB, 24, status_bits);
+    set_wide_bits(state_reg, SAMPLED_LSB, 5, sampled_bits);
 }
 
 class BusModel {
@@ -748,6 +802,10 @@ class BusModel {
     }
 
     uint8_t read(uint16_t addr) const { return raw_read(addr); }
+    uint8_t joyp_select() const { return joyp_select_; }
+    uint8_t current_buttons() const { return current_buttons_; }
+    const std::array<uint8_t, WRAM_SIZE>& wram_bytes() const { return wram_; }
+    const std::array<uint8_t, HRAM_SIZE>& hram_bytes() const { return hram_; }
 
   private:
     static PpuMode decode_integrated_ppu_mode(uint8_t mode_code) {
@@ -1218,6 +1276,20 @@ void capture_shade_pixel(std::array<uint8_t, SCREEN_WIDTH * SCREEN_HEIGHT>& fram
 
 void apply_restore_to_dut(Vsoc_rom_top_verilator_wrapper& top, const RestoreImage& image) {
     auto* root = top.rootp;
+    const bool restore_vblank_if = (image.if_reg & VBLANK_IF_BIT) != 0;
+    const bool restore_stat_if = (image.if_reg & STAT_IF_BIT) != 0;
+    root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__timebase_0__DOT__sys_counter =
+        static_cast<uint32_t>(image.lcd_clock & 0xFFFFFFFFULL);
+    root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__timebase_0__DOT__line_index = image.ly;
+    root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__timebase_0__DOT__dot_in_line =
+        static_cast<uint16_t>(image.lcd_clock % 456ULL);
+    root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__ppu_event_bridge_0__DOT__prev_frame_start = 0;
+    root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__ppu_vblank_req_accum = restore_vblank_if;
+    root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__ppu_stat_req_accum = restore_stat_if;
+    root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__prev_ppu_vblank_window_high = restore_vblank_if;
+    root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__prev_ppu_stat_window_high = restore_stat_if;
+    root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__ppu_if_latch_low2 =
+        static_cast<uint8_t>(image.if_reg & 0x03U);
     for (std::size_t index = 0; index < std::min<std::size_t>(image.vram.size(), VRAM_SIZE); ++index) {
         root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__vram_mem[index] = image.vram[index];
     }
@@ -1282,7 +1354,7 @@ int run_main(int argc, char** argv) {
         Vsoc_rom_top_verilator_wrapper top;
         BusModel memory(std::move(rom_bytes));
         memory.seed_restore(restore);
-        memory.set_buttons(script.mask_for_frame(0));
+        memory.set_buttons(0);
 
         std::array<uint8_t, SCREEN_WIDTH * SCREEN_HEIGHT> current_frame{};
         current_frame.fill(FRAME_SHADE_WHITE);
@@ -1302,19 +1374,7 @@ int run_main(int argc, char** argv) {
         top.stimulus_i = 1;
         set_bus_inputs(top, 0, memory.irq_pending(), memory.if_reg(), memory.ie_reg());
         eval_step(top);
-
-        uint64_t bootstrap_mcycles = 0;
-        while (bootstrap_mcycles < 262144) {
-            StepResult bootstrap = step_to_commit(top, memory);
-            ++bootstrap_mcycles;
-            last_post = bootstrap.post;
-            for (const Observation& observation : bootstrap.scanout_observations) {
-                if (observation.ppu_ly == restore.ly && observation.ppu_mode == 4) {
-                    bootstrap_mcycles = 262144;
-                    break;
-                }
-            }
-        }
+        memory.set_buttons(script.mask_for_frame(0));
         top.stimulus_i = 0;
         set_idle_inputs(top, 0, memory.irq_pending(), memory.if_reg(), memory.ie_reg());
         eval_step(top);
@@ -1324,9 +1384,42 @@ int run_main(int argc, char** argv) {
             ++completed_mcycles;
             last_post = step.post;
 
+            if (cfg.joyp_trace_limit != 0 &&
+                step.preview_kind == BUS_REQ_READ &&
+                step.preview_addr == JOYP_ADDR &&
+                completed_mcycles <= cfg.joyp_trace_limit) {
+                std::cout << "joyp-read"
+                          << " mcycles=" << completed_mcycles
+                          << " frames=" << completed_frames
+                          << " pc=0x" << std::hex << step.post.pc << std::dec
+                          << " ly=" << static_cast<int>(step.post.ppu_ly)
+                          << " mode=" << static_cast<int>(step.post.ppu_mode)
+                          << " select=0x" << std::hex << static_cast<int>(memory.joyp_select())
+                          << " buttons=0x" << static_cast<int>(memory.current_buttons())
+                          << " value=0x" << static_cast<int>(step.supplied_bus_read_data)
+                          << std::dec
+                          << "\n";
+            }
+
             const bool write_en = step.post.bus_req_kind == BUS_REQ_WRITE;
             const uint16_t write_addr = write_en ? step.post.bus_req_addr : 0;
             const uint8_t write_data = write_en ? step.post.bus_req_data : 0;
+
+            if (cfg.mmio_trace_limit != 0 &&
+                completed_mcycles <= cfg.mmio_trace_limit &&
+                write_en &&
+                (write_addr == LCDC_ADDR || write_addr == STAT_ADDR || write_addr == WY_ADDR || write_addr == WX_ADDR)) {
+                std::cout << "mmio-write"
+                          << " mcycles=" << completed_mcycles
+                          << " frames=" << completed_frames
+                          << " pc=0x" << std::hex << step.post.pc
+                          << " addr=0x" << write_addr
+                          << " data=0x" << static_cast<int>(write_data)
+                          << std::dec
+                          << " ly=" << static_cast<int>(step.post.ppu_ly)
+                          << " mode=" << static_cast<int>(step.post.ppu_mode)
+                          << "\n";
+            }
 
             if (write_en && !(write_addr >= DIV_ADDR && write_addr <= TAC_ADDR) && write_addr != IF_ADDR && write_addr != IE_ADDR) {
                 if (step.write_allowed_valid) {
@@ -1379,6 +1472,23 @@ int run_main(int argc, char** argv) {
 
         frames_raw.close();
 
+        if (!cfg.dump_wram_path.empty()) {
+            std::ofstream dump(cfg.dump_wram_path, std::ios::binary | std::ios::trunc);
+            if (!dump) {
+                throw std::runtime_error("failed to open WRAM dump path: " + cfg.dump_wram_path);
+            }
+            const auto& wram = memory.wram_bytes();
+            dump.write(reinterpret_cast<const char*>(wram.data()), static_cast<std::streamsize>(wram.size()));
+        }
+        if (!cfg.dump_hram_path.empty()) {
+            std::ofstream dump(cfg.dump_hram_path, std::ios::binary | std::ios::trunc);
+            if (!dump) {
+                throw std::runtime_error("failed to open HRAM dump path: " + cfg.dump_hram_path);
+            }
+            const auto& hram = memory.hram_bytes();
+            dump.write(reinterpret_cast<const char*>(hram.data()), static_cast<std::streamsize>(hram.size()));
+        }
+
         std::cout << "pokered playback complete"
                   << " mcycles=" << completed_mcycles
                   << " frames=" << completed_frames
@@ -1391,6 +1501,10 @@ int run_main(int argc, char** argv) {
                   << std::dec
                   << " sp=0x" << std::hex << restore.sp
                   << " pc=0x" << restore.pc
+                  << std::dec
+                  << " wJoyIgnore=0x" << std::hex << static_cast<int>(memory.read(WJOY_IGNORE_ADDR))
+                  << " wTextBoxID=0x" << static_cast<int>(memory.read(WTEXT_BOX_ID_ADDR))
+                  << " wCurrentMenuItem=0x" << static_cast<int>(memory.read(WCURRENT_MENU_ITEM_ADDR))
                   << std::dec
                   << "\n";
 

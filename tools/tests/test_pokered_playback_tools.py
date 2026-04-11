@@ -13,7 +13,7 @@ import sys
 if str(ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(ROOT / "tools"))
 
-from export_pokered_restore import _parse_timer_state, export_restore_manifest
+from export_pokered_restore import _parse_lcd_timing_state, _parse_timer_state, export_restore_manifest
 from export_pokered_walk_script import export_walk_script
 from pokered_frame_artifacts import FRAME_SIZE, encode_png_grayscale, write_frame_artifacts
 from pyboy import PyBoy
@@ -194,11 +194,18 @@ class PokeredPlaybackToolsTest(unittest.TestCase):
             self.assertEqual(int(values["halted"]), int(cpu_prefix["halted"] != 0))
             self.assertEqual(int(values["stopped"]), int(cpu_prefix["stopped"] != 0))
             timer_state = _parse_timer_state(state_bytes, int(values["state_version"]))
+            lcd_timing_state = _parse_lcd_timing_state(state_bytes, int(values["state_version"]))
             self.assertEqual(int(values["timer_div"]), timer_state["timer_div"])
             self.assertEqual(int(values["timer_div_counter"]), timer_state["timer_div_counter"])
             self.assertEqual(int(values["timer_tima"]), timer_state["timer_tima"])
             self.assertEqual(int(values["timer_tma"]), timer_state["timer_tma"])
             self.assertEqual(int(values["timer_tac"]), timer_state["timer_tac"])
+            self.assertEqual(int(values["lcd_clock"]), lcd_timing_state["lcd_clock"])
+            self.assertEqual(int(values["lcd_clock_target"]), lcd_timing_state["lcd_clock_target"])
+            self.assertEqual(int(values["next_stat_mode"]), lcd_timing_state["next_stat_mode"])
+            self.assertEqual(int(values["lcd_clock"]), 135432)
+            self.assertEqual(int(values["lcd_clock_target"]), 135888)
+            self.assertEqual(int(values["next_stat_mode"]), 1)
 
             vram_path = out_dir / values["vram"]
             oam_path = out_dir / values["oam"]

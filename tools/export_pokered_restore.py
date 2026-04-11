@@ -219,6 +219,29 @@ def _parse_timer_state(state_bytes: bytes, state_version: int) -> dict[str, int]
     }
 
 
+def _parse_lcd_timing_state(state_bytes: bytes, state_version: int) -> dict[str, int]:
+    if state_version < 8:
+        return {
+            "lcd_clock": 0,
+            "lcd_clock_target": 0,
+            "next_stat_mode": 0,
+        }
+
+    # LCD timing in PyBoy v8+ savestates sits after:
+    # VRAM, OAM, 11 LCD registers, and 2 LCD mode-flag bytes.
+    offset = _state_header_size(state_version) + _cpu_state_size(state_version) + VRAM_SIZE + OAM_SIZE + 13
+    if state_version >= 13:
+        offset += 8
+    if offset + 17 > len(state_bytes):
+        raise ValueError("state file is too short to contain the LCD timing state")
+
+    return {
+        "lcd_clock": int.from_bytes(state_bytes[offset : offset + 8], "little"),
+        "lcd_clock_target": int.from_bytes(state_bytes[offset + 8 : offset + 16], "little"),
+        "next_stat_mode": state_bytes[offset + 16],
+    }
+
+
 def export_restore_manifest(*, rom_path: Path, state_path: Path, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     state_bytes = state_path.read_bytes()
@@ -227,6 +250,7 @@ def export_restore_manifest(*, rom_path: Path, state_path: Path, out_dir: Path) 
     cpu_state = _parse_cpu_state_prefix(state_bytes)
     state_version = cpu_state["state_version"]
     timer_state = _parse_timer_state(state_bytes, state_version)
+    lcd_timing_state = _parse_lcd_timing_state(state_bytes, state_version)
     rom_bytes = rom_path.read_bytes()
     cart_type = rom_bytes[0x147]
     external_rom_count = max(1, len(rom_bytes) // ROM_BANK_SIZE)
@@ -323,6 +347,9 @@ def export_restore_manifest(*, rom_path: Path, state_path: Path, out_dir: Path) 
             f"timer_tima={timer_state['timer_tima']}",
             f"timer_tma={timer_state['timer_tma']}",
             f"timer_tac={timer_state['timer_tac']}",
+            f"lcd_clock={lcd_timing_state['lcd_clock']}",
+            f"lcd_clock_target={lcd_timing_state['lcd_clock_target']}",
+            f"next_stat_mode={lcd_timing_state['next_stat_mode']}",
             f"serial_sb={int(memory[0xFF01])}",
             f"serial_sc={int(memory[0xFF02])}",
             f"rombank_selected={rombank_selected}",
