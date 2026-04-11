@@ -50,15 +50,6 @@ pub entity wram_spram(
     inst spram_dual_read_port(clk, drive)
 }
 
-pub entity vram_spram(
-    clk: clock,
-    t_index: uint<2>,
-    cpu_addr: uint<13>,
-    ppu_addr: uint<13>,
-    write_en: bool,
-    write_addr: uint<13>,
-    write_data: uint<8>,
-) -> (uint<8>, uint<8>) {
-    let drive = rw8k_schedule(t_index, cpu_addr, ppu_addr, write_en, write_addr, write_data);
-    inst spram_dual_read_port(clk, drive)
-}
+// vram_spram was a speculative wrapper and is intentionally removed.
+// VRAM must use EBR to preserve the PPU's 1-tick memory-response contract.
+// See src/mem/phys/vram_ebr.spade for the supported hardware VRAM backend.

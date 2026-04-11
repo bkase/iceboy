@@ -1,4 +1,5 @@
 use lib::mem::phys::ebr::{hram_ebr, oam_ebr};
+use lib::mem::phys::vram_ebr::vram_ebr;
 
 pub entity hram_ebr_test_top(
     clk: clock,
@@ -70,4 +71,56 @@ pub entity ebr_synth_test_top(
     );
 
     (zext(hram_out) << 8) | zext(oam_out)
+}
+
+pub entity vram_ebr_test_top(
+    clk: clock,
+    cpu_addr_i: uint<13>,
+    ppu_addr_i: uint<13>,
+    dma_addr_i: uint<13>,
+    ppu_read_active_i: bool,
+    dma_read_active_i: bool,
+    write_en_i: bool,
+    write_addr_i: uint<13>,
+    write_data_i: uint<8>,
+) -> uint<10> {
+    let read_data = inst vram_ebr(
+        clk,
+        cpu_addr_i,
+        ppu_addr_i,
+        dma_addr_i,
+        ppu_read_active_i,
+        dma_read_active_i,
+        write_en_i,
+        write_addr_i,
+        write_data_i,
+    );
+
+    (zext(read_data) << 2)
+        | (zext(lib::util::bit(ppu_read_active_i)) << 1)
+        | zext(lib::util::bit(dma_read_active_i))
+}
+
+pub entity vram_ebr_synth_test_top(
+    clk: clock,
+    cpu_addr_i: uint<13>,
+    ppu_addr_i: uint<13>,
+    dma_addr_i: uint<13>,
+    ppu_read_active_i: bool,
+    dma_read_active_i: bool,
+    write_en_i: bool,
+    write_addr_i: uint<13>,
+    write_data_i: uint<8>,
+) -> uint<8> {
+    inst vram_ebr(
+        clk,
+        cpu_addr_i,
+        ppu_addr_i,
+        dma_addr_i,
+        ppu_read_active_i,
+        dma_read_active_i,
+        write_en_i,
+        write_addr_i,
+        write_data_i,
+    )
 }

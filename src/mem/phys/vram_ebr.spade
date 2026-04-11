@@ -1,0 +1,56 @@
+use std::mem::{dp_bram, read_read_port};
+
+fn maybe_write(enabled: bool, data: uint<8>) -> Option<uint<8>> {
+    if enabled {
+        Option::Some(data)
+    } else {
+        Option::None
+    }
+}
+
+fn selected_read_addr(
+    cpu_addr: uint<13>,
+    ppu_addr: uint<13>,
+    dma_addr: uint<13>,
+    ppu_read_active: bool,
+    dma_read_active: bool,
+) -> uint<13> {
+    if dma_read_active {
+        dma_addr
+    } else if ppu_read_active {
+        ppu_addr
+    } else {
+        cpu_addr
+    }
+}
+
+pub entity vram_ebr(
+    clk: clock,
+    cpu_addr: uint<13>,
+    ppu_addr: uint<13>,
+    dma_addr: uint<13>,
+    ppu_read_active: bool,
+    dma_read_active: bool,
+    write_en: bool,
+    write_addr: uint<13>,
+    write_data: uint<8>,
+) -> uint<8> {
+    // VRAM is intentionally single-read-port EBR. A mirrored dual-read design
+    // would cost 32 SB_RAM40_4K blocks for 8 KiB, which does not fit on UP5K.
+    // First-light behavior for DMA-sourced VRAM reads is therefore Option A:
+    // return 0xFF instead of arbitrating a concurrent second VRAM read.
+    let (write_port, read_port) = inst dp_bram::<13, uint<8>, 8192>(clk, clk);
+    let read_addr = selected_read_addr(cpu_addr, ppu_addr, dma_addr, ppu_read_active, dma_read_active);
+
+    set write_port.addr = if write_en { write_addr } else { read_addr };
+    set write_port.write = maybe_write(write_en, write_data);
+
+    let read_data = inst(1) read_read_port(clk, read_addr, read_port);
+    reg(clk) last_dma_fallback: bool initial(false) = dma_read_active;
+
+    if last_dma_fallback {
+        0xFFu8
+    } else {
+        read_data
+    }
+}

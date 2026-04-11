@@ -152,6 +152,18 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("docs/hardware/icebreaker_up5k_baseline.json", completed.stdout)
         self.assertTrue((ROOT / "tools" / "run_hardware_baseline.sh").exists())
 
+    def test_vram_ebr_synth_smoke_dry_run_targets_exact_vram_top(self) -> None:
+        completed = self.run_script("run_vram_ebr_synth_smoke.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+        self.assertIn("top vram_ebr_synth_smoke_top", completed.stdout)
+        self.assertIn("wrapper", completed.stdout)
+        self.assertIn("build/vram_ebr_synth_smoke/vram_ebr_synth_test_top.json", completed.stdout)
+        self.assertIn("build/vram_ebr_synth_smoke/yosys-stat.txt", completed.stdout)
+        self.assertIn("synth_ice40 -top vram_ebr_synth_smoke_top", completed.stdout)
+
     def test_build_icebreaker_variant_dry_run_supports_alternate_top(self) -> None:
         completed = self.run_script("build_icebreaker_variant.sh", "--dry-run", "--skip-build", "--top", "dummy_top")
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -671,6 +683,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/unit/test_joypad_interrupts.py"', text)
         self.assertIn('"test/unit/test_serial.py"', text)
         self.assertIn('"test/unit/test_st7789_lcd.py"', text)
+        self.assertIn('"test/unit/test_vram_ebr.py"', text)
         self.assertIn('"test/lockstep/test_ei_halt_corners.py"', text)
         self.assertIn('"test/harness/test_arch_time_invariants.py"', text)
         self.assertIn('"test/harness/test_soc_lockstep_top.py"', text)
@@ -729,6 +742,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/ppu/unit/test_oam_dma_mode2.py"', default_body)
         self.assertIn('"test/ppu/unit/test_oam_scan.py"', default_body)
         self.assertIn('"test/unit/test_st7789_lcd.py"', default_body)
+        self.assertIn('"test/unit/test_vram_ebr.py"', default_body)
         self.assertNotIn('"test/ppu/unit/test_window.py"', default_body)
         self.assertNotIn('"test/ppu/unit/test_tile.py"', default_body)
         self.assertNotIn('"test/power/test_ppu_power_quiescence.py"', default_body)
@@ -742,6 +756,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertNotIn('"test/ppu/unit/test_oam_dma_mode2.py"', extended_body)
         self.assertNotIn('"test/ppu/unit/test_oam_scan.py"', extended_body)
         self.assertNotIn('"test/unit/test_st7789_lcd.py"', extended_body)
+        self.assertNotIn('"test/unit/test_vram_ebr.py"', extended_body)
         self.assertIn('"test/ppu/unit/test_window.py"', extended_body)
         self.assertIn('"test/ppu/unit/test_tile.py"', extended_body)
         self.assertIn('"test/power/test_ppu_power_quiescence.py"', extended_body)
