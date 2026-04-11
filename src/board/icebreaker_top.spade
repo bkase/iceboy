@@ -60,9 +60,59 @@ entity hardware_core(clk: clock, rst: bool, LEDR_N: inv bool, LEDG_N: inv bool) 
 entity icebreaker_top(
     CLK: clock,
     BTN_N: bool,
+    BTN_D_UP: bool,
+    BTN_D_DOWN: bool,
+    BTN_D_LEFT: bool,
+    BTN_D_RIGHT: bool,
+    DIP_A: bool,
+    DIP_B: bool,
+    DIP_START: bool,
+    DIP_SELECT: bool,
     LEDR_N: inv bool,
     LEDG_N: inv bool,
+    LCD_SCK: inv bool,
+    LCD_MOSI: inv bool,
+    LCD_CS: inv bool,
+    LCD_DC: inv bool,
+    LCD_RES: inv bool,
+    LCD_BL: inv bool,
+    DEBUG_GPIO0: inv bool,
+    DEBUG_GPIO1: inv bool,
+    DBG_PC0: inv bool,
+    DBG_PC1: inv bool,
+    DBG_PC2: inv bool,
+    DBG_PC3: inv bool,
+    DBG_MCE: inv bool,
+    DBG_PHASE0: inv bool,
+    DBG_PHASE1: inv bool,
+    DBG_PHASE2: inv bool,
 ) {
+    let _ = (
+        BTN_D_UP,
+        BTN_D_DOWN,
+        BTN_D_LEFT,
+        BTN_D_RIGHT,
+        DIP_A,
+        DIP_B,
+        DIP_START,
+        DIP_SELECT,
+    );
     let rst = !BTN_N;
     inst hardware_core(CLK, rst, LEDR_N, LEDG_N);
+    set LCD_SCK = false;
+    set LCD_MOSI = false;
+    set LCD_CS = true;
+    set LCD_DC = false;
+    set LCD_RES = true;
+    set LCD_BL = false;
+    set DEBUG_GPIO0 = false;
+    set DEBUG_GPIO1 = false;
+    set DBG_PC0 = false;
+    set DBG_PC1 = false;
+    set DBG_PC2 = false;
+    set DBG_PC3 = false;
+    set DBG_MCE = false;
+    set DBG_PHASE0 = false;
+    set DBG_PHASE1 = false;
+    set DBG_PHASE2 = false;
 }

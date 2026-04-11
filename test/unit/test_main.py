@@ -9,6 +9,17 @@ async def reset_dut(dut):
     s = SpadeExt(dut)
     clock = Clock(dut.CLK, 83, units="ns")
     cocotb.start_soon(clock.start())
+    for signal in (
+        "BTN_D_UP",
+        "BTN_D_DOWN",
+        "BTN_D_LEFT",
+        "BTN_D_RIGHT",
+        "DIP_A",
+        "DIP_B",
+        "DIP_START",
+        "DIP_SELECT",
+    ):
+        setattr(s.i, signal, "false")
     s.i.BTN_N = "false"
     await ClockCycles(dut.CLK, 5)
     s.i.BTN_N = "true"

@@ -27,42 +27,32 @@ set_io -nowarn LEDG_N     37
 #set_io -nowarn FLASH_IO2  12
 #set_io -nowarn FLASH_IO3  13
 
-# PMOD 1A
-#set_io -nowarn P1A1        4
-#set_io -nowarn P1A2        2
-#set_io -nowarn P1A3       47
-#set_io -nowarn P1A4       45
-#set_io -nowarn P1A7        3
-#set_io -nowarn P1A8       48
-#set_io -nowarn P1A9       46
-#set_io -nowarn P1A10      44
+# PMOD 1A: Digilent button bank + DIP switch PMOD
+set_io -nowarn BTN_D_UP     4
+set_io -nowarn BTN_D_DOWN   2
+set_io -nowarn BTN_D_LEFT  47
+set_io -nowarn BTN_D_RIGHT 45
+set_io -nowarn DIP_A        3
+set_io -nowarn DIP_B       48
+set_io -nowarn DIP_START   46
+set_io -nowarn DIP_SELECT  44
 
-# PMOD 1B
-#set_io -nowarn P1B1       43
-#set_io -nowarn P1B2       38
-#set_io -nowarn P1B3       34
-#set_io -nowarn P1B4       31
-#set_io -nowarn P1B7       42
-#set_io -nowarn P1B8       36
-#set_io -nowarn P1B9       32
-#set_io -nowarn P1B10      28
+# PMOD 1B: debug bus / logic-analyzer taps
+set_io -nowarn DBG_PC0     43
+set_io -nowarn DBG_PC1     38
+set_io -nowarn DBG_PC2     34
+set_io -nowarn DBG_PC3     31
+set_io -nowarn DBG_MCE     42
+set_io -nowarn DBG_PHASE0  36
+set_io -nowarn DBG_PHASE1  32
+set_io -nowarn DBG_PHASE2  28
 
-# PMOD 2
-#set_io -nowarn P2_1       27
-#set_io -nowarn P2_2       25
-#set_io -nowarn P2_3       21
-#set_io -nowarn P2_4       19
-#set_io -nowarn P2_7       26
-#set_io -nowarn P2_8       23
-#set_io -nowarn P2_9       20
-#set_io -nowarn P2_10      18
-
-# LEDs and Buttons (PMOD 2)
-#set_io -nowarn LED1       26
-#set_io -nowarn LED2       27
-#set_io -nowarn LED3       25
-#set_io -nowarn LED4       23
-#set_io -nowarn LED5       21
-#set_io -nowarn BTN1       20
-#set_io -nowarn BTN2       19
-#set_io -nowarn BTN3       18
+# PMOD 2: Waveshare 2" ST7789 LCD + two spare debug GPIOs
+set_io -nowarn LCD_SCK     27
+set_io -nowarn LCD_MOSI    25
+set_io -nowarn LCD_CS      21
+set_io -nowarn LCD_DC      19
+set_io -nowarn LCD_RES     26
+set_io -nowarn LCD_BL      23
+set_io -nowarn DEBUG_GPIO0 20
+set_io -nowarn DEBUG_GPIO1 18

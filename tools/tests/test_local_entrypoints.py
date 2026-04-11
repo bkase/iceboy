@@ -180,6 +180,41 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("tools/build_icebreaker_variant.sh --top dummy_top", doc_text)
         self.assertIn("synth_ice40 -top <name>", doc_text)
 
+    def test_firstlight_pinout_is_frozen_in_pcf_doc_and_baseline_top(self) -> None:
+        pcf_text = (ROOT / "icebreaker.pcf").read_text(encoding="utf-8")
+        pinout_doc = (ROOT / "docs" / "hardware" / "pinout_firstlight.md").read_text(encoding="utf-8")
+        board_top = (ROOT / "src" / "board" / "icebreaker_top.spade").read_text(encoding="utf-8")
+
+        for signal in (
+            "BTN_D_UP",
+            "BTN_D_DOWN",
+            "BTN_D_LEFT",
+            "BTN_D_RIGHT",
+            "DIP_A",
+            "DIP_B",
+            "DIP_START",
+            "DIP_SELECT",
+            "LCD_SCK",
+            "LCD_MOSI",
+            "LCD_CS",
+            "LCD_DC",
+            "LCD_RES",
+            "LCD_BL",
+            "DEBUG_GPIO0",
+            "DEBUG_GPIO1",
+            "DBG_PC0",
+            "DBG_PC1",
+            "DBG_PC2",
+            "DBG_PC3",
+            "DBG_MCE",
+            "DBG_PHASE0",
+            "DBG_PHASE1",
+            "DBG_PHASE2",
+        ):
+            self.assertIn(signal, pcf_text)
+            self.assertIn(signal, pinout_doc)
+            self.assertIn(signal, board_top)
+
     def test_oracle_wrapper_targets_direct_smoke_tool(self) -> None:
         completed = self.run_script("oracle.sh", "--dry-run")
         self.assertEqual(completed.returncode, 0, completed.stderr)
