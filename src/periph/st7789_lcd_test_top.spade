@@ -1,0 +1,40 @@
+use lib::periph::st7789_lcd::st7789_lcd;
+
+pub entity st7789_lcd_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    reset_ticks_i: uint<24>,
+    post_reset_ticks_i: uint<24>,
+    sleep_out_ticks_i: uint<24>,
+    frame_start_i: bool,
+    pixel_valid_i: bool,
+    pixel_shade_i: uint<8>,
+) -> uint<45> {
+    let lcd = inst st7789_lcd(
+        clk_i,
+        rst_i,
+        reset_ticks_i,
+        post_reset_ticks_i,
+        sleep_out_ticks_i,
+        frame_start_i,
+        pixel_valid_i,
+        pixel_shade_i,
+    );
+
+    zext(lib::util::bit(lcd.lcd_sck))
+        | (zext(lib::util::bit(lcd.lcd_mosi)) << 1)
+        | (zext(lib::util::bit(lcd.lcd_cs)) << 2)
+        | (zext(lib::util::bit(lcd.lcd_dc)) << 3)
+        | (zext(lib::util::bit(lcd.lcd_res)) << 4)
+        | (zext(lib::util::bit(lcd.lcd_bl)) << 5)
+        | (zext(lib::util::bit(lcd.pixel_advance)) << 6)
+        | (zext(lib::util::bit(lcd.init_done)) << 7)
+        | (zext(lib::util::bit(lcd.frame_active)) << 8)
+        | (zext(lib::util::bit(lcd.tx_active)) << 9)
+        | (zext(lcd.state_code) << 10)
+        | (zext(lcd.current_byte) << 14)
+        | (zext(lib::util::bit(lcd.current_dc)) << 22)
+        | (zext(lcd.command_index) << 23)
+        | (zext(lcd.data_index) << 27)
+        | (zext(lcd.pixel_count) << 30)
+}

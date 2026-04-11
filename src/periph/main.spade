@@ -7,5 +7,7 @@ pub mod oam_dma;
 pub mod oam_dma_test_top;
 pub mod serial;
 pub mod serial_test_top;
+pub mod st7789_lcd;
+pub mod st7789_lcd_test_top;
 pub mod timer;
 pub mod timer_test_top;

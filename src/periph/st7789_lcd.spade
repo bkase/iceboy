@@ -1,0 +1,689 @@
+pub struct St7789LcdOut {
+    lcd_sck: bool,
+    lcd_mosi: bool,
+    lcd_cs: bool,
+    lcd_dc: bool,
+    lcd_res: bool,
+    lcd_bl: bool,
+    pixel_advance: bool,
+    init_done: bool,
+    frame_active: bool,
+    tx_active: bool,
+    state_code: uint<4>,
+    current_byte: uint<8>,
+    current_dc: bool,
+    command_index: uint<4>,
+    data_index: uint<3>,
+    pixel_count: uint<15>,
+}
+
+fn state_reset_pulse() -> uint<4> {
+    0u4
+}
+
+fn state_post_reset_delay() -> uint<4> {
+    1u4
+}
+
+fn state_init_gap() -> uint<4> {
+    2u4
+}
+
+fn state_init_send() -> uint<4> {
+    3u4
+}
+
+fn state_init_delay() -> uint<4> {
+    4u4
+}
+
+fn state_wait_frame() -> uint<4> {
+    5u4
+}
+
+fn state_frame_gap() -> uint<4> {
+    6u4
+}
+
+fn state_frame_send() -> uint<4> {
+    7u4
+}
+
+fn state_pixel_stream() -> uint<4> {
+    8u4
+}
+
+fn init_command_count() -> uint<4> {
+    9u4
+}
+
+fn init_command_byte(index: uint<4>) -> uint<8> {
+    match index {
+        0u4 => 0x01u8,
+        1u4 => 0x11u8,
+        2u4 => 0x3Au8,
+        3u4 => 0x36u8,
+        4u4 => 0x2Au8,
+        5u4 => 0x2Bu8,
+        6u4 => 0x21u8,
+        7u4 => 0x13u8,
+        _ => 0x29u8,
+    }
+}
+
+fn init_data_count(index: uint<4>) -> uint<3> {
+    match index {
+        2u4 => 1u3,
+        3u4 => 1u3,
+        4u4 => 4u3,
+        5u4 => 4u3,
+        _ => 0u3,
+    }
+}
+
+fn init_data_byte(index: uint<4>, data_index: uint<3>) -> uint<8> {
+    match index {
+        2u4 => 0x55u8,
+        3u4 => 0x00u8,
+        4u4 => match data_index {
+            0u3 => 0x00u8,
+            1u3 => 0x00u8,
+            2u3 => 0x01u8,
+            _ => 0x3Fu8,
+        },
+        5u4 => match data_index {
+            0u3 => 0x00u8,
+            1u3 => 0x00u8,
+            2u3 => 0x00u8,
+            _ => 0xEFu8,
+        },
+        _ => 0x00u8,
+    }
+}
+
+fn init_delay_ticks(index: uint<4>, sleep_out_ticks: uint<24>) -> uint<24> {
+    if index == 1u4 {
+        sleep_out_ticks
+    } else {
+        0u24
+    }
+}
+
+fn frame_command_count() -> uint<4> {
+    3u4
+}
+
+fn frame_command_byte(index: uint<4>) -> uint<8> {
+    match index {
+        0u4 => 0x2Au8,
+        1u4 => 0x2Bu8,
+        _ => 0x2Cu8,
+    }
+}
+
+fn frame_data_count(index: uint<4>) -> uint<3> {
+    match index {
+        0u4 => 4u3,
+        1u4 => 4u3,
+        _ => 0u3,
+    }
+}
+
+fn frame_data_byte(index: uint<4>, data_index: uint<3>) -> uint<8> {
+    match index {
+        0u4 => match data_index {
+            0u3 => 0x00u8,
+            1u3 => 0x50u8,
+            2u3 => 0x00u8,
+            _ => 0xEFu8,
+        },
+        1u4 => match data_index {
+            0u3 => 0x00u8,
+            1u3 => 0x30u8,
+            2u3 => 0x00u8,
+            _ => 0xBFu8,
+        },
+        _ => 0x00u8,
+    }
+}
+
+fn frame_command_keeps_cs(index: uint<4>) -> bool {
+    index == 2u4
+}
+
+fn hi_byte(word: uint<16>) -> uint<8> {
+    trunc(word >> 8)
+}
+
+fn lo_byte(word: uint<16>) -> uint<8> {
+    trunc(word)
+}
+
+fn dmglike_rgb565(shade: uint<8>) -> uint<16> {
+    let shade_code: uint<2> = trunc(shade);
+    match shade_code {
+        0u2 => 0xFFFFu16,
+        1u2 => 0xAD55u16,
+        2u2 => 0x52AAu16,
+        _ => 0x0000u16,
+    }
+}
+
+fn controller_step(
+    state: uint<4>,
+    delay_counter: uint<24>,
+    command_index: uint<4>,
+    data_index: uint<3>,
+    sending_data: bool,
+    cs_asserted: bool,
+    pixel_word: uint<16>,
+    pixel_word_pending: bool,
+    pixel_high_sent: bool,
+    pixel_count: uint<15>,
+    tx_active: bool,
+    tx_done: bool,
+    reset_ticks: uint<24>,
+    post_reset_ticks: uint<24>,
+    sleep_out_ticks: uint<24>,
+    frame_start: bool,
+    pixel_valid: bool,
+    pixel_shade: uint<8>,
+) -> (
+    uint<4>,
+    uint<24>,
+    uint<4>,
+    uint<3>,
+    bool,
+    bool,
+    uint<16>,
+    bool,
+    bool,
+    uint<15>,
+    bool,
+    uint<8>,
+    bool,
+    bool
+) {
+    let total_pixels = 23040u15;
+
+    let next_state = if state == state_reset_pulse() {
+        if reset_ticks == 0u24 || trunc(delay_counter + 1u24) >= reset_ticks {
+            state_post_reset_delay()
+        } else {
+            state_reset_pulse()
+        }
+    } else if state == state_post_reset_delay() {
+        if post_reset_ticks == 0u24 || trunc(delay_counter + 1u24) >= post_reset_ticks {
+            state_init_gap()
+        } else {
+            state_post_reset_delay()
+        }
+    } else if state == state_init_gap() {
+        if !tx_active {
+            state_init_send()
+        } else {
+            state_init_gap()
+        }
+    } else if state == state_init_send() {
+        if tx_done {
+            if sending_data {
+                let has_more_data = trunc(data_index + 1u3) < init_data_count(command_index);
+                if has_more_data {
+                    state_init_send()
+                } else {
+                    let delay_target = init_delay_ticks(command_index, sleep_out_ticks);
+                    if delay_target != 0u24 {
+                        state_init_delay()
+                    } else if trunc(command_index + 1u4) < init_command_count() {
+                        state_init_gap()
+                    } else {
+                        state_wait_frame()
+                    }
+                }
+            } else if init_data_count(command_index) != 0u3 {
+                state_init_send()
+            } else {
+                let delay_target = init_delay_ticks(command_index, sleep_out_ticks);
+                if delay_target != 0u24 {
+                    state_init_delay()
+                } else if trunc(command_index + 1u4) < init_command_count() {
+                    state_init_gap()
+                } else {
+                    state_wait_frame()
+                }
+            }
+        } else {
+            state_init_send()
+        }
+    } else if state == state_init_delay() {
+        let delay_target = init_delay_ticks(command_index, sleep_out_ticks);
+        if delay_target == 0u24 || trunc(delay_counter + 1u24) >= delay_target {
+            if trunc(command_index + 1u4) < init_command_count() {
+                state_init_gap()
+            } else {
+                state_wait_frame()
+            }
+        } else {
+            state_init_delay()
+        }
+    } else if state == state_wait_frame() {
+        if frame_start {
+            state_frame_gap()
+        } else {
+            state_wait_frame()
+        }
+    } else if state == state_frame_gap() {
+        if !tx_active {
+            state_frame_send()
+        } else {
+            state_frame_gap()
+        }
+    } else if state == state_frame_send() {
+        if tx_done {
+            if sending_data {
+                let has_more_data = trunc(data_index + 1u3) < frame_data_count(command_index);
+                if has_more_data {
+                    state_frame_send()
+                } else if frame_command_keeps_cs(command_index) {
+                    state_pixel_stream()
+                } else if trunc(command_index + 1u4) < frame_command_count() {
+                    state_frame_gap()
+                } else {
+                    state_wait_frame()
+                }
+            } else if frame_data_count(command_index) != 0u3 {
+                state_frame_send()
+            } else if frame_command_keeps_cs(command_index) {
+                state_pixel_stream()
+            } else if trunc(command_index + 1u4) < frame_command_count() {
+                state_frame_gap()
+            } else {
+                state_wait_frame()
+            }
+        } else {
+            state_frame_send()
+        }
+    } else if tx_done && pixel_word_pending && pixel_high_sent && pixel_count == total_pixels {
+        state_wait_frame()
+    } else {
+        state_pixel_stream()
+    };
+
+    let next_delay_counter = if state == state_reset_pulse() {
+        if reset_ticks == 0u24 || trunc(delay_counter + 1u24) >= reset_ticks {
+            0u24
+        } else {
+            trunc(delay_counter + 1u24)
+        }
+    } else if state == state_post_reset_delay() {
+        if post_reset_ticks == 0u24 || trunc(delay_counter + 1u24) >= post_reset_ticks {
+            0u24
+        } else {
+            trunc(delay_counter + 1u24)
+        }
+    } else if state == state_init_delay() {
+        let delay_target = init_delay_ticks(command_index, sleep_out_ticks);
+        if delay_target == 0u24 || trunc(delay_counter + 1u24) >= delay_target {
+            0u24
+        } else {
+            trunc(delay_counter + 1u24)
+        }
+    } else {
+        0u24
+    };
+
+    let next_command_index = if state == state_wait_frame() && frame_start {
+        0u4
+    } else if state == state_init_send() && tx_done {
+        if sending_data {
+            let has_more_data = trunc(data_index + 1u3) < init_data_count(command_index);
+            let delay_target = init_delay_ticks(command_index, sleep_out_ticks);
+            if has_more_data || delay_target != 0u24 || trunc(command_index + 1u4) >= init_command_count() {
+                command_index
+            } else {
+                trunc(command_index + 1u4)
+            }
+        } else if init_data_count(command_index) != 0u3 {
+            command_index
+        } else {
+            let delay_target = init_delay_ticks(command_index, sleep_out_ticks);
+            if delay_target != 0u24 || trunc(command_index + 1u4) >= init_command_count() {
+                command_index
+            } else {
+                trunc(command_index + 1u4)
+            }
+        }
+    } else if state == state_init_delay() {
+        let delay_target = init_delay_ticks(command_index, sleep_out_ticks);
+        if (delay_target == 0u24 || trunc(delay_counter + 1u24) >= delay_target) && trunc(command_index + 1u4) < init_command_count() {
+            trunc(command_index + 1u4)
+        } else {
+            command_index
+        }
+    } else if state == state_frame_send() && tx_done {
+        if sending_data {
+            let has_more_data = trunc(data_index + 1u3) < frame_data_count(command_index);
+            if has_more_data || frame_command_keeps_cs(command_index) || trunc(command_index + 1u4) >= frame_command_count() {
+                command_index
+            } else {
+                trunc(command_index + 1u4)
+            }
+        } else if frame_data_count(command_index) != 0u3 {
+            command_index
+        } else if frame_command_keeps_cs(command_index) || trunc(command_index + 1u4) >= frame_command_count() {
+            command_index
+        } else {
+            trunc(command_index + 1u4)
+        }
+    } else {
+        command_index
+    };
+
+    let next_data_index = if state == state_wait_frame() && frame_start {
+        0u3
+    } else if (state == state_init_gap()) || (state == state_frame_gap()) {
+        0u3
+    } else if state == state_init_send() && tx_done && sending_data && trunc(data_index + 1u3) < init_data_count(command_index) {
+        trunc(data_index + 1u3)
+    } else if state == state_frame_send() && tx_done && sending_data && trunc(data_index + 1u3) < frame_data_count(command_index) {
+        trunc(data_index + 1u3)
+    } else if state == state_init_send() && tx_done {
+        0u3
+    } else if state == state_frame_send() && tx_done {
+        0u3
+    } else {
+        data_index
+    };
+
+    let next_sending_data = if state == state_wait_frame() && frame_start {
+        false
+    } else if state == state_init_send() && tx_done {
+        if sending_data {
+            trunc(data_index + 1u3) < init_data_count(command_index)
+        } else {
+            init_data_count(command_index) != 0u3
+        }
+    } else if state == state_frame_send() && tx_done {
+        if sending_data {
+            trunc(data_index + 1u3) < frame_data_count(command_index)
+        } else {
+            frame_data_count(command_index) != 0u3
+        }
+    } else {
+        sending_data
+    };
+
+    let next_cs_asserted = if state == state_reset_pulse() || state == state_post_reset_delay() || state == state_init_gap() || state == state_init_delay() || state == state_wait_frame() || state == state_frame_gap() {
+        false
+    } else if state == state_init_send() && tx_done {
+        if sending_data {
+            let has_more_data = trunc(data_index + 1u3) < init_data_count(command_index);
+            has_more_data
+        } else {
+            init_data_count(command_index) != 0u3
+        }
+    } else if state == state_frame_send() && tx_done {
+        if sending_data {
+            let has_more_data = trunc(data_index + 1u3) < frame_data_count(command_index);
+            has_more_data || frame_command_keeps_cs(command_index)
+        } else {
+            frame_data_count(command_index) != 0u3 || frame_command_keeps_cs(command_index)
+        }
+    } else if state == state_pixel_stream() {
+        if tx_done && pixel_word_pending && pixel_high_sent && pixel_count == total_pixels {
+            false
+        } else {
+            true
+        }
+    } else if state == state_init_send() || state == state_frame_send() {
+        true
+    } else {
+        cs_asserted
+    };
+
+    let will_latch_pixel = state == state_pixel_stream() && !tx_active && !pixel_word_pending && pixel_count < total_pixels && pixel_valid;
+
+    let next_pixel_word = if will_latch_pixel {
+        dmglike_rgb565(pixel_shade)
+    } else {
+        pixel_word
+    };
+
+    let next_pixel_word_pending = if will_latch_pixel {
+        true
+    } else if state == state_pixel_stream() && tx_done && pixel_word_pending && pixel_high_sent {
+        false
+    } else {
+        pixel_word_pending
+    };
+
+    let next_pixel_high_sent = if will_latch_pixel {
+        false
+    } else if state == state_pixel_stream() && tx_done && pixel_word_pending && !pixel_high_sent {
+        true
+    } else if state == state_pixel_stream() && tx_done && pixel_word_pending && pixel_high_sent {
+        false
+    } else {
+        pixel_high_sent
+    };
+
+    let next_pixel_count = if state == state_wait_frame() && frame_start {
+        0u15
+    } else if will_latch_pixel {
+        trunc(pixel_count + 1u15)
+    } else {
+        pixel_count
+    };
+
+    let load_request = if state == state_init_send() && !tx_active {
+        true
+    } else if state == state_frame_send() && !tx_active {
+        true
+    } else if state == state_pixel_stream() && !tx_active && pixel_word_pending {
+        true
+    } else {
+        false
+    };
+
+    let load_byte = if state == state_init_send() && !tx_active {
+        if sending_data {
+            init_data_byte(command_index, data_index)
+        } else {
+            init_command_byte(command_index)
+        }
+    } else if state == state_frame_send() && !tx_active {
+        if sending_data {
+            frame_data_byte(command_index, data_index)
+        } else {
+            frame_command_byte(command_index)
+        }
+    } else if state == state_pixel_stream() && !tx_active && pixel_word_pending {
+        if pixel_high_sent {
+            lo_byte(pixel_word)
+        } else {
+            hi_byte(pixel_word)
+        }
+    } else {
+        0u8
+    };
+
+    let load_dc = if state == state_init_send() && !tx_active {
+        sending_data
+    } else if state == state_frame_send() && !tx_active {
+        sending_data
+    } else if state == state_pixel_stream() && !tx_active && pixel_word_pending {
+        true
+    } else {
+        false
+    };
+
+    (
+        next_state,
+        next_delay_counter,
+        next_command_index,
+        next_data_index,
+        next_sending_data,
+        next_cs_asserted,
+        next_pixel_word,
+        next_pixel_word_pending,
+        next_pixel_high_sent,
+        next_pixel_count,
+        load_request,
+        load_byte,
+        load_dc,
+        will_latch_pixel,
+    )
+}
+
+fn spi_step(
+    tx_active: bool,
+    tx_shift: uint<8>,
+    tx_bit: uint<3>,
+    tx_half: bool,
+    tx_byte: uint<8>,
+    tx_dc: bool,
+    load_request: bool,
+    load_byte: uint<8>,
+    load_dc: bool,
+) -> (bool, uint<8>, uint<3>, bool, uint<8>, bool) {
+    if !tx_active && load_request {
+        (true, load_byte, 0u3, false, load_byte, load_dc)
+    } else if tx_active {
+        if !tx_half {
+            (true, tx_shift, tx_bit, true, tx_byte, tx_dc)
+        } else if tx_bit == 7u3 {
+            (false, tx_shift, 0u3, false, tx_byte, tx_dc)
+        } else {
+            (true, trunc(tx_shift << 1), trunc(tx_bit + 1u3), false, tx_byte, tx_dc)
+        }
+    } else {
+        (false, tx_shift, tx_bit, false, tx_byte, tx_dc)
+    }
+}
+
+pub entity st7789_lcd(
+    clk: clock,
+    rst: bool,
+    reset_ticks_i: uint<24>,
+    post_reset_ticks_i: uint<24>,
+    sleep_out_ticks_i: uint<24>,
+    frame_start_i: bool,
+    pixel_valid_i: bool,
+    pixel_shade_i: uint<8>,
+) -> St7789LcdOut {
+    decl state_reg;
+    decl delay_counter_reg;
+    decl command_index_reg;
+    decl data_index_reg;
+    decl sending_data_reg;
+    decl cs_asserted_reg;
+    decl pixel_word_reg;
+    decl pixel_word_pending_reg;
+    decl pixel_high_sent_reg;
+    decl pixel_count_reg;
+    decl tx_active_reg;
+    decl tx_shift_reg;
+    decl tx_bit_reg;
+    decl tx_half_reg;
+    decl tx_byte_reg;
+    decl tx_dc_reg;
+
+    let tx_done = tx_active_reg && tx_half_reg && tx_bit_reg == 7u3;
+
+    let (
+        next_state,
+        next_delay_counter,
+        next_command_index,
+        next_data_index,
+        next_sending_data,
+        next_cs_asserted,
+        next_pixel_word,
+        next_pixel_word_pending,
+        next_pixel_high_sent,
+        next_pixel_count,
+        load_request,
+        load_byte,
+        load_dc,
+        pixel_advance,
+    ) = controller_step(
+        state_reg,
+        delay_counter_reg,
+        command_index_reg,
+        data_index_reg,
+        sending_data_reg,
+        cs_asserted_reg,
+        pixel_word_reg,
+        pixel_word_pending_reg,
+        pixel_high_sent_reg,
+        pixel_count_reg,
+        tx_active_reg,
+        tx_done,
+        reset_ticks_i,
+        post_reset_ticks_i,
+        sleep_out_ticks_i,
+        frame_start_i,
+        pixel_valid_i,
+        pixel_shade_i,
+    );
+
+    let (
+        next_tx_active,
+        next_tx_shift,
+        next_tx_bit,
+        next_tx_half,
+        next_tx_byte,
+        next_tx_dc,
+    ) = spi_step(
+        tx_active_reg,
+        tx_shift_reg,
+        tx_bit_reg,
+        tx_half_reg,
+        tx_byte_reg,
+        tx_dc_reg,
+        load_request,
+        load_byte,
+        load_dc,
+    );
+
+    reg(clk) state_reg: uint<4> reset(rst: state_reset_pulse()) = next_state;
+    reg(clk) delay_counter_reg: uint<24> reset(rst: 0u24) = next_delay_counter;
+    reg(clk) command_index_reg: uint<4> reset(rst: 0u4) = next_command_index;
+    reg(clk) data_index_reg: uint<3> reset(rst: 0u3) = next_data_index;
+    reg(clk) sending_data_reg: bool reset(rst: false) = next_sending_data;
+    reg(clk) cs_asserted_reg: bool reset(rst: false) = next_cs_asserted;
+    reg(clk) pixel_word_reg: uint<16> reset(rst: 0u16) = next_pixel_word;
+    reg(clk) pixel_word_pending_reg: bool reset(rst: false) = next_pixel_word_pending;
+    reg(clk) pixel_high_sent_reg: bool reset(rst: false) = next_pixel_high_sent;
+    reg(clk) pixel_count_reg: uint<15> reset(rst: 0u15) = next_pixel_count;
+    reg(clk) tx_active_reg: bool reset(rst: false) = next_tx_active;
+    reg(clk) tx_shift_reg: uint<8> reset(rst: 0u8) = next_tx_shift;
+    reg(clk) tx_bit_reg: uint<3> reset(rst: 0u3) = next_tx_bit;
+    reg(clk) tx_half_reg: bool reset(rst: false) = next_tx_half;
+    reg(clk) tx_byte_reg: uint<8> reset(rst: 0u8) = next_tx_byte;
+    reg(clk) tx_dc_reg: bool reset(rst: false) = next_tx_dc;
+
+    let mosi = if tx_active_reg {
+        ((tx_shift_reg >> 7) & 1u8) == 1u8
+    } else {
+        false
+    };
+
+    St7789LcdOut$(
+        lcd_sck: tx_active_reg && tx_half_reg,
+        lcd_mosi: mosi,
+        lcd_cs: !cs_asserted_reg,
+        lcd_dc: tx_dc_reg,
+        lcd_res: state_reg != state_reset_pulse(),
+        lcd_bl: state_reg != state_reset_pulse(),
+        pixel_advance: pixel_advance,
+        init_done: state_reg == state_wait_frame() || state_reg == state_frame_gap() || state_reg == state_frame_send() || state_reg == state_pixel_stream(),
+        frame_active: state_reg == state_frame_gap() || state_reg == state_frame_send() || state_reg == state_pixel_stream(),
+        tx_active: tx_active_reg,
+        state_code: state_reg,
+        current_byte: tx_byte_reg,
+        current_dc: tx_dc_reg,
+        command_index: command_index_reg,
+        data_index: data_index_reg,
+        pixel_count: pixel_count_reg,
+    )
+}
