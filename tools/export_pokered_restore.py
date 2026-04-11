@@ -13,6 +13,9 @@ MBC_RAM_BANK_SIZE = 0x2000
 ROM_BANK_SIZE = 0x4000
 LCD_SCANLINE_COUNT = 144
 LCD_SCANLINE_PARAM_SIZE = 5
+RENDERER_FRAME_BYTES = 160 * 144 * 4
+RENDERER_ATTR_BYTES = 160 * 144
+RAM_STATE_SIZE_DMG = 0x2000 + 0x60 + 0x4C + 0x7F + 0x34
 
 
 def _read_u16le(data: bytes, offset: int) -> int:
@@ -99,6 +102,8 @@ def _cpu_state_size(state_version: int) -> int:
 
 
 def _scanline_param_offset(state_version: int) -> int:
+    if state_version < 11:
+        return -1
     header_size = 5
     lcd_prefix_size = VRAM_SIZE + OAM_SIZE + 4 + 1
     if state_version >= 5:
@@ -109,6 +114,8 @@ def _scanline_param_offset(state_version: int) -> int:
 
 def _dominant_visible_restart_regs(state_bytes: bytes, state_version: int, *, fallback: dict[str, int]) -> dict[str, int]:
     offset = _scanline_param_offset(state_version)
+    if offset < 0:
+        return fallback
     end = offset + LCD_SCANLINE_COUNT * LCD_SCANLINE_PARAM_SIZE
     if end > len(state_bytes):
         return fallback
@@ -124,13 +131,91 @@ def _dominant_visible_restart_regs(state_bytes: bytes, state_version: int, *, fa
         return fallback
 
     scx, scy, wx, wy, tiledata_select = max(counts.items(), key=lambda item: item[1])[0]
-    restart_lcdc = (fallback["lcdc"] & ~0x10) | (0x10 if tiledata_select else 0x00)
+    restart_lcdc = (fallback["restart_lcdc"] & ~0x10) | (0x10 if tiledata_select else 0x00)
     return {
         "restart_lcdc": restart_lcdc,
         "restart_scx": scx,
         "restart_scy": scy,
         "restart_wx": wx,
         "restart_wy": wy,
+    }
+
+
+def _state_header_size(state_version: int) -> int:
+    size = 2
+    if state_version >= 8:
+        size += 3
+    return size
+
+
+def _lcd_state_size(state_version: int) -> int:
+    size = VRAM_SIZE + OAM_SIZE + 4
+    if state_version >= 5:
+        size += 3
+    size += 4
+    if state_version >= 11:
+        size += LCD_SCANLINE_COUNT * LCD_SCANLINE_PARAM_SIZE
+    if state_version >= 8:
+        size += 1 + 1 + 8 + 8 + 1
+        if state_version >= 13:
+            size += 3
+        if state_version >= 12:
+            size += 8
+    return size
+
+
+def _sound_state_size(state_version: int) -> int:
+    if state_version < 13:
+        return 0
+    if state_version == 13:
+        return 16 + 77 + 57 + 62 + 65
+    return 1955
+
+
+def _renderer_state_size(state_version: int) -> int:
+    size = 0
+    if 2 <= state_version < 11:
+        size += LCD_SCANLINE_COUNT * LCD_SCANLINE_PARAM_SIZE
+    if state_version >= 6:
+        size += RENDERER_FRAME_BYTES
+        if state_version >= 10:
+            size += RENDERER_ATTR_BYTES
+    return size
+
+
+def _timer_state_offset(state_version: int) -> int:
+    return (
+        _state_header_size(state_version)
+        + _cpu_state_size(state_version)
+        + _lcd_state_size(state_version)
+        + _sound_state_size(state_version)
+        + _renderer_state_size(state_version)
+        + RAM_STATE_SIZE_DMG
+    )
+
+
+def _parse_timer_state(state_bytes: bytes, state_version: int) -> dict[str, int]:
+    if state_version < 5:
+        return {
+            "timer_div": 0,
+            "timer_tima": 0,
+            "timer_div_counter": 0,
+            "timer_tima_counter": 0,
+            "timer_tma": 0,
+            "timer_tac": 0,
+        }
+
+    offset = _timer_state_offset(state_version)
+    if offset + 8 > len(state_bytes):
+        raise ValueError("state file is too short to contain the timer state")
+
+    return {
+        "timer_div": state_bytes[offset],
+        "timer_tima": state_bytes[offset + 1],
+        "timer_div_counter": _read_u16le(state_bytes, offset + 2),
+        "timer_tima_counter": _read_u16le(state_bytes, offset + 4),
+        "timer_tma": state_bytes[offset + 6],
+        "timer_tac": state_bytes[offset + 7],
     }
 
 
@@ -141,6 +226,7 @@ def export_restore_manifest(*, rom_path: Path, state_path: Path, out_dir: Path) 
         raise ValueError(f"{state_path} is empty")
     cpu_state = _parse_cpu_state_prefix(state_bytes)
     state_version = cpu_state["state_version"]
+    timer_state = _parse_timer_state(state_bytes, state_version)
     rom_bytes = rom_path.read_bytes()
     cart_type = rom_bytes[0x147]
     external_rom_count = max(1, len(rom_bytes) // ROM_BANK_SIZE)
@@ -186,7 +272,7 @@ def export_restore_manifest(*, rom_path: Path, state_path: Path, out_dir: Path) 
             state_bytes,
             state_version,
             fallback={
-                "lcdc": int(memory[0xFF40]),
+                "restart_lcdc": int(memory[0xFF40]),
                 "restart_scx": int(memory[0xFF43]),
                 "restart_scy": int(memory[0xFF42]),
                 "restart_wx": int(memory[0xFF4B]),
@@ -232,11 +318,11 @@ def export_restore_manifest(*, rom_path: Path, state_path: Path, out_dir: Path) 
             f"restart_scy={restart_regs['restart_scy']}",
             f"restart_wx={restart_regs['restart_wx']}",
             f"restart_wy={restart_regs['restart_wy']}",
-            f"timer_div={int(memory[0xFF04])}",
-            f"timer_div_counter=0",
-            f"timer_tima={int(memory[0xFF05])}",
-            f"timer_tma={int(memory[0xFF06])}",
-            f"timer_tac={int(memory[0xFF07])}",
+            f"timer_div={timer_state['timer_div']}",
+            f"timer_div_counter={timer_state['timer_div_counter']}",
+            f"timer_tima={timer_state['timer_tima']}",
+            f"timer_tma={timer_state['timer_tma']}",
+            f"timer_tac={timer_state['timer_tac']}",
             f"serial_sb={int(memory[0xFF01])}",
             f"serial_sc={int(memory[0xFF02])}",
             f"rombank_selected={rombank_selected}",

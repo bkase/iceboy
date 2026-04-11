@@ -12,4 +12,4 @@ sequence:
   - frames: 420..540
     buttons: [left]
   - frames: 540..600
-    buttons: []
+    buttons: [start]

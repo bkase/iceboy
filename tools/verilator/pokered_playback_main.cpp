@@ -59,6 +59,8 @@ constexpr uint8_t SERIAL_IF_BIT = 0x08;
 constexpr uint8_t JOYPAD_IF_BIT = 0x10;
 
 constexpr uint64_t RESET_STIMULUS = 0x3;
+constexpr uint8_t CPU_PHASE_FETCH = 0;
+constexpr uint8_t CPU_PHASE_HALTED = 9;
 
 constexpr int SCREEN_WIDTH = 160;
 constexpr int SCREEN_HEIGHT = 144;
@@ -782,8 +784,11 @@ class BusModel {
     }
 
     uint8_t selected_pressed_nibble() const {
-        const bool action_selected = (joyp_select_ & 0x1U) == 0;
-        const bool dpad_selected = (joyp_select_ & 0x2U) == 0;
+        // joyp_select_ stores FF00 bits 5:4 right-shifted by 4. Bit 0 is P14
+        // (d-pad select) and bit 1 is P15 (action select). We previously
+        // swapped these and made scripted movement invisible to the game.
+        const bool dpad_selected = (joyp_select_ & 0x1U) == 0;
+        const bool action_selected = (joyp_select_ & 0x2U) == 0;
         uint8_t pressed = 0;
         if (action_selected) {
             pressed |= action_pressed_nibble();
@@ -1227,6 +1232,7 @@ void apply_restore_to_dut(Vsoc_rom_top_verilator_wrapper& top, const RestoreImag
     }
     apply_restore_visible_ppu_regs(root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__ppu_core_0__DOT__state_reg, image);
     clear_wide(root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__cpu_core_0__DOT__arch_state);
+    clear_wide(root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__cpu_core_0__DOT__micro_state);
     set_wide_bits(
         root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__cpu_core_0__DOT__arch_state,
         0,
@@ -1249,6 +1255,15 @@ void apply_restore_to_dut(Vsoc_rom_top_verilator_wrapper& top, const RestoreImag
     set_wide_bits(root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__cpu_core_0__DOT__arch_state, 76, 8, image.b);
     set_wide_bits(root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__cpu_core_0__DOT__arch_state, 84, 8, image.f & 0xF0U);
     set_wide_bits(root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__cpu_core_0__DOT__arch_state, 92, 8, image.a);
+    // CpuMicroState is reset to Fetch in hardware. Savestate replay must also restore the
+    // control phase; otherwise a halted save resumes with the right registers but the wrong
+    // execution pipeline.
+    set_wide_bits(
+        root->soc_rom_top_verilator_wrapper__DOT__impl__DOT__cpu_core_0__DOT__micro_state,
+        194,
+        4,
+        image.halted ? CPU_PHASE_HALTED : CPU_PHASE_FETCH
+    );
     top.eval();
 }
 

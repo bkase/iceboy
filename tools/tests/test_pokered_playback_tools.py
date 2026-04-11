@@ -13,7 +13,7 @@ import sys
 if str(ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(ROOT / "tools"))
 
-from export_pokered_restore import export_restore_manifest
+from export_pokered_restore import _parse_timer_state, export_restore_manifest
 from export_pokered_walk_script import export_walk_script
 from pokered_frame_artifacts import FRAME_SIZE, encode_png_grayscale, write_frame_artifacts
 from pyboy import PyBoy
@@ -40,8 +40,9 @@ class PokeredPlaybackToolsTest(unittest.TestCase):
             out = Path(tmpdir) / "walk.schedule"
             fps, duration = export_walk_script(TOOLS / "pokered_walk_script.yaml", out)
             self.assertEqual((fps, duration), (60, 600))
+            lines = out.read_text(encoding="utf-8").splitlines()
             self.assertEqual(
-                out.read_text(encoding="utf-8").splitlines()[:4],
+                lines[:4],
                 [
                     "fps=60",
                     "duration_frames=600",
@@ -49,6 +50,7 @@ class PokeredPlaybackToolsTest(unittest.TestCase):
                     "60 180 8",
                 ],
             )
+            self.assertEqual(lines[-1], "540 600 128")
 
     def test_encode_png_grayscale_rejects_wrong_size(self) -> None:
         with self.assertRaisesRegex(ValueError, "frame size mismatch"):
@@ -191,6 +193,12 @@ class PokeredPlaybackToolsTest(unittest.TestCase):
             self.assertEqual(int(values["ime"]), cpu_prefix["ime"])
             self.assertEqual(int(values["halted"]), int(cpu_prefix["halted"] != 0))
             self.assertEqual(int(values["stopped"]), int(cpu_prefix["stopped"] != 0))
+            timer_state = _parse_timer_state(state_bytes, int(values["state_version"]))
+            self.assertEqual(int(values["timer_div"]), timer_state["timer_div"])
+            self.assertEqual(int(values["timer_div_counter"]), timer_state["timer_div_counter"])
+            self.assertEqual(int(values["timer_tima"]), timer_state["timer_tima"])
+            self.assertEqual(int(values["timer_tma"]), timer_state["timer_tma"])
+            self.assertEqual(int(values["timer_tac"]), timer_state["timer_tac"])
 
             vram_path = out_dir / values["vram"]
             oam_path = out_dir / values["oam"]
@@ -230,6 +238,10 @@ class PokeredPlaybackToolsTest(unittest.TestCase):
                 self.assertEqual(int(values["stat"]), int(memory[0xFF41]))
                 self.assertEqual(int(values["scx"]), int(memory[0xFF43]))
                 self.assertEqual(int(values["scy"]), int(memory[0xFF42]))
+                self.assertEqual(int(values["restart_scx"]), int(memory[0xFF43]))
+                self.assertEqual(int(values["restart_scy"]), int(memory[0xFF42]))
+                self.assertEqual(int(values["restart_wx"]), int(memory[0xFF4B]))
+                self.assertEqual(int(values["restart_wy"]), int(memory[0xFF4A]))
                 self.assertEqual(vram_path.read_bytes(), bytes(int(memory[address]) & 0xFF for address in range(0x8000, 0xA000)))
                 self.assertEqual(oam_path.read_bytes(), bytes(int(memory[address]) & 0xFF for address in range(0xFE00, 0xFEA0)))
                 self.assertEqual(wram_path.read_bytes(), bytes(int(memory[address]) & 0xFF for address in range(0xC000, 0xE000)))
