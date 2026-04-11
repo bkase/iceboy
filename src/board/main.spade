@@ -1,2 +1,3 @@
 pub mod clockgen;
+mod dummy_top;
 mod icebreaker_top;

@@ -1,0 +1,8 @@
+#[no_mangle(all)]
+entity dummy_top(
+    CLK: clock,
+    LEDR_N: inv bool,
+) {
+    let _ = CLK;
+    set LEDR_N = false;
+}

@@ -152,6 +152,34 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("docs/hardware/icebreaker_up5k_baseline.json", completed.stdout)
         self.assertTrue((ROOT / "tools" / "run_hardware_baseline.sh").exists())
 
+    def test_build_icebreaker_variant_dry_run_supports_alternate_top(self) -> None:
+        completed = self.run_script("build_icebreaker_variant.sh", "--dry-run", "--skip-build", "--top", "dummy_top")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+        self.assertIn("top dummy_top", completed.stdout)
+        self.assertIn("build/variants/dummy_top/dummy_top.json", completed.stdout)
+        self.assertIn("build/variants/dummy_top/yosys-stat.txt", completed.stdout)
+        self.assertIn("synth_ice40 -top dummy_top", completed.stdout)
+
+    def test_build_icebreaker_variant_requires_explicit_top(self) -> None:
+        completed = self.run_script("build_icebreaker_variant.sh", "--dry-run")
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--top is required", completed.stderr)
+
+    def test_multi_top_gate_probe_and_doc_are_checked_in(self) -> None:
+        board_main = (ROOT / "src" / "board" / "main.spade").read_text(encoding="utf-8")
+        dummy_top = (ROOT / "src" / "board" / "dummy_top.spade").read_text(encoding="utf-8")
+        doc_text = (ROOT / "docs" / "hardware" / "multi_top_build.md").read_text(encoding="utf-8")
+
+        self.assertIn("mod dummy_top;", board_main)
+        self.assertIn("#[no_mangle(all)]", dummy_top)
+        self.assertIn("entity dummy_top", dummy_top)
+        self.assertIn("swim.toml", doc_text)
+        self.assertIn("tools/build_icebreaker_variant.sh --top dummy_top", doc_text)
+        self.assertIn("synth_ice40 -top <name>", doc_text)
+
     def test_oracle_wrapper_targets_direct_smoke_tool(self) -> None:
         completed = self.run_script("oracle.sh", "--dry-run")
         self.assertEqual(completed.returncode, 0, completed.stderr)
