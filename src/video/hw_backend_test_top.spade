@@ -1,0 +1,135 @@
+use lib::ppu::sem::memory::{MemClient, MemRegion, PpuMemReq, PpuMemResp, PpuMemResult, idle_ppu_mem_req};
+use lib::ppu::sem::observe::PpuMemReqs;
+use lib::video::hw_backend::hw_backend;
+use lib::video::test_helpers::{decode_client, decode_region};
+
+fn build_req(
+    req_region_i: bool,
+    req_client_i: uint<3>,
+    req_id_i: uint<4>,
+    req_addr_i: uint<16>,
+) -> PpuMemReq {
+    PpuMemReq$(
+        tag: lib::ppu::sem::memory::MemTxnTag$(
+            region: decode_region(req_region_i),
+            client: decode_client(req_client_i),
+            id: req_id_i,
+        ),
+        kind: lib::ppu::sem::memory::PpuMemKind::Read,
+        addr: req_addr_i,
+    )
+}
+
+fn build_reqs(
+    req_valid_i: bool,
+    req_region_i: bool,
+    req_client_i: uint<3>,
+    req_id_i: uint<4>,
+    req_addr_i: uint<16>,
+) -> PpuMemReqs {
+    let slot0 = build_req(req_region_i, req_client_i, req_id_i, req_addr_i);
+    PpuMemReqs$(
+        count: if req_valid_i { 1u3 } else { 0u3 },
+        slots: [slot0, idle_ppu_mem_req(), idle_ppu_mem_req(), idle_ppu_mem_req()],
+    )
+}
+
+fn client_bits(client: MemClient) -> uint<3> {
+    match client {
+        MemClient::Cpu => 0u3,
+        MemClient::BgFetcher => 1u3,
+        MemClient::ObjFetcher => 2u3,
+        MemClient::OamScanner => 3u3,
+        MemClient::Dma => 4u3,
+    }
+}
+
+fn region_bit(region: MemRegion) -> uint<1> {
+    match region {
+        MemRegion::Vram => 0u1,
+        MemRegion::Oam => 1u1,
+    }
+}
+
+fn reason_bits(result: PpuMemResult) -> uint<3> {
+    match result {
+        PpuMemResult::UndefinedRead$(reason) => match reason {
+            lib::ppu::sem::memory::VideoBlockReason::CpuBlockedByMode2 => 1u3,
+            lib::ppu::sem::memory::VideoBlockReason::CpuBlockedByMode3 => 2u3,
+            lib::ppu::sem::memory::VideoBlockReason::CpuBlockedByOamDma => 3u3,
+            lib::ppu::sem::memory::VideoBlockReason::PpuBlockedByOwnership => 4u3,
+        },
+        _ => 0u3,
+    }
+}
+
+fn result_bits(result: PpuMemResult) -> uint<2> {
+    match result {
+        PpuMemResult::Ok$(data: _) => 1u2,
+        PpuMemResult::Denied => 0u2,
+        PpuMemResult::UndefinedRead$(reason: _) => 2u2,
+    }
+}
+
+fn resp_data(resp: PpuMemResp) -> uint<8> {
+    match resp.result {
+        PpuMemResult::Ok$(data) => data,
+        _ => 0u8,
+    }
+}
+
+fn resp_valid(resp: PpuMemResp) -> bool {
+    match resp.result {
+        PpuMemResult::Denied =>
+            !(resp.tag.id == 0u4 && region_bit(resp.tag.region) == 0u1 && client_bits(resp.tag.client) == 0u3),
+        _ => true,
+    }
+}
+
+pub entity hw_backend_test_top(
+    clk: clock,
+    rst_i: bool,
+    req_valid_i: bool,
+    req_region_i: bool,
+    req_client_i: uint<3>,
+    req_id_i: uint<4>,
+    req_addr_i: uint<16>,
+    cpu_addr_i: uint<16>,
+    cpu_write_en_i: bool,
+    cpu_write_data_i: uint<8>,
+    cpu_is_vram_i: bool,
+    cpu_is_oam_i: bool,
+    dma_active_i: bool,
+    dma_oam_write_en_i: bool,
+    dma_oam_write_addr_i: uint<8>,
+    dma_oam_write_data_i: uint<8>,
+    ppu_vram_active_i: bool,
+    ppu_oam_active_i: bool,
+) -> uint<38> {
+    let (ppu_mem_resp, cpu_vram_read_data, cpu_oam_read_data) = inst hw_backend(
+        clk,
+        rst_i,
+        build_reqs(req_valid_i, req_region_i, req_client_i, req_id_i, req_addr_i),
+        cpu_addr_i,
+        cpu_write_en_i,
+        cpu_write_data_i,
+        cpu_is_vram_i,
+        cpu_is_oam_i,
+        dma_active_i,
+        dma_oam_write_en_i,
+        dma_oam_write_addr_i,
+        dma_oam_write_data_i,
+        ppu_vram_active_i,
+        ppu_oam_active_i,
+    );
+
+    zext(cpu_vram_read_data)
+        | (zext(cpu_oam_read_data) << 8)
+        | (zext(resp_data(ppu_mem_resp)) << 16)
+        | (zext(ppu_mem_resp.tag.id) << 24)
+        | (zext(region_bit(ppu_mem_resp.tag.region)) << 28)
+        | (zext(client_bits(ppu_mem_resp.tag.client)) << 29)
+        | (zext(result_bits(ppu_mem_resp.result)) << 32)
+        | (zext(reason_bits(ppu_mem_resp.result)) << 34)
+        | (zext(lib::util::bit(resp_valid(ppu_mem_resp))) << 37)
+}
