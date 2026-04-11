@@ -2,6 +2,8 @@
 
 `iceboy` is a Game Boy hardware project centered on a DMG-style SoC written in Spade, with simulation, differential testing, and FPGA bring-up support in the same repository.
 
+The main goal is not just correctness: this project is also an attempt to drive power consumption down enough that the design is practical on a tiny iCE40 FPGA while still behaving like a real DMG.
+
 The repo contains:
 
 - `src/`: CPU, PPU, bus, DMA, joypad, timer, and board-level hardware
@@ -18,6 +20,13 @@ The project is aimed at high-fidelity DMG behavior, with a strong emphasis on:
 - Pan Docs and mealybug-style raster correctness
 - native Verilator playback and ROM-based regression testing
 - differential comparison against external oracles such as PyBoy where useful
+- keeping the implementation small and power-conscious enough for iCE40 hardware experiments
+
+## Current Status
+
+- The simulator can sort of play Pokemon right now.
+- Native Verilator playback can restore a Pokemon Red savestate, render frames, and respond to movement/menu input well enough to generate gameplay video.
+- Real-hardware bring-up is next. The electronics are still in the mail for the iCE40 setup, and this README will be updated once the design is running on physical hardware.
 
 ## Common Workflows
 
