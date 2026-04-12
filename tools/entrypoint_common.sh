@@ -66,6 +66,14 @@ iceboy_nextpnr_bin() {
     iceboy_resolve_command "ICEBOY_NEXTPNR_BIN" "${ICEBOY_ROOT}/build/oss-cad-suite/bin/nextpnr-ice40"
 }
 
+iceboy_icepack_bin() {
+    iceboy_resolve_command "ICEBOY_ICEPACK_BIN" "${ICEBOY_ROOT}/build/oss-cad-suite/bin/icepack"
+}
+
+iceboy_icetime_bin() {
+    iceboy_resolve_command "ICEBOY_ICETIME_BIN" "${ICEBOY_ROOT}/build/oss-cad-suite/bin/icetime"
+}
+
 iceboy_sby_bin() {
     iceboy_resolve_command "ICEBOY_SBY_BIN" "${ICEBOY_ROOT}/build/oss-cad-suite/bin/sby"
 }

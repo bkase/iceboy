@@ -74,6 +74,8 @@ class LocalEntrypointsTest(unittest.TestCase):
                 "ICEBOY_VERILATOR_BIN": str(make_fake_tool(bindir, "verilator", "Verilator 5.046")),
                 "ICEBOY_YOSYS_BIN": str(make_fake_tool(bindir, "yosys", "Yosys 0.63+188")),
                 "ICEBOY_NEXTPNR_BIN": str(make_fake_tool(bindir, "nextpnr-ice40", "nextpnr-0.10-15-g77ccf518")),
+                "ICEBOY_ICEPACK_BIN": str(make_fake_tool(bindir, "icepack", "icepack 1.0-test")),
+                "ICEBOY_ICETIME_BIN": str(make_fake_tool(bindir, "icetime", "icetime 1.0-test")),
                 "ICEBOY_SBY_BIN": str(make_fake_tool(bindir, "sby", "SBY 0.63-11-g6424d15")),
                 "ICEBOY_EQY_BIN": str(make_fake_tool(bindir, "eqy", "EQY 0.1-test")),
             }
@@ -292,6 +294,45 @@ class LocalEntrypointsTest(unittest.TestCase):
         completed = self.run_script("build_icebreaker_variant.sh", "--dry-run")
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("--top is required", completed.stderr)
+
+    def test_build_icebreaker_variant_dry_run_includes_pack_step_and_bin_output(self) -> None:
+        completed = self.run_script(
+            "build_icebreaker_variant.sh",
+            "--dry-run",
+            "--skip-build",
+            "--pack",
+            "--top",
+            "board::icebreaker_lcd_test_top::icebreaker_lcd_test_top",
+            "--module",
+            "icebreaker_lcd_test_top",
+            "--board-top",
+            "src/board/icebreaker_lcd_test_top.spade",
+            "--out-dir",
+            "build/variants/icebreaker_lcd_test_top",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] nextpnr-ice40: nextpnr-0.10-15-g77ccf518", completed.stdout)
+        self.assertIn("build/variants/icebreaker_lcd_test_top/icebreaker_lcd_test_top.asc", completed.stdout)
+        self.assertIn("tools/pack_icebreaker_bitstream.sh", completed.stdout)
+        self.assertIn("build/variants/icebreaker_lcd_test_top/icebreaker_lcd_test_top.bin", completed.stdout)
+
+    def test_pack_icebreaker_bitstream_dry_run_supports_icetime(self) -> None:
+        completed = self.run_script(
+            "pack_icebreaker_bitstream.sh",
+            "--dry-run",
+            "--icetime",
+            "--asc",
+            "build/hw_baseline/icebreaker.asc",
+            "--out",
+            "build/bitstreams/icebreaker_top_baseline.bin",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] icepack: ", completed.stdout)
+        self.assertIn("[tool] icetime: ", completed.stdout)
+        self.assertIn("build/hw_baseline/icebreaker.asc", completed.stdout)
+        self.assertIn("build/bitstreams/icebreaker_top_baseline.bin", completed.stdout)
+        self.assertIn("-d up5k", completed.stdout)
+        self.assertIn("icebreaker.pcf", completed.stdout)
 
     def test_multi_top_gate_probe_and_doc_are_checked_in(self) -> None:
         board_main = (ROOT / "src" / "board" / "main.spade").read_text(encoding="utf-8")
@@ -635,6 +676,9 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((TOOLS / "export_pokered_restore.py").exists())
         self.assertTrue((TOOLS / "export_pokered_walk_script.py").exists())
         self.assertTrue((TOOLS / "pokered_walk_script.yaml").exists())
+
+    def test_pack_icebreaker_bitstream_assets_exist(self) -> None:
+        self.assertTrue((TOOLS / "pack_icebreaker_bitstream.sh").exists())
 
     def test_obj_observe_assets_exist(self) -> None:
         run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
