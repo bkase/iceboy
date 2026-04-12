@@ -134,6 +134,12 @@ class RunTestsTest(unittest.TestCase):
         self.assertTrue((ROOT / "test" / "harness" / "verilog" / "icebreaker_alu_loop_top_verilator_wrapper.sv").is_file())
         self.assertTrue((ROOT / "bench" / "roms" / "alu_loop.asm").is_file())
 
+    def test_hardware_soc_core_native_runner_sources_exist(self) -> None:
+        self.assertTrue((ROOT / "tools" / "run_hardware_soc_core_verilator.sh").is_file())
+        self.assertTrue((ROOT / "tools" / "verilator" / "hardware_soc_core_main.cpp").is_file())
+        self.assertTrue((ROOT / "test" / "harness" / "verilog" / "hardware_soc_core_verilator_wrapper.sv").is_file())
+        self.assertTrue((ROOT / "tools" / "write_rendered_shaded_frame.py").is_file())
+
     def test_dmg_acid2_native_runner_sources_exist(self) -> None:
         self.assertTrue((ROOT / "tools" / "verilator" / "dmg_acid2_main.cpp").is_file())
         self.assertTrue((ROOT / "tools" / "compare_shaded_frame.py").is_file())

@@ -8,6 +8,13 @@ pub extern entity alu_loop_rom_raw_1k(
     CPU_DATA: inv uint<8>,
 );
 
+#[no_mangle(all)]
+pub extern entity bg_static_rom_raw_1k(
+    CLK: clock,
+    CPU_ADDR: uint<10>,
+    CPU_DATA: inv uint<8>,
+);
+
 fn alu_loop_rom_backend_out(cpu_addr: uint<15>, raw_cpu_data: uint<8>) -> RomBackendOut {
     RomBackendOut$(
         cpu_data: if cpu_addr < 1024u15 { raw_cpu_data } else { 0xffu8 },
@@ -25,4 +32,23 @@ pub entity alu_loop_rom_backend(clk: clock, ports: RomBackendPorts) -> RomBacken
     let _ = ports.loader_write_addr;
     let _ = ports.loader_write_data;
     alu_loop_rom_backend_out(ports.cpu_addr, raw_cpu_data)
+}
+
+fn bg_static_rom_backend_out(cpu_addr: uint<15>, raw_cpu_data: uint<8>) -> RomBackendOut {
+    RomBackendOut$(
+        cpu_data: if cpu_addr < 1024u15 { raw_cpu_data } else { 0xffu8 },
+        dma_data: 0xffu8,
+        rom_ready: true,
+    )
+}
+
+pub entity bg_static_rom_backend(clk: clock, ports: RomBackendPorts) -> RomBackendOut {
+    let raw_cpu_data_wire = inst new_mut_wire();
+    inst bg_static_rom_raw_1k(clk, trunc(ports.cpu_addr), raw_cpu_data_wire);
+    let raw_cpu_data = inst read_mut_wire(raw_cpu_data_wire);
+    let _ = ports.dma_addr;
+    let _ = ports.loader_write_en;
+    let _ = ports.loader_write_addr;
+    let _ = ports.loader_write_data;
+    bg_static_rom_backend_out(ports.cpu_addr, raw_cpu_data)
 }

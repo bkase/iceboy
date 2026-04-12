@@ -2,6 +2,7 @@ pub mod clockgen;
 mod dummy_top;
 pub mod hardware_soc_core;
 pub mod hardware_soc_core_test_top;
+pub mod hardware_soc_core_verilator_top;
 pub mod icebreaker_alu_loop_top;
 pub mod icebreaker_lcd_test_top;
 mod icebreaker_top;

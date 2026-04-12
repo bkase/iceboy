@@ -600,6 +600,21 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("--trace", completed.stdout)
         self.assertIn("--vcd=build/custom/alu_loop_debug.vcd", completed.stdout)
 
+    def test_hardware_soc_core_verilator_wrapper_dry_run_uses_bg_static_oracle_runner(self) -> None:
+        completed = self.run_script("run_hardware_soc_core_verilator.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("tools/prepare_verilator_sv.py", completed.stdout)
+        self.assertIn("build/spade.verilator.sv", completed.stdout)
+        self.assertIn("hardware_soc_core_verilator_wrapper.sv", completed.stdout)
+        self.assertIn("tools/verilator/hardware_soc_core_main.cpp", completed.stdout)
+        self.assertIn("tools/write_rendered_shaded_frame.py", completed.stdout)
+        self.assertIn("bench/roms/out/BG_STATIC.gb", completed.stdout)
+        self.assertIn("--expected-raw=", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+
     def test_ppu_wave_b_mealybug_verilator_wrapper_dry_run_uses_sanitized_verilog_path(self) -> None:
         completed = self.run_script("run_ppu_wave_b_mealybug_verilator.sh", "--dry-run", "--skip-build")
         self.assertEqual(completed.returncode, 0, completed.stderr)

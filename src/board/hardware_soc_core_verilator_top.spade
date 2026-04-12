@@ -1,0 +1,65 @@
+use std::option::Option;
+
+use lib::board::hardware_soc_core::hardware_soc_core_bg_static_1k;
+use lib::periph::joypad::idle_joyp_buttons;
+use lib::ppu::sem::scanout::ScanoutEvent;
+
+fn scanout_valid(scanout: Option<ScanoutEvent>) -> bool {
+    match scanout {
+        Option::Some(_) => true,
+        Option::None => false,
+    }
+}
+
+fn scanout_kind(scanout: Option<ScanoutEvent>) -> uint<2> {
+    match scanout {
+        Option::Some(ScanoutEvent::FrameStart) => 1u2,
+        Option::Some(ScanoutEvent::Pixel$(emit: _)) => 2u2,
+        Option::Some(_) => 3u2,
+        Option::None => 0u2,
+    }
+}
+
+fn scanout_x(scanout: Option<ScanoutEvent>) -> uint<8> {
+    match scanout {
+        Option::Some(ScanoutEvent::Pixel$(emit)) => emit.x,
+        _ => 0u8,
+    }
+}
+
+fn scanout_y(scanout: Option<ScanoutEvent>) -> uint<8> {
+    match scanout {
+        Option::Some(ScanoutEvent::Pixel$(emit)) => emit.y,
+        _ => 0u8,
+    }
+}
+
+fn scanout_shade(scanout: Option<ScanoutEvent>) -> uint<2> {
+    match scanout {
+        Option::Some(ScanoutEvent::Pixel$(emit)) => emit.shade,
+        _ => 0u2,
+    }
+}
+
+#[no_mangle(all)]
+entity hardware_soc_core_verilator_top(
+    clk_i: clock,
+    rst_i: bool,
+    status_o: inv uint<40>,
+) {
+    let core = inst hardware_soc_core_bg_static_1k(clk_i, rst_i, idle_joyp_buttons());
+    let scanout = core.scanout;
+
+    set status_o =
+        zext(lib::util::bit(scanout_valid(scanout)))
+        | (zext(scanout_kind(scanout)) << 1)
+        | (zext(scanout_x(scanout)) << 3)
+        | (zext(scanout_y(scanout)) << 11)
+        | (zext(scanout_shade(scanout)) << 19)
+        | (zext(core.ppu_ly) << 21)
+        | (zext(core.ppu_mode_bits) << 29)
+        | (zext(lib::util::bit(core.rom_ready)) << 32)
+        | (zext(lib::util::bit(core.m_ce)) << 33)
+        | (zext(core.t_index) << 34)
+        | (zext(core.pc_low4) << 36);
+}

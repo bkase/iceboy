@@ -11,7 +11,7 @@ use lib::mem::logical::map::{hram_addr, rom_addr, wram_addr};
 use lib::mem::phys::ebr::hram_ebr;
 use lib::mem::phys::rom_backend_types::{RomBackendOut, RomBackendPorts};
 use lib::mem::phys::rom_baked_ebr::rom_baked_ebr_1k;
-use lib::mem::phys::rom_baked_images::alu_loop_rom_backend;
+use lib::mem::phys::rom_baked_images::{alu_loop_rom_backend, bg_static_rom_backend};
 use lib::mem::phys::rom_spram_rw::rom_spram_rw;
 use lib::mem::phys::spram::wram_spram;
 use lib::periph::interrupts::{InterruptsOut, interrupts};
@@ -429,6 +429,26 @@ pub entity hardware_soc_core_baked_ebr_1k(
         rom_backend,
     );
     let rom_backend = inst rom_baked_ebr_1k(clk, core.rom_ports);
+    core
+}
+
+pub entity hardware_soc_core_bg_static_1k(
+    clk: clock,
+    rst: bool,
+    joyp_buttons: JoypButtons,
+) -> HardwareSocCoreOut {
+    decl rom_backend;
+    let core = inst hardware_soc_core(
+        clk,
+        rst,
+        joyp_buttons,
+        MemoryBehaviorProfile::DmgConservative,
+        false,
+        0u15,
+        0u8,
+        rom_backend,
+    );
+    let rom_backend = inst bg_static_rom_backend(clk, core.rom_ports);
     core
 }
 
