@@ -1,0 +1,66 @@
+use std::option::Option;
+
+use lib::ppu::sem::scanout::{PixelEmit, PixelSource, ScanoutEvent};
+use lib::video::framebuffer_spram::framebuffer_spram;
+
+fn advance_x(x: uint<8>) -> uint<8> {
+    if x == 159u8 {
+        0u8
+    } else {
+        trunc(x + 1u8)
+    }
+}
+
+fn advance_y(x: uint<8>, y: uint<8>) -> uint<8> {
+    if x == 159u8 {
+        if y == 143u8 {
+            0u8
+        } else {
+            trunc(y + 1u8)
+        }
+    } else {
+        y
+    }
+}
+
+fn synth_shade(x: uint<8>, y: uint<8>) -> uint<2> {
+    let x_wide: uint<16> = zext(x);
+    let y_wide: uint<16> = zext(y);
+    trunc(x_wide ^ (y_wide << 1))
+}
+
+#[no_mangle(all)]
+entity framebuffer_spram_synth_top(
+    clk: clock,
+    rst_i: bool,
+    ready_i: bool,
+    status_o: inv uint<32>,
+) {
+    reg(clk) phase_reg: uint<2> reset(rst_i: 0u2) = trunc(phase_reg + 1u2);
+    reg(clk) x_reg: uint<8> reset(rst_i: 0u8) = if phase_reg != 3u2 { advance_x(x_reg) } else { x_reg };
+    reg(clk) y_reg: uint<8> reset(rst_i: 0u8) = if phase_reg != 3u2 { advance_y(x_reg, y_reg) } else { y_reg };
+    reg(clk) frame_start_sent_reg: bool reset(rst_i: false) =
+        if phase_reg == 3u2 && !frame_start_sent_reg { true } else { frame_start_sent_reg };
+
+    let scanout =
+        if phase_reg != 3u2 {
+            Option::Some(
+                ScanoutEvent::Pixel$(
+                    emit: PixelEmit$(x: x_reg, y: y_reg, shade: synth_shade(x_reg, y_reg), source: PixelSource::Background),
+                )
+            )
+        } else if !frame_start_sent_reg {
+            Option::Some(ScanoutEvent::FrameStart)
+        } else {
+            Option::None
+        };
+    let framebuffer = inst framebuffer_spram(clk, rst_i, scanout, ready_i);
+
+    set status_o =
+        zext(framebuffer.pixel_shade)
+        | (zext(framebuffer.next_read_addr) << 8)
+        | (zext(lib::util::bit(framebuffer.reader_active)) << 24)
+        | (zext(lib::util::bit(framebuffer.read_pending)) << 25)
+        | (zext(lib::util::bit(framebuffer.frame_start)) << 26)
+        | (zext(lib::util::bit(framebuffer.pixel_valid)) << 27);
+}

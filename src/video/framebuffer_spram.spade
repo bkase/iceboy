@@ -1,0 +1,158 @@
+use std::option::Option;
+use std::ports::{new_mut_wire, read_mut_wire};
+
+use lib::mem::phys::ice40_spram::{SB_SPRAM256KA, byte_is_high, select_byte, write_datain, write_mask};
+use lib::ppu::sem::scanout::ScanoutEvent;
+
+pub struct FramebufferSpramOut {
+    frame_start: bool,
+    pixel_valid: bool,
+    pixel_shade: uint<8>,
+    reader_active: bool,
+    next_read_addr: uint<16>,
+    read_pending: bool,
+}
+
+struct FramebufferWriteReq {
+    active: bool,
+    addr: uint<15>,
+    data: uint<8>,
+}
+
+fn framebuffer_total_pixels() -> uint<16> {
+    23040u16
+}
+
+fn framebuffer_word_addr(addr: uint<15>) -> uint<14> {
+    trunc(addr >> 1)
+}
+
+fn framebuffer_pixel_addr(x: uint<8>, y: uint<8>) -> uint<15> {
+    let y_wide: uint<16> = zext(y);
+    let x_wide: uint<16> = zext(x);
+    let row_base_wide: uint<32> = y_wide * 160u16;
+    let row_base: uint<16> = trunc(row_base_wide);
+    trunc(row_base + x_wide)
+}
+
+fn idle_write_req() -> FramebufferWriteReq {
+    FramebufferWriteReq$(active: false, addr: 0u15, data: 0u8)
+}
+
+fn scanout_is_frame_start(scanout: Option<ScanoutEvent>) -> bool {
+    match scanout {
+        Option::Some(ScanoutEvent::FrameStart) => true,
+        _ => false,
+    }
+}
+
+fn scanout_write_req(scanout: Option<ScanoutEvent>) -> FramebufferWriteReq {
+    match scanout {
+        Option::Some(ScanoutEvent::Pixel$(emit)) =>
+            FramebufferWriteReq$(active: true, addr: framebuffer_pixel_addr(emit.x, emit.y), data: zext(emit.shade)),
+        _ => idle_write_req(),
+    }
+}
+
+// Single-buffer first-light trade-off:
+// - one 32 KiB SPRAM stores the full 160x144x8bpp framebuffer
+// - PPU scanout writes have priority over LCD reads
+// - LCD starts a sweep only on a PPU FrameStart edge and then reads the same
+//   buffer while the PPU keeps writing into it
+// - static BG_STATIC content stays visually coherent because every PPU frame is
+//   identical, and low-motion joypad_bg_smoke updates only tear briefly during
+//   a cursor move
+// - high-motion content is explicitly out of scope: one LCD frame can sample
+//   several different PPU frames and therefore tear across the whole image
+// This is the intended first-light compromise until a future double-buffered or
+// packed-2bpp design revisits the motion budget.
+pub entity framebuffer_spram(
+    clk: clock,
+    rst: bool,
+    scanout_i: Option<ScanoutEvent>,
+    pixel_advance_i: bool,
+) -> FramebufferSpramOut {
+    decl reader_active_reg;
+    decl next_read_addr_reg;
+    decl read_pending_reg;
+    decl read_high_reg;
+    decl pixel_valid_reg;
+    decl pixel_shade_reg;
+
+    let dataout = inst new_mut_wire();
+    let write_req = scanout_write_req(scanout_i);
+    let frame_start_event = scanout_is_frame_start(scanout_i);
+    let frame_start_accept = frame_start_event && !reader_active_reg;
+    let seeded_next_read_addr = if frame_start_accept { 0u16 } else { next_read_addr_reg };
+    let reader_running = reader_active_reg || frame_start_accept;
+    let read_issue =
+        reader_running
+        && !write_req.active
+        && !pixel_valid_reg
+        && !read_pending_reg
+        && seeded_next_read_addr < framebuffer_total_pixels();
+    let read_addr: uint<15> = trunc(seeded_next_read_addr);
+
+    inst SB_SPRAM256KA(
+        if write_req.active { framebuffer_word_addr(write_req.addr) } else { framebuffer_word_addr(read_addr) },
+        if write_req.active { write_datain(write_req.data, byte_is_high(trunc(write_req.addr))) } else { 0u16 },
+        if write_req.active { write_mask(byte_is_high(trunc(write_req.addr))) } else { 0u4 },
+        write_req.active,
+        write_req.active || read_issue,
+        clk,
+        false,
+        false,
+        true,
+        dataout,
+    );
+
+    let dataout_value = inst read_mut_wire(dataout);
+    let consume_pixel = pixel_valid_reg && pixel_advance_i;
+    let next_pixel_valid =
+        if read_pending_reg {
+            true
+        } else if consume_pixel {
+            false
+        } else if frame_start_accept {
+            false
+        } else {
+            pixel_valid_reg
+        };
+    let next_pixel_shade =
+        if read_pending_reg {
+            select_byte(dataout_value, read_high_reg)
+        } else {
+            pixel_shade_reg
+        };
+    let next_read_addr =
+        if read_issue {
+            trunc(seeded_next_read_addr + 1u16)
+        } else {
+            seeded_next_read_addr
+        };
+    let last_pixel_consumed = consume_pixel && seeded_next_read_addr == framebuffer_total_pixels();
+    let next_reader_active =
+        if frame_start_accept {
+            true
+        } else if last_pixel_consumed {
+            false
+        } else {
+            reader_running
+        };
+
+    reg(clk) reader_active_reg: bool reset(rst: false) = next_reader_active;
+    reg(clk) next_read_addr_reg: uint<16> reset(rst: 0u16) = next_read_addr;
+    reg(clk) read_pending_reg: bool reset(rst: false) = read_issue;
+    reg(clk) read_high_reg: bool reset(rst: false) = byte_is_high(trunc(read_addr));
+    reg(clk) pixel_valid_reg: bool reset(rst: false) = next_pixel_valid;
+    reg(clk) pixel_shade_reg: uint<8> reset(rst: 0u8) = next_pixel_shade;
+
+    FramebufferSpramOut$(
+        frame_start: frame_start_accept,
+        pixel_valid: pixel_valid_reg,
+        pixel_shade: pixel_shade_reg,
+        reader_active: reader_active_reg,
+        next_read_addr: next_read_addr_reg,
+        read_pending: read_pending_reg,
+    )
+}

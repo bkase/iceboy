@@ -1,0 +1,47 @@
+use std::option::Option;
+
+use lib::ppu::sem::scanout::{BlankReason, PixelEmit, PixelSource, ScanoutEvent};
+use lib::video::framebuffer_spram::framebuffer_spram;
+
+fn build_scanout(
+    scanout_kind_i: uint<3>,
+    scanout_x_i: uint<8>,
+    scanout_y_i: uint<8>,
+    scanout_shade_i: uint<2>,
+) -> Option<ScanoutEvent> {
+    match scanout_kind_i {
+        1u3 => Option::Some(ScanoutEvent::FrameStart),
+        2u3 => Option::Some(ScanoutEvent::LineStart$(y: scanout_y_i)),
+        3u3 => Option::Some(ScanoutEvent::Blank$(y: scanout_y_i, reason: BlankReason::NonVisibleDot)),
+        4u3 => Option::Some(
+            ScanoutEvent::Pixel$(
+                emit: PixelEmit$(x: scanout_x_i, y: scanout_y_i, shade: scanout_shade_i, source: PixelSource::Background),
+            )
+        ),
+        _ => Option::None,
+    }
+}
+
+pub entity framebuffer_spram_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    scanout_kind_i: uint<3>,
+    scanout_x_i: uint<8>,
+    scanout_y_i: uint<8>,
+    scanout_shade_i: uint<2>,
+    pixel_advance_i: bool,
+) -> uint<28> {
+    let framebuffer = inst framebuffer_spram(
+        clk_i,
+        rst_i,
+        build_scanout(scanout_kind_i, scanout_x_i, scanout_y_i, scanout_shade_i),
+        pixel_advance_i,
+    );
+
+    zext(framebuffer.pixel_shade)
+        | (zext(framebuffer.next_read_addr) << 8)
+        | (zext(lib::util::bit(framebuffer.reader_active)) << 24)
+        | (zext(lib::util::bit(framebuffer.read_pending)) << 25)
+        | (zext(lib::util::bit(framebuffer.frame_start)) << 26)
+        | (zext(lib::util::bit(framebuffer.pixel_valid)) << 27)
+}
