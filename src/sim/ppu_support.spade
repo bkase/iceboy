@@ -7,7 +7,6 @@ use lib::ppu::sem::observe::{
     PpuDebugTrace,
     PpuSemanticCommit,
     empty_line_summary,
-    idle_dot_output_for_state,
     idle_ppu_debug_trace,
     idle_ppu_semantic_commit,
 };
@@ -151,10 +150,6 @@ pub fn timed_events_from_stimulus(
     stimulus: RasterStimulus,
 ) -> ([TimedPpuEvent; 4], uint<4>) {
     timed_events_from_direct(at, seq_counter, stimulus.reg_write, stimulus.dma_start)
-}
-
-pub fn held_dot_output(state: PpuState, dot_ce: bool, stepped: DotOutput) -> DotOutput {
-    if dot_ce { stepped } else { idle_dot_output_for_state(state) }
 }
 
 pub fn semantic_valid(semantic: Option<PpuSemanticCommit>) -> bool {

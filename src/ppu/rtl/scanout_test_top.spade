@@ -4,7 +4,7 @@ use lib::ppu::sem::events::idle_oam_dma_state;
 use lib::ppu::sem::events::idle_timed_ppu_event;
 use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
 use lib::ppu::sem::events::zero_video_coord;
-use lib::ppu::sem::step::step_dot;
+use lib::ppu::sem::step::{held_dot_output, step_dot};
 use lib::ppu::sem::types::{
     LcdRunState,
     Lcdc,
@@ -19,7 +19,7 @@ use lib::ppu::sem::types::{
     initial_stat_irq_state,
 };
 use lib::sim::encode::{encode_blank_reason, encode_scanout_kind, scanout_blank_reason, scanout_y};
-use lib::sim::ppu_support::{decode_lcd_run, encode_ppu_phase, held_dot_output, ppu_debug_trace, timed_events_from_direct};
+use lib::sim::ppu_support::{decode_lcd_run, encode_ppu_phase, ppu_debug_trace, timed_events_from_direct};
 
 fn decode_mmio_reg(target_i: uint<4>) -> MmioReg {
     match target_i {

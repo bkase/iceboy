@@ -1,0 +1,38 @@
+use std::option::Option;
+
+use lib::ppu::rtl::core_hw::ppu_core_hw;
+use lib::ppu::sem::events::{idle_oam_dma_state, idle_timed_ppu_event};
+use lib::ppu::sem::memory::idle_ppu_mem_resp;
+use lib::ppu::sem::scanout::ScanoutEvent;
+
+fn scanout_valid(scanout: Option<ScanoutEvent>) -> bool {
+    match scanout {
+        Option::Some(_) => true,
+        Option::None => false,
+    }
+}
+
+#[no_mangle(all)]
+entity core_hw_synth_top(
+    clk: clock,
+    rst_i: bool,
+    status_o: inv uint<32>,
+) {
+    let core = inst ppu_core_hw(
+        clk,
+        rst_i,
+        true,
+        [idle_timed_ppu_event(); 4],
+        0u4,
+        idle_ppu_mem_resp(),
+        idle_oam_dma_state(),
+    );
+
+    set status_o =
+        zext(core.mmio_resp.read_data)
+        | (zext(core.mem_reqs.count) << 8)
+        | (zext(lib::util::bit(core.mmio_resp.read_valid)) << 11)
+        | (zext(lib::util::bit(core.irq_req.vblank_req)) << 12)
+        | (zext(lib::util::bit(core.irq_req.stat_req)) << 13)
+        | (zext(lib::util::bit(scanout_valid(core.scanout))) << 14);
+}

@@ -2,13 +2,12 @@ use lib::ppu::sem::events::{DotInput, OamDmaState, VideoCoord};
 use lib::ppu::sem::memory::PpuMemResp;
 use lib::ppu::sem::observe::{LineSummary, PpuMemReqs, PpuMmioResp, PpuSemanticCommit};
 use lib::ppu::sem::scanout::ScanoutEvent;
-use lib::ppu::sem::step::step_dot;
+use lib::ppu::sem::step::{held_dot_output, step_dot};
 use lib::ppu::sem::stimulus::{PpuSimSnapshot, RasterStimulus};
 use lib::ppu::sem::types::{PpuIrqReq, PpuState, initial_ppu_state, visible_mode};
 use lib::sim::ppu_support::{
     encode_ppu_mode,
     encode_ppu_phase,
-    held_dot_output,
     line_summary_or_empty,
     line_summary_valid,
     scanout_or_blank,

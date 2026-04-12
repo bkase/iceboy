@@ -1,10 +1,10 @@
 use lib::ppu::sem::events::{DotInput, OamDmaState, VideoCoord};
 use lib::ppu::sem::memory::PpuMemResp;
 use lib::ppu::sem::observe::{LineSummary, PpuSemanticCommit};
-use lib::ppu::sem::step::step_dot;
+use lib::ppu::sem::step::{held_dot_output, step_dot};
 use lib::ppu::sem::stimulus::{PpuSimSnapshot, RasterStimulus};
 use lib::ppu::sem::types::{PpuState, initial_ppu_state};
-use lib::sim::ppu_support::{held_dot_output, line_summary_or_empty, line_summary_valid, semantic_or_idle, semantic_valid, timed_events_from_stimulus};
+use lib::sim::ppu_support::{line_summary_or_empty, line_summary_valid, semantic_or_idle, semantic_valid, timed_events_from_stimulus};
 
 struct PpuStateTopOut {
     commit_seq: uint<64>,

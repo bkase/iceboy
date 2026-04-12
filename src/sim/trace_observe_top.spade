@@ -1,9 +1,9 @@
 use lib::ppu::sem::events::{DotInput, OamDmaState, TimedPpuEvent, VideoCoord};
 use lib::ppu::sem::memory::PpuMemResp;
 use lib::ppu::sem::observe::PpuDebugTrace;
-use lib::ppu::sem::step::step_dot;
+use lib::ppu::sem::step::{held_dot_output, step_dot};
 use lib::ppu::sem::types::{PpuState, initial_ppu_state};
-use lib::sim::ppu_support::{held_dot_output, idle_trace_for_state, ppu_debug_trace};
+use lib::sim::ppu_support::{idle_trace_for_state, ppu_debug_trace};
 
 struct TraceObserveTopOut {
     commit_seq: uint<64>,

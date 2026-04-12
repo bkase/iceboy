@@ -85,6 +85,14 @@ use lib::ppu::rtl::oam_scan::{oam_scan_req, step_oam_scan_entry};
 use lib::ppu::rtl::regs::{apply_mmio_write, set_lcd_enable};
 use lib::ppu::rtl::timing::{advance_run_state, advance_timing, handle_lcd_transition};
 
+pub fn held_dot_output(state: PpuState, dot_ce: bool, stepped: DotOutput) -> DotOutput {
+    if dot_ce {
+        stepped
+    } else {
+        lib::ppu::sem::observe::idle_dot_output_for_state(state)
+    }
+}
+
 fn is_stat_write(write: MmioWrite) -> bool {
     match write.target {
         MmioReg::Stat => true,

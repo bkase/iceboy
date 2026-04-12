@@ -5,7 +5,7 @@ use lib::bus::types::BusReq;
 use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
 use lib::ppu::sem::events::{DotInput, idle_oam_dma_state, zero_video_coord};
 use lib::ppu::sem::memory::{MemClient, MemRegion, PpuMemKind, PpuMemReq, PpuMemResp, PpuMemResult, idle_ppu_mem_req, idle_ppu_mem_resp};
-use lib::ppu::sem::step::step_dot;
+use lib::ppu::sem::step::{held_dot_output, step_dot};
 use lib::ppu::sem::types::{
     FetcherSource,
     FetcherStep,
@@ -27,7 +27,7 @@ use lib::ppu::sem::types::{
     initial_fetcher_state,
 };
 use lib::sim::encode::{encode_scanout_kind, scanout_shade, scanout_source, scanout_x};
-use lib::sim::ppu_support::{build_test_lcdc, held_dot_output, ppu_debug_trace, timed_events_from_direct};
+use lib::sim::ppu_support::{build_test_lcdc, ppu_debug_trace, timed_events_from_direct};
 
 fn configured_ticket(oam_index: uint<6>, x: uint<8>, y: uint<8>, selection_rank: uint<4>) -> SelectedObjTicket {
     SelectedObjTicket$(oam_index: oam_index, x: x, y: y, selection_rank: selection_rank)

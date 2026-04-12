@@ -1,8 +1,8 @@
 use std::option::Option;
 
-use lib::ppu::sem::events::{DotInput, OamDmaState, TimedPpuEvent, VideoCoord};
+use lib::ppu::sem::events::{DotInput, OamDmaState, TimedPpuEvent};
 use lib::ppu::sem::memory::PpuMemResp;
-use lib::ppu::sem::observe::{PpuDebugTrace, PpuMemReqs, PpuMmioResp};
+use lib::ppu::sem::observe::{PpuMemReqs, PpuMmioResp};
 use lib::ppu::sem::scanout::ScanoutEvent;
 use lib::ppu::sem::step::{held_dot_output, step_dot};
 use lib::ppu::sem::types::{
@@ -19,15 +19,12 @@ use lib::ppu::sem::types::{
     initial_ppu_render_state,
     initial_stat_irq_state,
 };
-use lib::sim::ppu_support::{idle_trace_for_state, ppu_debug_trace};
 
-pub struct PpuCoreOut {
+pub struct PpuCoreHwOut {
     mmio_resp: PpuMmioResp,
     mem_reqs: PpuMemReqs,
     irq_req: PpuIrqReq,
     scanout: Option<ScanoutEvent>,
-    visible_trace: PpuDebugTrace,
-    trace: PpuDebugTrace,
 }
 
 fn dmg_skipboot_regs() -> PpuRegs {
@@ -72,16 +69,15 @@ fn dmg_skipboot_state() -> PpuState {
     )
 }
 
-pub entity ppu_core(
+pub entity ppu_core_hw(
     clk: clock,
     rst: bool,
     dot_ce: bool,
-    video_now: VideoCoord,
     bus_events: [TimedPpuEvent; 4],
     bus_event_count: uint<4>,
     mem_resp: PpuMemResp,
     dma_state: OamDmaState,
-) -> PpuCoreOut {
+) -> PpuCoreHwOut {
     decl state_reg;
     let step = step_dot(
         state_reg,
@@ -91,12 +87,10 @@ pub entity ppu_core(
     let visible_state = visible.next_state;
     reg(clk) state_reg: PpuState reset(rst: dmg_skipboot_state()) = visible_state;
 
-    PpuCoreOut$(
+    PpuCoreHwOut$(
         mmio_resp: visible.mmio_resp,
         mem_reqs: visible.mem_reqs,
         irq_req: visible.irq_req,
         scanout: visible.scanout,
-        visible_trace: idle_trace_for_state(video_now, state_reg),
-        trace: if dot_ce { ppu_debug_trace(video_now, visible) } else { idle_trace_for_state(video_now, visible_state) },
     )
 }

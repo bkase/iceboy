@@ -1,4 +1,7 @@
 pub mod core;
+pub mod core_debug_synth_top;
+pub mod core_hw;
+pub mod core_hw_synth_top;
 pub mod core_test_top;
 pub mod fifo;
 pub mod fifo_test_top;

@@ -1,8 +1,7 @@
 use lib::ppu::sem::step::add_stall_dots;
 use lib::ppu::sem::types::{BgFifo, BgPixel, PpuState, PpuStatusState, PpuVisibleState, PpuSamplingState, PpuPhase, LcdRunState, StatIrqState, initial_ppu_regs, initial_ppu_sampling_state, ppu_render_state};
 use lib::ppu::sem::events::idle_dot_input;
-use lib::ppu::sem::step::step_dot;
-use lib::sim::ppu_support::held_dot_output;
+use lib::ppu::sem::step::{held_dot_output, step_dot};
 use lib::sim::ppu_support::build_test_lcdc;
 
 fn seeded_bg_fifo() -> BgFifo {
