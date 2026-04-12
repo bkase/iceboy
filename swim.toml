@@ -1,7 +1,7 @@
 name = "iceboy"
 
 [verilog]
-sources = ["test/harness/verilog/SB_SPRAM256KA.v"]
+sources = ["test/harness/verilog/SB_SPRAM256KA.v", "test/harness/verilog/button_bank_raw.v"]
 
 [synthesis]
 top = "icebreaker_top"

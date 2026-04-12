@@ -1,0 +1,46 @@
+use lib::periph::button_bank::button_bank;
+
+fn decode_buttons4(buttons_i: uint<4>) -> [bool; 4] {
+    [
+        (buttons_i & 0x1u4) != 0u4,
+        (buttons_i & 0x2u4) != 0u4,
+        (buttons_i & 0x4u4) != 0u4,
+        (buttons_i & 0x8u4) != 0u4,
+    ]
+}
+
+fn decode_buttons2(buttons_i: uint<2>) -> [bool; 2] {
+    [
+        (buttons_i & 0x1u2) != 0u2,
+        (buttons_i & 0x2u2) != 0u2,
+    ]
+}
+
+fn pack_bool4(bits: [bool; 4]) -> uint<4> {
+    (zext(lib::util::bit(bits[3])) << 3)
+    | (zext(lib::util::bit(bits[2])) << 2)
+    | (zext(lib::util::bit(bits[1])) << 1)
+    | zext(lib::util::bit(bits[0]))
+}
+
+fn pack_bool2(bits: [bool; 2]) -> uint<2> {
+    (zext(lib::util::bit(bits[1])) << 1) | zext(lib::util::bit(bits[0]))
+}
+
+pub entity button_bank_test_top(
+    clk_i: clock,
+    buttons4_i: uint<4>,
+    buttons2_i: uint<2>,
+) -> uint<24> {
+    let bank4 = inst button_bank::<4, 3>(clk_i, decode_buttons4(buttons4_i));
+    let bank2 = inst button_bank::<2, 2>(clk_i, decode_buttons2(buttons2_i));
+
+    (zext(pack_bool4(bank4.raw_sync)) << 20)
+    | (zext(pack_bool4(bank4.debounced)) << 16)
+    | (zext(pack_bool4(bank4.rising)) << 12)
+    | (zext(pack_bool4(bank4.falling)) << 8)
+    | (zext(pack_bool2(bank2.raw_sync)) << 6)
+    | (zext(pack_bool2(bank2.debounced)) << 4)
+    | (zext(pack_bool2(bank2.rising)) << 2)
+    | zext(pack_bool2(bank2.falling))
+}

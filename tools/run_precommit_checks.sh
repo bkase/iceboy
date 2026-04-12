@@ -63,6 +63,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/unit/test_joypad_interrupts.py"
     "test/unit/test_serial.py"
     "test/unit/test_st7789_lcd.py"
+    "test/unit/test_button_bank.py"
     "test/unit/test_framebuffer_spram.py"
     "test/unit/test_timer.py"
     "test/unit/test_hw_backend.py"

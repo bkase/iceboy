@@ -1,0 +1,32 @@
+pub struct ButtonBankOut<#uint N> {
+    raw_sync: [bool; N],
+    debounced: [bool; N],
+    rising: [bool; N],
+    falling: [bool; N],
+}
+
+pub extern entity button_bank_raw<#uint N, #uint DEBOUNCE_BITS, #uint O>(
+    CLK: clock,
+    BUTTONS_I: uint<N>,
+ ) -> uint<O>
+    where O: { N * 4 };
+
+pub entity button_bank<#uint N, #uint DEBOUNCE_BITS>(clk: clock, buttons_i: [bool; N]) -> ButtonBankOut<N> {
+    let packed: uint<{ N * 4 }> = inst button_bank_raw::<N, DEBOUNCE_BITS, { N * 4 }>(
+        clk,
+        std::conv::bits_to_uint(buttons_i),
+    );
+    let debounced_and_above: uint<{ N * 3 }> = trunc(packed >> N);
+    let rising_and_falling: uint<{ N * 2 }> = trunc(debounced_and_above >> N);
+    let raw_sync_u: uint<N> = trunc(packed);
+    let debounced_u: uint<N> = trunc(debounced_and_above);
+    let rising_u: uint<N> = trunc(rising_and_falling);
+    let falling_u: uint<N> = trunc(rising_and_falling >> N);
+
+    ButtonBankOut$(
+        raw_sync: std::conv::uint_to_bits(raw_sync_u),
+        debounced: std::conv::uint_to_bits(debounced_u),
+        rising: std::conv::uint_to_bits(rising_u),
+        falling: std::conv::uint_to_bits(falling_u),
+    )
+}
