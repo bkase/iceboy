@@ -47,6 +47,7 @@ pub struct VisibleHardwareSocCoreOut {
     rom_ports: RomBackendPorts,
     cpu_halted: bool,
     scanout: Option<ScanoutEvent>,
+    t_index: uint<2>,
 }
 
 fn preview_cpu_bus_req(cpu: lib::cpu::core::CpuCoreOut, m_ce: bool, fallback_pc: uint<16>) -> BusReq {
@@ -560,6 +561,7 @@ pub entity hardware_soc_core_visible(
         rom_ports: rom_ports,
         cpu_halted: cpu_is_halted(cpu.halt_state),
         scanout: ppu.scanout,
+        t_index: tb.t_index,
     )
 }
 

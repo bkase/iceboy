@@ -802,6 +802,23 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("--joypad-schedule=", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
+    def test_icebreaker_uart_rom_verilator_wrapper_dry_run_targets_uart_upload_runner(self) -> None:
+        completed = self.run_script("run_icebreaker_uart_rom_verilator.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("test/harness/verilog/icebreaker_uart_rom_top_verilator_wrapper.sv", completed.stdout)
+        self.assertIn("tools/verilator/icebreaker_uart_rom_top_main.cpp", completed.stdout)
+        self.assertIn("bench/roms/out/bg_static.gb", completed.stdout)
+        self.assertIn("bench/ref/BG_STATIC.py", completed.stdout)
+        self.assertIn("--rom-path=", completed.stdout)
+        self.assertIn("--rom-prefix-len=1024", completed.stdout)
+        self.assertIn("--captured-png=", completed.stdout)
+        self.assertIn("--reference-png=", completed.stdout)
+        self.assertIn("--diff-png=", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+
     def test_pokered_playback_verilator_wrapper_dry_run_uses_native_restore_runner(self) -> None:
         completed = self.run_script("run_pokered_playback_verilator.sh", "--dry-run", "--skip-build")
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -973,6 +990,15 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((TOOLS / "verilator" / "icebreaker_visible_palette.h").exists())
         self.assertTrue((ROOT / "test" / "harness" / "verilog" / "icebreaker_visible_top_verilator_wrapper.sv").exists())
         self.assertTrue((ROOT / "bench" / "ref" / "BG_STATIC.py").exists())
+
+    def test_icebreaker_uart_rom_assets_exist(self) -> None:
+        hook_text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
+        self.assertIn('"test/unit/test_uart_rom_top_protocol.py"', hook_text)
+        self.assertTrue((TOOLS / "run_icebreaker_uart_rom_verilator.sh").exists())
+        self.assertTrue((TOOLS / "verilator" / "icebreaker_uart_rom_top_main.cpp").exists())
+        self.assertTrue((ROOT / "src" / "board" / "icebreaker_uart_rom_top.spade").exists())
+        self.assertTrue((ROOT / "test" / "harness" / "verilog" / "icebreaker_uart_rom_top_verilator_wrapper.sv").exists())
+        self.assertTrue((ROOT / "test" / "unit" / "test_uart_rom_top_protocol.py").exists())
 
     def test_pack_icebreaker_bitstream_assets_exist(self) -> None:
         self.assertTrue((TOOLS / "pack_icebreaker_bitstream.sh").exists())
@@ -1163,6 +1189,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/unit/test_framebuffer_spram.py"', text)
         self.assertIn('"test/unit/test_hw_backend.py"', text)
         self.assertIn('"test/unit/test_vram_ebr.py"', text)
+        self.assertIn('"test/unit/test_uart_rom_top_protocol.py"', text)
         self.assertIn('"tools/run_joypad_bg_smoke_verilator.sh"', text)
         self.assertIn('"tools/run_icebreaker_alu_loop_verilator.sh"', text)
         self.assertIn('"test/lockstep/test_ei_halt_corners.py"', text)
@@ -1216,7 +1243,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         default_items = re.findall(r'"([^"]+)"', default_body)
         extended_items = re.findall(r'"([^"]+)"', extended_body)
 
-        self.assertLessEqual(len(default_items), 23)
+        self.assertLessEqual(len(default_items), 24)
         self.assertIn("test/harness/test_e2e_smoke.py", default_items)
         self.assertIn("test/unit/test_bus_fabric.py", default_items)
         self.assertIn("test/unit/test_membus.py", default_items)
@@ -1227,6 +1254,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("test/ppu/unit/test_oam_scan.py", default_items)
         self.assertIn("test/unit/test_joypad.py", default_items)
         self.assertIn("test/unit/test_joypad_interrupts.py", default_items)
+        self.assertIn("test/unit/test_uart_rom_top_protocol.py", default_items)
         self.assertIn("test/unit/test_timer.py", default_items)
         self.assertIn("tools/run_ppu_wave_b_mealybug_verilator.sh", default_items)
 

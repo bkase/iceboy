@@ -1,0 +1,265 @@
+use std::option::Option;
+
+use lib::board::clockgen::timebase;
+use lib::board::hardware_soc_core::hardware_soc_core_visible;
+use lib::board::reset_bridge::reset_bridge;
+use lib::mem::phys::rom_backend_types::RomBackendPorts;
+use lib::mem::phys::rom_spram_rw::rom_spram_rw;
+use lib::periph::joypad::JoypButtons;
+use lib::periph::rom_uploader::rom_uploader;
+use lib::periph::st7789_lcd::st7789_lcd;
+use lib::ppu::sem::scanout::ScanoutEvent;
+use lib::video::framebuffer_spram::framebuffer_spram;
+
+fn joypad_buttons_from_inputs(dpad_bits: [bool; 4], dip_bits: [bool; 4]) -> JoypButtons {
+    JoypButtons$(
+        right: dpad_bits[0],
+        left: dpad_bits[1],
+        up: dpad_bits[2],
+        down: dpad_bits[3],
+        a: dip_bits[0],
+        b: dip_bits[1],
+        select: dip_bits[2],
+        start: dip_bits[3],
+    )
+}
+
+fn scanout_when_ready(scanout: Option<ScanoutEvent>, ready: bool) -> Option<ScanoutEvent> {
+    if ready {
+        scanout
+    } else {
+        Option::None
+    }
+}
+
+fn scanout_valid(scanout: Option<ScanoutEvent>) -> bool {
+    match scanout {
+        Option::Some(_) => true,
+        Option::None => false,
+    }
+}
+
+fn scanout_is_frame_start(scanout: Option<ScanoutEvent>) -> bool {
+    match scanout {
+        Option::Some(ScanoutEvent::FrameStart) => true,
+        _ => false,
+    }
+}
+
+fn uart_bit_ticks() -> uint<16> {
+    104u16
+}
+
+fn uart_half_bit_ticks() -> uint<16> {
+    52u16
+}
+
+entity icebreaker_uart_rom_output_stage(
+    clk: clock,
+    rst_i: bool,
+    scanout_i: Option<ScanoutEvent>,
+    cpu_halted_i: bool,
+    tx_i: bool,
+    upload_hold_i: bool,
+    debug_gpio0_i: bool,
+    debug_gpio1_i: bool,
+    TX: inv bool,
+    LEDR_N: inv bool,
+    LEDG_N: inv bool,
+    LCD_SCK: inv bool,
+    LCD_MOSI: inv bool,
+    LCD_CS: inv bool,
+    LCD_DC: inv bool,
+    LCD_RES: inv bool,
+    LCD_BL: inv bool,
+    DEBUG_GPIO0: inv bool,
+    DEBUG_GPIO1: inv bool,
+    DBG_PC0: inv bool,
+    DBG_PC1: inv bool,
+    DBG_PC2: inv bool,
+    DBG_PC3: inv bool,
+    DBG_MCE: inv bool,
+    DBG_PHASE0: inv bool,
+    DBG_PHASE1: inv bool,
+    DBG_PHASE2: inv bool,
+) {
+    decl lcd;
+    let _ = rst_i;
+    let scanout_ready = !upload_hold_i && lcd.init_done;
+
+    let framebuffer = inst framebuffer_spram(clk, false, scanout_when_ready(scanout_i, scanout_ready), lcd.pixel_advance);
+    let lcd = inst st7789_lcd(
+        clk,
+        false,
+        120000u24,
+        120000u24,
+        1440000u24,
+        framebuffer.frame_start,
+        framebuffer.pixel_valid,
+        framebuffer.pixel_shade,
+    );
+    reg(clk) heartbeat_led_reg: bool initial(false) =
+        if framebuffer.frame_start {
+            !heartbeat_led_reg
+        } else {
+            heartbeat_led_reg
+        };
+
+    set TX = tx_i;
+    set LEDR_N = if upload_hold_i { true } else { heartbeat_led_reg };
+    set LEDG_N = if upload_hold_i { false } else { !cpu_halted_i };
+    set LCD_SCK = lcd.lcd_sck;
+    set LCD_MOSI = lcd.lcd_mosi;
+    set LCD_CS = lcd.lcd_cs;
+    set LCD_DC = lcd.lcd_dc;
+    set LCD_RES = lcd.lcd_res;
+    set LCD_BL = if upload_hold_i { false } else { lcd.lcd_bl };
+    set DEBUG_GPIO0 = debug_gpio0_i;
+    set DEBUG_GPIO1 = debug_gpio1_i;
+    set DBG_PC0 = framebuffer.reader_active;
+    set DBG_PC1 = framebuffer.pixel_valid;
+    set DBG_PC2 = lcd.frame_active;
+    set DBG_PC3 = lcd.tx_active;
+    set DBG_MCE = lcd.init_done;
+    set DBG_PHASE0 = lcd.pixel_advance;
+    set DBG_PHASE1 = cpu_halted_i;
+    set DBG_PHASE2 = scanout_is_frame_start(scanout_i);
+}
+
+#[no_mangle(all)]
+entity icebreaker_uart_rom_top(
+    CLK: clock,
+    BTN_N: bool,
+    RX: bool,
+    BTN_D_UP: bool,
+    BTN_D_DOWN: bool,
+    BTN_D_LEFT: bool,
+    BTN_D_RIGHT: bool,
+    DIP_A: bool,
+    DIP_B: bool,
+    DIP_START: bool,
+    DIP_SELECT: bool,
+    TX: inv bool,
+    LEDR_N: inv bool,
+    LEDG_N: inv bool,
+    LCD_SCK: inv bool,
+    LCD_MOSI: inv bool,
+    LCD_CS: inv bool,
+    LCD_DC: inv bool,
+    LCD_RES: inv bool,
+    LCD_BL: inv bool,
+    DEBUG_GPIO0: inv bool,
+    DEBUG_GPIO1: inv bool,
+    DBG_PC0: inv bool,
+    DBG_PC1: inv bool,
+    DBG_PC2: inv bool,
+    DBG_PC3: inv bool,
+    DBG_MCE: inv bool,
+    DBG_PHASE0: inv bool,
+    DBG_PHASE1: inv bool,
+    DBG_PHASE2: inv bool,
+) {
+    let board_rst = inst reset_bridge(CLK, BTN_N, 48000u16, 16u16).rst;
+    let upload_tb = inst timebase(CLK, board_rst);
+    let dpad_buttons = [BTN_D_RIGHT, BTN_D_LEFT, BTN_D_UP, BTN_D_DOWN];
+    let dip_switches = [DIP_A, DIP_B, DIP_SELECT, DIP_START];
+    let joyp_buttons = joypad_buttons_from_inputs(dpad_buttons, dip_switches);
+    let uploader = inst rom_uploader(
+        CLK,
+        board_rst,
+        upload_tb.t_index,
+        RX,
+        uart_bit_ticks(),
+        uart_half_bit_ticks(),
+    );
+    let core_rst = board_rst || uploader.hold_reset;
+
+    decl core;
+    decl rom_backend;
+    let rom_t_index = if uploader.hold_reset { upload_tb.t_index } else { core.t_index };
+    let core = inst hardware_soc_core_visible(
+        CLK,
+        core_rst,
+        joyp_buttons,
+        rom_backend,
+    );
+    let rom_backend = inst rom_spram_rw(
+        CLK,
+        rom_t_index,
+        RomBackendPorts$(
+            cpu_addr: core.rom_ports.cpu_addr,
+            dma_addr: 0u15,
+            loader_write_en: uploader.loader_write_en,
+            loader_write_addr: uploader.loader_write_addr,
+            loader_write_data: uploader.loader_write_data,
+        ),
+    );
+
+    inst icebreaker_uart_rom_output_stage(
+        CLK,
+        core_rst,
+        core.scanout,
+        core.cpu_halted,
+        uploader.tx_o,
+        uploader.hold_reset,
+        uploader.hold_reset,
+        uploader.tx_busy,
+        TX,
+        LEDR_N,
+        LEDG_N,
+        LCD_SCK,
+        LCD_MOSI,
+        LCD_CS,
+        LCD_DC,
+        LCD_RES,
+        LCD_BL,
+        DEBUG_GPIO0,
+        DEBUG_GPIO1,
+        DBG_PC0,
+        DBG_PC1,
+        DBG_PC2,
+        DBG_PC3,
+        DBG_MCE,
+        DBG_PHASE0,
+        DBG_PHASE1,
+        DBG_PHASE2,
+    );
+}
+
+entity icebreaker_uart_rom_protocol_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    t_index_i: uint<2>,
+    rx_i: bool,
+    bit_ticks_i: uint<16>,
+    half_bit_ticks_i: uint<16>,
+    read_addr_i: uint<15>,
+) -> uint<32> {
+    let uploader = inst rom_uploader(
+        clk_i,
+        rst_i,
+        t_index_i,
+        rx_i,
+        bit_ticks_i,
+        half_bit_ticks_i,
+    );
+    let backend = inst rom_spram_rw(
+        clk_i,
+        t_index_i,
+        RomBackendPorts$(
+            cpu_addr: read_addr_i,
+            dma_addr: 0u15,
+            loader_write_en: uploader.loader_write_en,
+            loader_write_addr: uploader.loader_write_addr,
+            loader_write_data: uploader.loader_write_data,
+        ),
+    );
+
+    zext(backend.cpu_data)
+        | (zext(lib::util::bit(uploader.hold_reset)) << 8)
+        | (zext(lib::util::bit(uploader.tx_o)) << 9)
+        | (zext(lib::util::bit(backend.rom_ready)) << 10)
+        | (zext(lib::util::bit(uploader.tx_busy)) << 11)
+        | (zext(uploader.state) << 12)
+        | (zext(uploader.bytes_remaining) << 16)
+}
