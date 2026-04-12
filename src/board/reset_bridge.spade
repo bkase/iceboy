@@ -1,0 +1,88 @@
+pub struct ResetBridgeOut {
+    rst: bool,
+    sync_btn_n: bool,
+    debounced_btn_n: bool,
+    counter: uint<16>,
+}
+
+fn saturating_inc(counter: uint<16>) -> uint<16> {
+    if counter == 0xffffu16 { counter } else { trunc(counter + 1u16) }
+}
+
+fn saturating_add(left: uint<16>, right: uint<16>) -> uint<16> {
+    let wide_sum: uint<17> = zext(left) + zext(right);
+    if wide_sum > 0xffffu17 { 0xffffu16 } else { trunc(wide_sum) }
+}
+
+fn stable_ticks_required(sync_btn_n: bool, debounce_ticks_i: uint<16>, release_hold_ticks_i: uint<16>) -> uint<16> {
+    if sync_btn_n {
+        saturating_add(debounce_ticks_i, release_hold_ticks_i)
+    } else {
+        debounce_ticks_i
+    }
+}
+
+fn transition_ready(counter: uint<16>, required_ticks: uint<16>) -> bool {
+    required_ticks == 0u16 || saturating_inc(counter) >= required_ticks
+}
+
+fn next_debounced_btn_n(
+    sync_btn_n: bool,
+    debounced_btn_n: bool,
+    counter: uint<16>,
+    debounce_ticks_i: uint<16>,
+    release_hold_ticks_i: uint<16>,
+) -> bool {
+    let required_ticks = stable_ticks_required(sync_btn_n, debounce_ticks_i, release_hold_ticks_i);
+    if sync_btn_n == debounced_btn_n {
+        debounced_btn_n
+    } else if transition_ready(counter, required_ticks) {
+        sync_btn_n
+    } else {
+        debounced_btn_n
+    }
+}
+
+fn next_counter(
+    sync_btn_n: bool,
+    debounced_btn_n: bool,
+    counter: uint<16>,
+    debounce_ticks_i: uint<16>,
+    release_hold_ticks_i: uint<16>,
+) -> uint<16> {
+    let required_ticks = stable_ticks_required(sync_btn_n, debounce_ticks_i, release_hold_ticks_i);
+    if sync_btn_n == debounced_btn_n || transition_ready(counter, required_ticks) {
+        0u16
+    } else {
+        saturating_inc(counter)
+    }
+}
+
+pub entity reset_bridge(
+    clk: clock,
+    btn_n_i: bool,
+    debounce_ticks_i: uint<16>,
+    release_hold_ticks_i: uint<16>,
+) -> ResetBridgeOut {
+    // Treat power-on as "button pressed" so reset stays asserted until the
+    // synchronized button input has been stably released for the full window.
+    reg(clk) sync_stage0: bool initial(false) = btn_n_i;
+    reg(clk) sync_stage1: bool initial(false) = sync_stage0;
+    decl debounced_btn_n_reg;
+    decl counter_reg;
+
+    let next_debounced_btn_n_reg =
+        next_debounced_btn_n(sync_stage1, debounced_btn_n_reg, counter_reg, debounce_ticks_i, release_hold_ticks_i);
+    let next_counter_reg = next_counter(sync_stage1, debounced_btn_n_reg, counter_reg, debounce_ticks_i, release_hold_ticks_i);
+
+    reg(clk) debounced_btn_n_reg: bool initial(false) =
+        next_debounced_btn_n_reg;
+    reg(clk) counter_reg: uint<16> initial(0u16) = next_counter_reg;
+
+    ResetBridgeOut$(
+        rst: !debounced_btn_n_reg,
+        sync_btn_n: sync_stage1,
+        debounced_btn_n: debounced_btn_n_reg,
+        counter: counter_reg,
+    )
+}

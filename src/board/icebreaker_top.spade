@@ -1,4 +1,5 @@
 use lib::board::clockgen::timebase;
+use lib::board::reset_bridge::reset_bridge;
 use lib::bus::membus::membus;
 use lib::bus::types::{BusReq, BusResp};
 use lib::cpu::core::cpu_core;
@@ -97,7 +98,7 @@ entity icebreaker_top(
         DIP_START,
         DIP_SELECT,
     );
-    let rst = !BTN_N;
+    let rst = inst reset_bridge(CLK, BTN_N, 48000u16, 16u16).rst;
     inst hardware_core(CLK, rst, LEDR_N, LEDG_N);
     set LCD_SCK = false;
     set LCD_MOSI = false;

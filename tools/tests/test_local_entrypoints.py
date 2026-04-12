@@ -774,6 +774,7 @@ class LocalEntrypointsTest(unittest.TestCase):
     def test_precommit_uses_curated_exact_swim_paths(self) -> None:
         text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
         self.assertIn('"test/unit/test_main.py"', text)
+        self.assertIn('"test/unit/test_reset_bridge.py"', text)
         self.assertIn('"test/unit/test_halt_bug.py"', text)
         self.assertIn('"test/unit/test_bus_fabric.py"', text)
         self.assertIn('"test/unit/test_membus.py"', text)
@@ -881,6 +882,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/ppu/unit/test_oam_dma_mode2.py"', default_body)
         self.assertIn('"test/ppu/unit/test_oam_scan.py"', default_body)
         self.assertIn('"test/unit/test_st7789_lcd.py"', default_body)
+        self.assertIn('"test/unit/test_reset_bridge.py"', default_body)
         self.assertIn('"test/unit/test_framebuffer_spram.py"', default_body)
         self.assertIn('"test/unit/test_hw_backend.py"', default_body)
         self.assertIn('"test/unit/test_vram_ebr.py"', default_body)
@@ -899,6 +901,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertNotIn('"test/ppu/unit/test_oam_dma_mode2.py"', extended_body)
         self.assertNotIn('"test/ppu/unit/test_oam_scan.py"', extended_body)
         self.assertNotIn('"test/unit/test_st7789_lcd.py"', extended_body)
+        self.assertNotIn('"test/unit/test_reset_bridge.py"', extended_body)
         self.assertNotIn('"test/unit/test_framebuffer_spram.py"', extended_body)
         self.assertNotIn('"test/unit/test_hw_backend.py"', extended_body)
         self.assertNotIn('"test/unit/test_vram_ebr.py"', extended_body)

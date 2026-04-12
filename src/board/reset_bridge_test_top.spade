@@ -1,0 +1,15 @@
+use lib::board::reset_bridge::reset_bridge;
+
+pub entity reset_bridge_test_top(
+    clk_i: clock,
+    btn_n_i: bool,
+    debounce_ticks_i: uint<16>,
+    release_hold_ticks_i: uint<16>,
+) -> uint<19> {
+    let bridge = inst reset_bridge(clk_i, btn_n_i, debounce_ticks_i, release_hold_ticks_i);
+
+    zext(lib::util::bit(bridge.rst))
+        | (zext(lib::util::bit(bridge.sync_btn_n)) << 1)
+        | (zext(lib::util::bit(bridge.debounced_btn_n)) << 2)
+        | (zext(bridge.counter) << 3)
+}

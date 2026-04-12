@@ -1,8 +1,13 @@
 # top = board::icebreaker_top::icebreaker_top
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, RisingEdge
+from cocotb.triggers import ClockCycles, ReadOnly
 from spade import SpadeExt
+
+
+BOARD_RESET_DEBOUNCE_TICKS = 48_000
+BOARD_RESET_RELEASE_HOLD_TICKS = 16
+BOARD_RESET_RELEASE_MARGIN_TICKS = 4
 
 
 async def reset_dut(dut):
@@ -23,7 +28,11 @@ async def reset_dut(dut):
     s.i.BTN_N = "false"
     await ClockCycles(dut.CLK, 5)
     s.i.BTN_N = "true"
-    await RisingEdge(dut.CLK)
+    await ClockCycles(
+        dut.CLK,
+        BOARD_RESET_DEBOUNCE_TICKS + BOARD_RESET_RELEASE_HOLD_TICKS + BOARD_RESET_RELEASE_MARGIN_TICKS,
+    )
+    await ReadOnly()
 
 
 @cocotb.test()
@@ -32,7 +41,7 @@ async def test_hardware_top_starts_with_live_cpu_and_leds_on(dut):
 
     assert dut.LEDR_N.value == 1, f"Expected LEDR_N=1 after reset, got {dut.LEDR_N.value}"
     assert dut.LEDG_N.value == 1, f"Expected LEDG_N=1 after reset, got {dut.LEDG_N.value}"
-    assert int(dut.hardware_core_0.timebase_0.sys_counter.value) == 0
+    assert int(dut.hardware_core_0.timebase_0.sys_counter.value) <= BOARD_RESET_RELEASE_MARGIN_TICKS
 
 
 @cocotb.test()

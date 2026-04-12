@@ -6,9 +6,9 @@
     "yosys_stat": "/Users/bkase/Documents/iceboy/build/hw_baseline/synth/yosys-stat.txt"
   },
   "board": "iCEBreaker",
-  "captured_on": "2026-04-08",
+  "captured_on": "2026-04-12",
   "clock_constraint": {
-    "achieved_mhz": 15.17197322845459,
+    "achieved_mhz": 16.783309936523438,
     "clock_name": "CLK$SB_IO_IN_$glb_clk",
     "constraint_mhz": 12.00004768371582,
     "target_mhz": 12.0,
@@ -37,17 +37,17 @@
   },
   "top": "board::icebreaker_top::icebreaker_top",
   "utilization": {
-    "carry_used": 494,
+    "carry_used": 479,
     "dff_available": 1024,
-    "dff_used": 359,
+    "dff_used": 378,
     "ebr_available": 30,
     "ebr_used": 3,
     "fits_up5k_dff": true,
     "fits_up5k_lut4": true,
     "logic_cells_available": 5280,
-    "logic_cells_used": 4165,
+    "logic_cells_used": 4005,
     "lut4_available": 5280,
-    "lut4_used": 3796,
+    "lut4_used": 3664,
     "spram_available": 4,
     "spram_used": 2
   }

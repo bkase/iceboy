@@ -26,6 +26,7 @@ SKIP_PYTHON_MODULES=(
 PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/harness/test_e2e_smoke.py"
     "test/unit/test_main.py"
+    "test/unit/test_reset_bridge.py"
     "test/unit/test_alu.py"
     "test/unit/test_decode.py"
     "test/unit/test_decode_cb.py"
