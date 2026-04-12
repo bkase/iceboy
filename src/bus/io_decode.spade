@@ -1,0 +1,78 @@
+use lib::bus::address_decode::region_is_cpu_writable;
+use lib::bus::types::{BusRegion, BusReq};
+use lib::cpu::types::MemoryBehaviorProfile;
+
+pub fn blocked_read_data(memory_behavior_profile: MemoryBehaviorProfile) -> uint<8> {
+    // Keep the semantic split so future DMG-specific bus behavior can diverge here.
+    let _ = memory_behavior_profile;
+    0xffu8
+}
+
+pub fn not_usable_read_data(memory_behavior_profile: MemoryBehaviorProfile) -> uint<8> {
+    // Keep the semantic split so future DMG-specific "not usable" reads can diverge.
+    let _ = memory_behavior_profile;
+    0xffu8
+}
+
+pub fn cpu_write_allowed(
+    region: BusRegion,
+    blocked: bool,
+    memory_behavior_profile: MemoryBehaviorProfile,
+) -> bool {
+    let _ = memory_behavior_profile;
+    !blocked && region_is_cpu_writable(region)
+}
+
+pub fn wram_write(region: BusRegion, req: BusReq) -> (bool, uint<13>, uint<8>) {
+    match req {
+        BusReq::Write$(addr: addr, data: data) => match region {
+            BusRegion::Wram => (true, trunc(addr - 0xc000u16), data),
+            BusRegion::Echo => (true, trunc(addr - 0xe000u16), data),
+            _ => (false, 0u13, 0u8),
+        },
+        _ => (false, 0u13, 0u8),
+    }
+}
+
+pub fn hram_write(region: BusRegion, req: BusReq) -> (bool, uint<7>, uint<8>) {
+    match req {
+        BusReq::Write$(addr: addr, data: data) => match region {
+            BusRegion::Hram => (true, trunc(addr - 0xff80u16), data),
+            _ => (false, 0u7, 0u8),
+        },
+        _ => (false, 0u7, 0u8),
+    }
+}
+
+pub fn oam_write(region: BusRegion, req: BusReq) -> (bool, uint<8>, uint<8>) {
+    match req {
+        BusReq::Write$(addr: addr, data: data) => match region {
+            BusRegion::Oam => (true, trunc(addr - 0xfe00u16), data),
+            _ => (false, 0u8, 0u8),
+        },
+        _ => (false, 0u8, 0u8),
+    }
+}
+
+pub fn dma_start(req: BusReq) -> (bool, uint<8>) {
+    match req {
+        BusReq::Write$(addr: addr, data: data) => {
+            if addr == 0xff46u16 {
+                (true, data)
+            } else {
+                (false, 0u8)
+            }
+        },
+        _ => (false, 0u8),
+    }
+}
+
+pub fn dma_read_data(region: BusRegion, rom_data: uint<8>, wram_data: uint<8>, hram_data: uint<8>) -> uint<8> {
+    match region {
+        BusRegion::Rom => rom_data,
+        BusRegion::Wram => wram_data,
+        BusRegion::Echo => wram_data,
+        BusRegion::Hram => hram_data,
+        _ => 0xffu8,
+    }
+}

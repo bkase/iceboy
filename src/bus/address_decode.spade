@@ -1,0 +1,102 @@
+use lib::bus::types::{BusOwner, BusRegion, BusReq};
+
+pub fn decode_region(addr: uint<16>) -> BusRegion {
+    if addr <= 0x7fffu16 {
+        BusRegion::Rom
+    } else if addr <= 0x9fffu16 {
+        BusRegion::Vram
+    } else if addr <= 0xbfffu16 {
+        BusRegion::CartRam
+    } else if addr <= 0xdfffu16 {
+        BusRegion::Wram
+    } else if addr <= 0xfdffu16 {
+        BusRegion::Echo
+    } else if addr <= 0xfe9fu16 {
+        BusRegion::Oam
+    } else if addr <= 0xfeffu16 {
+        BusRegion::NotUsable
+    } else if addr <= 0xff7fu16 {
+        BusRegion::Io
+    } else if addr <= 0xfffeu16 {
+        BusRegion::Hram
+    } else {
+        BusRegion::Ie
+    }
+}
+
+pub fn req_addr(req: BusReq) -> uint<16> {
+    match req {
+        BusReq::Idle => 0u16,
+        BusReq::Read$(addr: addr) => addr,
+        BusReq::Write$(addr: addr, data: _) => addr,
+    }
+}
+
+pub fn req_owner(req: BusReq) -> BusOwner {
+    match req {
+        BusReq::Idle => BusOwner::Idle,
+        _ => BusOwner::Cpu,
+    }
+}
+
+pub fn region_is_cpu_writable(region: BusRegion) -> bool {
+    match region {
+        BusRegion::Wram => true,
+        BusRegion::Echo => true,
+        BusRegion::Oam => true,
+        BusRegion::Hram => true,
+        _ => false,
+    }
+}
+
+fn owner_is_cpu(owner: BusOwner) -> bool {
+    match owner {
+        BusOwner::Cpu => true,
+        _ => false,
+    }
+}
+
+pub fn region_owner(region: BusRegion, oam_dma_active: bool, ppu_vram_active: bool, ppu_oam_active: bool) -> BusOwner {
+    if oam_dma_active
+        && !match region {
+            BusRegion::Hram => true,
+            _ => false,
+        } {
+        BusOwner::OamDma
+    } else if ppu_vram_active && match region {
+        BusRegion::Vram => true,
+        _ => false,
+    } {
+        BusOwner::Ppu
+    } else if ppu_oam_active && match region {
+        BusRegion::Oam => true,
+        _ => false,
+    } {
+        BusOwner::Ppu
+    } else {
+        BusOwner::Cpu
+    }
+}
+
+pub fn blocked_req(req: BusReq, owner: BusOwner) -> bool {
+    match req {
+        BusReq::Idle => false,
+        _ => !owner_is_cpu(owner),
+    }
+}
+
+pub fn is_vram_addr(addr: uint<16>) -> bool {
+    addr >= 0x8000u16 && addr <= 0x9fffu16
+}
+
+pub fn is_oam_addr(addr: uint<16>) -> bool {
+    addr >= 0xfe00u16 && addr <= 0xfe9fu16
+}
+
+pub fn is_wram_addr(addr: uint<16>) -> bool {
+    addr >= 0xc000u16 && addr <= 0xdfffu16
+}
+
+pub fn is_hram_addr(addr: uint<16>) -> bool {
+    addr >= 0xff80u16 && addr <= 0xfffeu16
+}

@@ -1,3 +1,5 @@
+use lib::bus::address_decode::{blocked_req, decode_region, region_owner, req_addr};
+use lib::bus::io_decode::{blocked_read_data, cpu_write_allowed, dma_read_data, dma_start, hram_write, not_usable_read_data, oam_write, wram_write};
 use lib::bus::types::{BusObs, BusOwner, BusRegion, BusReq, BusResp, idle_bus_obs, idle_bus_resp};
 use lib::cpu::types::MemoryBehaviorProfile;
 use lib::mem::logical::map::{hram_addr, oam_addr, rom_addr, wram_addr};
@@ -7,114 +9,8 @@ use lib::mem::phys::spram::{rom_image_spram, wram_spram};
 use lib::periph::joypad::{JoypButtons, joypad};
 use lib::periph::oam_dma::oam_dma;
 
-fn decode_region(addr: uint<16>) -> BusRegion {
-    if addr <= 0x7fffu16 {
-        BusRegion::Rom
-    } else if addr <= 0x9fffu16 {
-        BusRegion::Vram
-    } else if addr <= 0xbfffu16 {
-        BusRegion::CartRam
-    } else if addr <= 0xdfffu16 {
-        BusRegion::Wram
-    } else if addr <= 0xfdffu16 {
-        BusRegion::Echo
-    } else if addr <= 0xfe9fu16 {
-        BusRegion::Oam
-    } else if addr <= 0xfeffu16 {
-        BusRegion::NotUsable
-    } else if addr <= 0xff7fu16 {
-        BusRegion::Io
-    } else if addr <= 0xfffeu16 {
-        BusRegion::Hram
-    } else {
-        BusRegion::Ie
-    }
-}
-
 fn active_req(rst: bool, m_ce: bool, req: BusReq) -> BusReq {
     if rst || !m_ce { BusReq::Idle } else { req }
-}
-
-fn req_addr(req: BusReq) -> uint<16> {
-    match req {
-        BusReq::Idle => 0u16,
-        BusReq::Read$(addr: addr) => addr,
-        BusReq::Write$(addr: addr, data: _) => addr,
-    }
-}
-
-fn req_owner(req: BusReq) -> BusOwner {
-    match req {
-        BusReq::Idle => BusOwner::Idle,
-        _ => BusOwner::Cpu,
-    }
-}
-
-fn region_is_cpu_writable(region: BusRegion) -> bool {
-    match region {
-        BusRegion::Wram => true,
-        BusRegion::Echo => true,
-        BusRegion::Oam => true,
-        BusRegion::Hram => true,
-        _ => false,
-    }
-}
-
-fn owner_is_cpu(owner: BusOwner) -> bool {
-    match owner {
-        BusOwner::Cpu => true,
-        _ => false,
-    }
-}
-
-fn region_owner(region: BusRegion, oam_dma_active: bool, ppu_vram_active: bool, ppu_oam_active: bool) -> BusOwner {
-    if oam_dma_active
-        && !match region {
-            BusRegion::Hram => true,
-            _ => false,
-        } {
-        BusOwner::OamDma
-    } else if ppu_vram_active && match region {
-        BusRegion::Vram => true,
-        _ => false,
-    } {
-        BusOwner::Ppu
-    } else if ppu_oam_active && match region {
-        BusRegion::Oam => true,
-        _ => false,
-    } {
-        BusOwner::Ppu
-    } else {
-        BusOwner::Cpu
-    }
-}
-
-fn blocked_req(req: BusReq, owner: BusOwner) -> bool {
-    match req {
-        BusReq::Idle => false,
-        _ => !owner_is_cpu(owner),
-    }
-}
-
-fn blocked_read_data(memory_behavior_profile: MemoryBehaviorProfile) -> uint<8> {
-    // Keep the semantic split so future DMG-specific bus behavior can diverge here.
-    let _ = memory_behavior_profile;
-    0xffu8
-}
-
-fn not_usable_read_data(memory_behavior_profile: MemoryBehaviorProfile) -> uint<8> {
-    // Keep the semantic split so future DMG-specific "not usable" reads can diverge.
-    let _ = memory_behavior_profile;
-    0xffu8
-}
-
-fn cpu_write_allowed(
-    region: BusRegion,
-    blocked: bool,
-    memory_behavior_profile: MemoryBehaviorProfile,
-) -> bool {
-    let _ = memory_behavior_profile;
-    !blocked && region_is_cpu_writable(region)
 }
 
 pub fn observe_req(
@@ -131,60 +27,6 @@ pub fn observe_req(
     match req {
         BusReq::Idle => idle_bus_obs(),
         _ => BusObs$(region: region, blocked: blocked_req(req, owner), owner: owner),
-    }
-}
-
-fn wram_write(region: BusRegion, req: BusReq) -> (bool, uint<13>, uint<8>) {
-    match req {
-        BusReq::Write$(addr: addr, data: data) => match region {
-            BusRegion::Wram => (true, trunc(addr - 0xc000u16), data),
-            BusRegion::Echo => (true, trunc(addr - 0xe000u16), data),
-            _ => (false, 0u13, 0u8),
-        },
-        _ => (false, 0u13, 0u8),
-    }
-}
-
-fn hram_write(region: BusRegion, req: BusReq) -> (bool, uint<7>, uint<8>) {
-    match req {
-        BusReq::Write$(addr: addr, data: data) => match region {
-            BusRegion::Hram => (true, trunc(addr - 0xff80u16), data),
-            _ => (false, 0u7, 0u8),
-        },
-        _ => (false, 0u7, 0u8),
-    }
-}
-
-fn oam_write(region: BusRegion, req: BusReq) -> (bool, uint<8>, uint<8>) {
-    match req {
-        BusReq::Write$(addr: addr, data: data) => match region {
-            BusRegion::Oam => (true, trunc(addr - 0xfe00u16), data),
-            _ => (false, 0u8, 0u8),
-        },
-        _ => (false, 0u8, 0u8),
-    }
-}
-
-fn dma_start(req: BusReq) -> (bool, uint<8>) {
-    match req {
-        BusReq::Write$(addr: addr, data: data) => {
-            if addr == 0xff46u16 {
-                (true, data)
-            } else {
-                (false, 0u8)
-            }
-        },
-        _ => (false, 0u8),
-    }
-}
-
-fn dma_read_data(region: BusRegion, rom_data: uint<8>, wram_data: uint<8>, hram_data: uint<8>) -> uint<8> {
-    match region {
-        BusRegion::Rom => rom_data,
-        BusRegion::Wram => wram_data,
-        BusRegion::Echo => wram_data,
-        BusRegion::Hram => hram_data,
-        _ => 0xffu8,
     }
 }
 
