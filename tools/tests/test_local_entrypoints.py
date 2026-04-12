@@ -130,12 +130,37 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
         self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
+        self.assertIn("module icebreaker_top", completed.stdout)
         self.assertIn("src/board/icebreaker_top.spade", completed.stdout)
         self.assertIn("build/hw_verify/hardware.json", completed.stdout)
         self.assertIn("build/hw_verify/yosys-stat.txt", completed.stdout)
         self.assertIn("LUT4/DFF/SPRAM/EBR", completed.stdout)
         self.assertIn("CommitTrace", completed.stdout)
         self.assertIn("BusObs", completed.stdout)
+
+    def test_verify_icebreaker_variant_dry_run_supports_explicit_variant_contract(self) -> None:
+        completed = self.run_script(
+            "verify_icebreaker_variant.sh",
+            "--dry-run",
+            "--skip-build",
+            "--top",
+            "board::dummy_top::dummy_top",
+            "--module",
+            "dummy_top",
+            "--board-top",
+            "src/board/dummy_top.spade",
+            "--out-dir",
+            "build/hw_verify_dummy",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
+        self.assertIn("top board::dummy_top::dummy_top", completed.stdout)
+        self.assertIn("module dummy_top", completed.stdout)
+        self.assertIn("src/board/dummy_top.spade", completed.stdout)
+        self.assertIn("build/hw_verify_dummy/hardware.json", completed.stdout)
+        self.assertIn("build/hw_verify_dummy/yosys-stat.txt", completed.stdout)
+        self.assertIn("synth_ice40 -top dummy_top", completed.stdout)
 
     def test_hardware_baseline_dry_run_emits_synth_and_pnr_steps(self) -> None:
         completed = self.run_script("run_hardware_baseline.sh", "--dry-run")
@@ -145,6 +170,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
         self.assertIn("[tool] nextpnr-ice40: nextpnr-0.10-15-g77ccf518", completed.stdout)
         self.assertIn("DRY RUN: /", completed.stdout)
+        self.assertIn("module icebreaker_top", completed.stdout)
         self.assertIn("read_verilog -sv", completed.stdout)
         self.assertIn("synth_ice40 -top icebreaker_top", completed.stdout)
         self.assertIn("--freq 12", completed.stdout)
@@ -167,13 +193,49 @@ class LocalEntrypointsTest(unittest.TestCase):
     def test_build_icebreaker_variant_dry_run_supports_alternate_top(self) -> None:
         completed = self.run_script("build_icebreaker_variant.sh", "--dry-run", "--skip-build", "--top", "dummy_top")
         self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
         self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
         self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
+        self.assertIn("[tool] nextpnr-ice40: nextpnr-0.10-15-g77ccf518", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
         self.assertIn("top dummy_top", completed.stdout)
-        self.assertIn("build/variants/dummy_top/dummy_top.json", completed.stdout)
-        self.assertIn("build/variants/dummy_top/yosys-stat.txt", completed.stdout)
+        self.assertIn("module dummy_top", completed.stdout)
+        self.assertIn("src/board/dummy_top.spade", completed.stdout)
+        self.assertIn("build/variants/dummy_top/synth/dummy_top.json", completed.stdout)
+        self.assertIn("build/variants/dummy_top/synth/yosys-stat.txt", completed.stdout)
+        self.assertIn("build/variants/dummy_top/dummy_top.asc", completed.stdout)
         self.assertIn("synth_ice40 -top dummy_top", completed.stdout)
+
+    def test_build_icebreaker_variant_dry_run_accepts_explicit_module_and_baseline_outputs(self) -> None:
+        completed = self.run_script(
+            "build_icebreaker_variant.sh",
+            "--dry-run",
+            "--skip-build",
+            "--skip-synth",
+            "--top",
+            "board::icebreaker_top::icebreaker_top",
+            "--module",
+            "icebreaker_top",
+            "--board-top",
+            "src/board/icebreaker_top.spade",
+            "--out-dir",
+            "build/hw_baseline",
+            "--record-json",
+            "docs/hardware/icebreaker_up5k_baseline.json",
+            "--synth-dir",
+            "build/hw_baseline/synth",
+            "--netlist-name",
+            "hardware.json",
+            "--asc-name",
+            "icebreaker.asc",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("skip yosys synth", completed.stdout)
+        self.assertIn("top board::icebreaker_top::icebreaker_top", completed.stdout)
+        self.assertIn("module icebreaker_top", completed.stdout)
+        self.assertIn("build/hw_baseline/synth/hardware.json", completed.stdout)
+        self.assertIn("build/hw_baseline/icebreaker.asc", completed.stdout)
+        self.assertIn("docs/hardware/icebreaker_up5k_baseline.json", completed.stdout)
 
     def test_build_icebreaker_variant_requires_explicit_top(self) -> None:
         completed = self.run_script("build_icebreaker_variant.sh", "--dry-run")
@@ -190,6 +252,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("entity dummy_top", dummy_top)
         self.assertIn("swim.toml", doc_text)
         self.assertIn("tools/build_icebreaker_variant.sh --top dummy_top", doc_text)
+        self.assertIn("verify_icebreaker_variant.sh", doc_text)
         self.assertIn("synth_ice40 -top <name>", doc_text)
 
     def test_firstlight_pinout_is_frozen_in_pcf_doc_and_baseline_top(self) -> None:

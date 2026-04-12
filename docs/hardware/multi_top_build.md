@@ -17,7 +17,10 @@ That means multi-top emission is free. The shared Spade-to-Verilog step stays fi
 Build the canonical hardware top without editing `swim.toml`:
 
 ```bash
-tools/build_icebreaker_variant.sh --top icebreaker_top
+tools/build_icebreaker_variant.sh \
+  --top board::icebreaker_top::icebreaker_top \
+  --module icebreaker_top \
+  --board-top src/board/icebreaker_top.spade
 ```
 
 Build the regression probe top from the same source tree and the same `build/spade.sv` flow:
@@ -27,6 +30,16 @@ tools/build_icebreaker_variant.sh --top dummy_top
 ```
 
 Both commands share the same front-end build. The helper runs `swim build` once, then asks Yosys to synthesize the requested top from the generated `build/spade.sv`.
+
+The verification flow uses the same variant contract, but stops after synthesis and resource checks:
+
+```bash
+tools/verify_icebreaker_variant.sh \
+  --top board::icebreaker_top::icebreaker_top \
+  --module icebreaker_top \
+  --board-top src/board/icebreaker_top.spade \
+  --enforce-budget
+```
 
 ## Follow-on rule
 
