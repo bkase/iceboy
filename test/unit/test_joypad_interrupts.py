@@ -59,11 +59,11 @@ async def test_selected_button_press_sets_joypad_if_and_pending(dut):
     assert snapshot["iflags"] == 0xE0
     assert snapshot["pending"] == 0x00
 
-    snapshot = await step(dut, write_addr=P1_ADDR, write_data=0x20, buttons=0)
-    assert snapshot["p1"] == 0xEF
+    snapshot = await step(dut, write_addr=P1_ADDR, write_data=0x10, buttons=0)
+    assert snapshot["p1"] == 0xDF
 
     snapshot = await step(dut, buttons=BUTTON_A)
-    assert snapshot["p1"] == 0xEE
+    assert snapshot["p1"] == 0xDE
     assert snapshot["iflags"] == 0xE0
     assert snapshot["pending"] == 0x00
 

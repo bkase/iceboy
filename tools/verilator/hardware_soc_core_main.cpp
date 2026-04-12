@@ -18,6 +18,8 @@ struct Config {
     std::string expected_raw_path;
     std::string frame_capture_path;
     std::string trace_path;
+    std::string joypad_schedule_path;
+    std::string rom_id = "bg_static";
     uint64_t max_cycles = 4'000'000ULL;
     uint64_t progress_interval = 0ULL;
     uint64_t completed_frames = 3ULL;
@@ -34,7 +36,8 @@ struct Observation {
     bool rom_ready = false;
     bool m_ce = false;
     uint8_t t_index = 0;
-    uint8_t pc_low4 = 0;
+    uint16_t pc = 0;
+    uint8_t phase_bits = 0;
 };
 
 uint64_t extract_bits(const Vhardware_soc_core_verilator_wrapper& top, int lsb, int width) {
@@ -57,7 +60,8 @@ Observation observe(const Vhardware_soc_core_verilator_wrapper& top) {
     obs.rom_ready = extract_bits(top, 32, 1) != 0;
     obs.m_ce = extract_bits(top, 33, 1) != 0;
     obs.t_index = static_cast<uint8_t>(extract_bits(top, 34, 2));
-    obs.pc_low4 = static_cast<uint8_t>(extract_bits(top, 36, 4));
+    obs.pc = static_cast<uint16_t>(extract_bits(top, 36, 16));
+    obs.phase_bits = static_cast<uint8_t>(extract_bits(top, 52, 3));
     return obs;
 }
 
@@ -71,6 +75,10 @@ Config parse_args(int argc, char** argv) {
             cfg.frame_capture_path = arg.substr(sizeof("--frame-capture=") - 1);
         } else if (arg.rfind("--trace=", 0) == 0) {
             cfg.trace_path = arg.substr(sizeof("--trace=") - 1);
+        } else if (arg.rfind("--joypad-schedule=", 0) == 0) {
+            cfg.joypad_schedule_path = arg.substr(sizeof("--joypad-schedule=") - 1);
+        } else if (arg.rfind("--rom-id=", 0) == 0) {
+            cfg.rom_id = arg.substr(sizeof("--rom-id=") - 1);
         } else if (arg.rfind("--max-cycles=", 0) == 0) {
             cfg.max_cycles = std::stoull(arg.substr(sizeof("--max-cycles=") - 1));
         } else if (arg.rfind("--progress-interval=", 0) == 0) {
@@ -84,7 +92,27 @@ Config parse_args(int argc, char** argv) {
     if (cfg.expected_raw_path.empty()) {
         throw std::runtime_error("--expected-raw is required");
     }
+    if (cfg.rom_id != "bg_static" && cfg.rom_id != "joypad_bg_smoke") {
+        throw std::runtime_error("unsupported --rom-id: " + cfg.rom_id);
+    }
     return cfg;
+}
+
+std::vector<uint8_t> load_joypad_schedule(const std::string& path) {
+    std::ifstream schedule_stream(path);
+    if (!schedule_stream) {
+        throw std::runtime_error("failed to open joypad schedule: " + path);
+    }
+    std::vector<uint8_t> schedule;
+    std::string token;
+    while (schedule_stream >> token) {
+        const unsigned long raw = std::stoul(token, nullptr, 0);
+        if (raw > 0xFFUL) {
+            throw std::runtime_error("joypad schedule entry exceeds 8 bits: " + token);
+        }
+        schedule.push_back(static_cast<uint8_t>(raw));
+    }
+    return schedule;
 }
 
 std::vector<uint8_t> read_exact_file(const std::string& path, size_t expected_size) {
@@ -112,13 +140,13 @@ void write_file(const std::string& path, const std::vector<uint8_t>& data) {
 uint8_t dmg_shade_value(uint8_t shade) {
     switch (shade & 0x3U) {
         case 0:
-            return 0x00U;
-        case 1:
-            return 0x55U;
-        case 2:
-            return 0xAAU;
-        default:
             return 0xFFU;
+        case 1:
+            return 0xAAU;
+        case 2:
+            return 0x55U;
+        default:
+            return 0x00U;
     }
 }
 
@@ -136,6 +164,8 @@ void clock_cycle(Vhardware_soc_core_verilator_wrapper& top) {
 void reset_dut(Vhardware_soc_core_verilator_wrapper& top) {
     top.clk_i = 0;
     top.rst_i = 1;
+    top.rom_select_i = 0;
+    top.joypad_buttons_i = 0;
     for (int index = 0; index < 8; ++index) {
         clock_cycle(top);
     }
@@ -153,7 +183,11 @@ void maybe_trace(std::ofstream* trace, uint64_t cycle, const Observation& obs) {
              << ",\"shade\":" << static_cast<unsigned>(obs.shade)
              << ",\"ly\":" << static_cast<unsigned>(obs.ly)
              << ",\"mode\":" << static_cast<unsigned>(obs.mode)
+             << ",\"rom_ready\":" << (obs.rom_ready ? "true" : "false")
              << ",\"m_ce\":" << (obs.m_ce ? "true" : "false")
+             << ",\"t_index\":" << static_cast<unsigned>(obs.t_index)
+             << ",\"pc\":" << static_cast<unsigned>(obs.pc)
+             << ",\"phase_bits\":" << static_cast<unsigned>(obs.phase_bits)
              << "}\n";
 }
 
@@ -165,6 +199,8 @@ int main(int argc, char** argv) {
     try {
         const Config cfg = parse_args(argc, argv);
         const std::vector<uint8_t> expected = read_exact_file(cfg.expected_raw_path, kFramePixels);
+        const std::vector<uint8_t> joypad_schedule =
+            cfg.joypad_schedule_path.empty() ? std::vector<uint8_t>() : load_joypad_schedule(cfg.joypad_schedule_path);
         std::ofstream trace_stream;
         std::ofstream* trace = nullptr;
         if (!cfg.trace_path.empty()) {
@@ -177,6 +213,8 @@ int main(int argc, char** argv) {
 
         Vhardware_soc_core_verilator_wrapper top;
         reset_dut(top);
+        top.rom_select_i = cfg.rom_id == "joypad_bg_smoke" ? 1 : 0;
+        top.joypad_buttons_i = joypad_schedule.empty() ? 0 : joypad_schedule[0];
 
         std::vector<uint8_t> current_frame(kFramePixels, 0xFFU);
         std::vector<uint8_t> completed_frame(kFramePixels, 0xFFU);
@@ -244,6 +282,11 @@ int main(int argc, char** argv) {
                 }
                 std::fill(current_frame.begin(), current_frame.end(), 0xFFU);
                 pixels_in_current_frame = 0;
+                if (saw_frame_start && !joypad_schedule.empty()) {
+                    const uint8_t next_buttons =
+                        completed_frames < joypad_schedule.size() ? joypad_schedule[completed_frames] : 0U;
+                    top.joypad_buttons_i = next_buttons;
+                }
                 saw_frame_start = true;
                 continue;
             }

@@ -1,6 +1,7 @@
 pub mod core;
 pub mod core_debug_synth_top;
 pub mod core_hw;
+pub mod core_hw_bg_window;
 pub mod core_hw_synth_top;
 pub mod core_test_top;
 pub mod fifo;
@@ -21,6 +22,7 @@ pub mod obj_fetch_test_top;
 pub mod oam_scan;
 pub mod oam_scan_test_top;
 pub mod regs;
+pub mod regs_bg_window_test_top;
 pub mod scanout_test_top;
 pub mod tile;
 pub mod tile_test_top;

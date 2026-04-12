@@ -62,14 +62,14 @@ __checkpoint_poll:
     jp __pass
 
 WaitFrameBoundary:
-.wait_vblank:
-    ld a, [rLY]
-    cp 144
-    jr c, .wait_vblank
 .wait_visible:
     ld a, [rLY]
     cp 144
     jr nc, .wait_visible
+.wait_vblank:
+    ld a, [rLY]
+    cp 144
+    jr c, .wait_vblank
     ret
 
 SampleInputs:

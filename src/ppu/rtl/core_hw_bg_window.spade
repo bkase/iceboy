@@ -1,0 +1,106 @@
+use std::option::Option;
+
+use lib::ppu::sem::events::{DotInput, OamDmaState, TimedPpuEvent};
+use lib::ppu::sem::memory::PpuMemResp;
+use lib::ppu::sem::observe::{PpuMemReqs, PpuMmioResp};
+use lib::ppu::sem::scanout::ScanoutEvent;
+use lib::ppu::sem::step::{held_dot_output, step_dot_bg_window};
+use lib::ppu::sem::types::{
+    LcdRunState,
+    Lcdc,
+    PpuIrqReq,
+    PpuMode,
+    PpuPhase,
+    PpuRegs,
+    PpuSamplingState,
+    PpuState,
+    PpuStatusState,
+    PpuVisibleState,
+    StatSelect,
+    initial_ppu_render_state,
+    initial_stat_irq_state,
+    visible_mode,
+};
+
+pub struct PpuCoreHwBgWindowOut {
+    regs: PpuRegs,
+    status: PpuStatusState,
+    ly: uint<8>,
+    mode: PpuMode,
+    mmio_resp: PpuMmioResp,
+    mem_reqs: PpuMemReqs,
+    irq_req: PpuIrqReq,
+    scanout: Option<ScanoutEvent>,
+}
+
+fn dmg_skipboot_regs_bg_window() -> PpuRegs {
+    PpuRegs$(
+        lcdc: Lcdc$(
+            lcd_enable: true,
+            win_map_hi: false,
+            win_enable: false,
+            bgwin_data_hi: true,
+            bg_map_hi: false,
+            obj_size_8x16: false,
+            obj_enable: false,
+            bg_enable: true,
+        ),
+        stat_sel: StatSelect$(lyc_sel: false, mode2_sel: false, mode1_sel: false, mode0_sel: false),
+        scy: 0u8,
+        scx: 0u8,
+        lyc: 0u8,
+        wy: 0u8,
+        wx: 0u8,
+        bgp: 0xfcu8,
+        obp0: 0xffu8,
+        obp1: 0xffu8,
+    )
+}
+
+fn dmg_skipboot_state_bg_window() -> PpuState {
+    PpuState$(
+        visible: PpuVisibleState$(regs: dmg_skipboot_regs_bg_window(), ly: 0u8),
+        status: PpuStatusState$(
+            run: LcdRunState::Running,
+            phase: PpuPhase::OamScan$(index: 0u6, found: 0u4),
+            stat_irq: initial_stat_irq_state(),
+            lyc_match_flag: true,
+        ),
+        sampled: PpuSamplingState$(
+            scx_low3_line: 0u3,
+            wy_triggered_this_frame: false,
+            window_enable_at_mode2_start: false,
+        ),
+        render: initial_ppu_render_state(),
+    )
+}
+
+pub entity ppu_core_hw_bg_window(
+    clk: clock,
+    rst: bool,
+    dot_ce: bool,
+    bus_events: [TimedPpuEvent; 4],
+    bus_event_count: uint<4>,
+    mem_resp: PpuMemResp,
+    dma_state: OamDmaState,
+) -> PpuCoreHwBgWindowOut {
+    decl state_reg;
+    let step = step_dot_bg_window(
+        state_reg,
+        DotInput$(bus_events: bus_events, bus_event_count: bus_event_count, mem_resp: mem_resp, dma_state: dma_state),
+    );
+    let visible = held_dot_output(state_reg, dot_ce, step);
+    let visible_state = visible.next_state;
+    reg(clk) state_reg: PpuState reset(rst: dmg_skipboot_state_bg_window()) = visible_state;
+
+    PpuCoreHwBgWindowOut$(
+        regs: visible_state.visible.regs,
+        status: visible_state.status,
+        ly: visible_state.visible.ly,
+        mode: visible_mode(visible_state.status),
+        mmio_resp: visible.mmio_resp,
+        mem_reqs: visible.mem_reqs,
+        irq_req: visible.irq_req,
+        scanout: visible.scanout,
+    )
+}

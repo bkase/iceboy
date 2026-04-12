@@ -65,3 +65,17 @@ async def test_hram_boundary_and_neighbor_reads_stay_isolated(dut):
 
     assert neighbors == {"cpu_data": 0x00, "dma_data": 0x00}
     assert boundary == {"cpu_data": 0x11, "dma_data": 0x44}
+
+
+@cocotb.test()
+async def test_hram_stack_like_adjacent_bytes_survive_back_to_back_reads(dut):
+    await start_clock(dut)
+
+    await step(dut, write_en=True, write_addr=0x7D, write_data=0x01)
+    await step(dut, write_en=True, write_addr=0x7C, write_data=0x58)
+
+    high = await step(dut, cpu_addr=0x7D, dma_addr=0x7C)
+    low = await step(dut, cpu_addr=0x7C, dma_addr=0x7D)
+
+    assert high == {"cpu_data": 0x01, "dma_data": 0x58}
+    assert low == {"cpu_data": 0x58, "dma_data": 0x01}

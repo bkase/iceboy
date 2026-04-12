@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
 from bench.actions.generators import SeededEventScript
 
 
-BUTTON_BIT_ORDER = tuple(reversed(("up", "down", "left", "right", "a", "b", "start", "select")))
+BUTTON_BIT_ORDER = ("right", "left", "up", "down", "a", "b", "select", "start")
 
 
 def encode_joypad_buttons(buttons: object) -> int:

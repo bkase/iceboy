@@ -209,7 +209,7 @@ async def test_ff00_is_joypad_register_not_generic_ff_io(dut):
     dut.m_ce_i_i.value = 1
     dut.req_kind_i_i.value = REQ_WRITE
     dut.addr_i_i.value = 0xFF00
-    dut.data_i_i.value = 0x20
+    dut.data_i_i.value = 0x10
     dut.buttons_i_i.value = 0x10
     dut.memory_behavior_profile_i_i.value = PROFILE_DMG_CONSERVATIVE
     dut.oam_dma_active_i_i.value = 0
@@ -222,7 +222,7 @@ async def test_ff00_is_joypad_register_not_generic_ff_io(dut):
     await RisingEdge(dut.clk_i)
     await Timer(1, units="ns")
     action = decode_output(int(dut.output__.value))
-    assert action["data"] == 0xEE
+    assert action["data"] == 0xDE
     assert action["region"] == REGION_IO
 
 

@@ -107,6 +107,19 @@ fn decode_lcdc(value: uint<8>) -> Lcdc {
     )
 }
 
+fn decode_lcdc_bg_window(value: uint<8>) -> Lcdc {
+    Lcdc$(
+        lcd_enable: ((value >> 7) & 1u8) == 1u8,
+        win_map_hi: ((value >> 6) & 1u8) == 1u8,
+        win_enable: ((value >> 5) & 1u8) == 1u8,
+        bgwin_data_hi: ((value >> 4) & 1u8) == 1u8,
+        bg_map_hi: ((value >> 3) & 1u8) == 1u8,
+        obj_size_8x16: ((value >> 2) & 1u8) == 1u8,
+        obj_enable: false,
+        bg_enable: (value & 1u8) == 1u8,
+    )
+}
+
 fn pack_stat_select(stat_sel: StatSelect) -> uint<8> {
     (bool_bit(stat_sel.lyc_sel) << 6)
     | (bool_bit(stat_sel.mode2_sel) << 5)
@@ -138,6 +151,21 @@ fn mode_bits(mode: PpuMode) -> uint<8> {
 pub fn apply_mmio_write(regs: PpuRegs, event: MmioWrite) -> PpuRegs {
     match event.target {
         MmioReg::Lcdc => replace_lcdc(regs, decode_lcdc(event.value)),
+        MmioReg::Stat => replace_stat_select(regs, decode_stat_select(event.value)),
+        MmioReg::Scy => replace_scy(regs, event.value),
+        MmioReg::Scx => replace_scx(regs, event.value),
+        MmioReg::Lyc => replace_lyc(regs, event.value),
+        MmioReg::Wy => replace_wy(regs, event.value),
+        MmioReg::Wx => replace_wx(regs, event.value),
+        MmioReg::Bgp => replace_bgp(regs, event.value),
+        MmioReg::Obp0 => replace_obp0(regs, event.value),
+        MmioReg::Obp1 => replace_obp1(regs, event.value),
+    }
+}
+
+pub fn apply_mmio_write_bg_window(regs: PpuRegs, event: MmioWrite) -> PpuRegs {
+    match event.target {
+        MmioReg::Lcdc => replace_lcdc(regs, decode_lcdc_bg_window(event.value)),
         MmioReg::Stat => replace_stat_select(regs, decode_stat_select(event.value)),
         MmioReg::Scy => replace_scy(regs, event.value),
         MmioReg::Scx => replace_scx(regs, event.value),

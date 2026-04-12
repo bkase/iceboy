@@ -1,0 +1,13 @@
+use lib::ppu::sem::events::mmio::{MmioReg, MmioWrite};
+use lib::ppu::sem::types::{initial_ppu_regs, initial_ppu_status_state};
+use lib::ppu::rtl::regs::{apply_mmio_write_bg_window, readback_register};
+
+pub entity regs_bg_window_test_top(lcdc_value_i: uint<8>) -> uint<9> {
+    let regs = apply_mmio_write_bg_window(
+        initial_ppu_regs(),
+        MmioWrite$(target: MmioReg::Lcdc, value: lcdc_value_i),
+    );
+    let readback = readback_register(0x40u8, regs, initial_ppu_status_state(), 0u8);
+
+    zext(readback) | (zext(lib::util::bit(regs.lcdc.obj_enable)) << 8)
+}

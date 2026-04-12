@@ -1,7 +1,9 @@
 use std::option::Option;
 
-use lib::board::hardware_soc_core::hardware_soc_core_bg_static_1k;
-use lib::periph::joypad::idle_joyp_buttons;
+use lib::board::hardware_soc_core::hardware_soc_core;
+use lib::cpu::types::MemoryBehaviorProfile;
+use lib::mem::phys::rom_baked_images::{bg_static_rom_backend, joypad_bg_smoke_rom_backend};
+use lib::periph::joypad::decode_buttons;
 use lib::ppu::sem::scanout::ScanoutEvent;
 
 fn scanout_valid(scanout: Option<ScanoutEvent>) -> bool {
@@ -45,9 +47,24 @@ fn scanout_shade(scanout: Option<ScanoutEvent>) -> uint<2> {
 entity hardware_soc_core_verilator_top(
     clk_i: clock,
     rst_i: bool,
-    status_o: inv uint<40>,
+    rom_select_i: bool,
+    joypad_buttons_i: uint<8>,
+    status_o: inv uint<56>,
 ) {
-    let core = inst hardware_soc_core_bg_static_1k(clk_i, rst_i, idle_joyp_buttons());
+    decl rom_backend;
+    let core = inst hardware_soc_core(
+        clk_i,
+        rst_i,
+        decode_buttons(joypad_buttons_i),
+        MemoryBehaviorProfile::DmgConservative,
+        false,
+        0u15,
+        0u8,
+        rom_backend,
+    );
+    let bg_static_backend = inst bg_static_rom_backend(clk_i, core.rom_ports);
+    let joypad_bg_smoke_backend = inst joypad_bg_smoke_rom_backend(clk_i, core.rom_ports);
+    let rom_backend = if rom_select_i { joypad_bg_smoke_backend } else { bg_static_backend };
     let scanout = core.scanout;
 
     set status_o =
@@ -61,5 +78,6 @@ entity hardware_soc_core_verilator_top(
         | (zext(lib::util::bit(core.rom_ready)) << 32)
         | (zext(lib::util::bit(core.m_ce)) << 33)
         | (zext(core.t_index) << 34)
-        | (zext(core.pc_low4) << 36);
+        | (zext(core.pc) << 36)
+        | (zext(core.phase_bits) << 52);
 }

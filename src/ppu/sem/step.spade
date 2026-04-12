@@ -82,7 +82,7 @@ use lib::ppu::rtl::obj_fetch::{
     resolve_obj_meta,
 };
 use lib::ppu::rtl::oam_scan::{oam_scan_req, step_oam_scan_entry};
-use lib::ppu::rtl::regs::{apply_mmio_write, set_lcd_enable};
+use lib::ppu::rtl::regs::{apply_mmio_write, apply_mmio_write_bg_window, set_lcd_enable};
 use lib::ppu::rtl::timing::{advance_run_state, advance_timing, handle_lcd_transition};
 
 pub fn held_dot_output(state: PpuState, dot_ce: bool, stepped: DotOutput) -> DotOutput {
@@ -113,6 +113,19 @@ fn apply_event(regs: PpuRegs, event: TimedPpuEvent) -> (PpuRegs, bool, bool, boo
     }
 }
 
+fn apply_event_bg_window(regs: PpuRegs, event: TimedPpuEvent) -> (PpuRegs, bool, bool, bool) {
+    match event.kind {
+        PpuEventKind::MmioWrite$(write) => (apply_mmio_write_bg_window(regs, write), is_stat_write(write), false, false),
+        PpuEventKind::DmaStart$(source_high: _) => (regs, false, false, false),
+        PpuEventKind::ForceLcdPower$(enabled) =>
+            if enabled {
+                (regs, false, true, false)
+            } else {
+                (regs, false, false, true)
+            },
+    }
+}
+
 fn fold_events(input: DotInput, regs: PpuRegs) -> (PpuRegs, bool, bool, bool) {
     let (regs0, stat0, enable0, disable0) =
         if input.bus_event_count > 0u4 { apply_event(regs, input.bus_events[0]) } else { (regs, false, false, false) };
@@ -122,6 +135,24 @@ fn fold_events(input: DotInput, regs: PpuRegs) -> (PpuRegs, bool, bool, bool) {
         if input.bus_event_count > 2u4 { apply_event(regs1, input.bus_events[2]) } else { (regs1, false, false, false) };
     let (regs3, stat3, enable3, disable3) =
         if input.bus_event_count > 3u4 { apply_event(regs2, input.bus_events[3]) } else { (regs2, false, false, false) };
+
+    (
+        regs3,
+        stat0 || stat1 || stat2 || stat3,
+        enable0 || enable1 || enable2 || enable3,
+        disable0 || disable1 || disable2 || disable3,
+    )
+}
+
+fn fold_events_bg_window(input: DotInput, regs: PpuRegs) -> (PpuRegs, bool, bool, bool) {
+    let (regs0, stat0, enable0, disable0) =
+        if input.bus_event_count > 0u4 { apply_event_bg_window(regs, input.bus_events[0]) } else { (regs, false, false, false) };
+    let (regs1, stat1, enable1, disable1) =
+        if input.bus_event_count > 1u4 { apply_event_bg_window(regs0, input.bus_events[1]) } else { (regs0, false, false, false) };
+    let (regs2, stat2, enable2, disable2) =
+        if input.bus_event_count > 2u4 { apply_event_bg_window(regs1, input.bus_events[2]) } else { (regs1, false, false, false) };
+    let (regs3, stat3, enable3, disable3) =
+        if input.bus_event_count > 3u4 { apply_event_bg_window(regs2, input.bus_events[3]) } else { (regs2, false, false, false) };
 
     (
         regs3,
@@ -174,10 +205,13 @@ fn update_render_state(
     next_phase: PpuPhase,
     frame_start: bool,
     line_start: bool,
+    obj_profile_enabled: bool,
 ) -> PpuRenderState {
     let next_is_transfer = phase_is_transfer(next_phase);
     let (next_scan, next_list) =
-        if line_start {
+        if !obj_profile_enabled {
+            (lib::ppu::sem::types::empty_oam_scan_state(), lib::ppu::sem::types::empty_line_obj_list())
+        } else if line_start {
             (lib::ppu::sem::types::empty_oam_scan_state(), lib::ppu::sem::types::empty_line_obj_list())
         } else {
             advance_live_oam_scan(render, status_phase, visible_ly, regs, mem_resp, dma_active)
@@ -1211,6 +1245,7 @@ fn apply_live_transfer(
     mem_resp: PpuMemResp,
     line_start: bool,
     frame_start: bool,
+    obj_profile_enabled: bool,
 ) -> (PpuState, PpuMemReqs, Option<ScanoutEvent>) {
     let was_transfer = match state.status.phase {
         PpuPhase::Transfer$(x_out: _, discard_scx: _) => true,
@@ -1221,7 +1256,7 @@ fn apply_live_transfer(
         _ => false,
     };
     if !was_transfer && !next_is_transfer {
-        (candidate_state, live_mem_reqs(candidate_state), Option::None)
+        (candidate_state, live_mem_reqs(candidate_state, obj_profile_enabled), Option::None)
     } else {
         let entering_transfer = !was_transfer && next_is_transfer;
         let next_discard_seed = match candidate_state.status.phase {
@@ -1234,7 +1269,7 @@ fn apply_live_transfer(
             _ => next_discard_seed,
         };
         let render_inputs = sample_render_inputs(candidate_state.visible, candidate_state.sampled, candidate_state.status.phase);
-        let obj_enabled = candidate_state.visible.regs.lcdc.obj_enable;
+        let obj_enabled = obj_profile_enabled && candidate_state.visible.regs.lcdc.obj_enable;
         let transfer_seed_render = if entering_transfer { record_transfer_entry(candidate_state.render, next_discard_seed) } else { state.render };
         let transfer_render =
             if next_is_transfer && !obj_enabled && fetcher_source_is_object(transfer_seed_render) {
@@ -1465,7 +1500,7 @@ fn apply_live_transfer(
                 transfer_render
             };
         let obj_popped =
-            if !obj_enabled {
+            if !obj_profile_enabled || !obj_enabled {
                 ObjFifoPopResult$(next_fifo: empty_obj_fifo(), pixel_valid: false, pixel: zero_obj_pixel())
             } else if pipe_output.pixel_valid {
                 pop_obj_fifo(transfer_after_window.obj_fifo)
@@ -1484,15 +1519,26 @@ fn apply_live_transfer(
             } else {
                 transfer_after_window
             };
-        let pixel_scanout = lib::ppu::rtl::mixer::emit_mixed_scanout(
-            pipe_output.pixel_valid && !candidate_state.render.first_frame_blank && candidate_state.visible.ly < 144u8,
-            pipe_output.pixel,
-            obj_popped.pixel_valid,
-            obj_popped.pixel,
-            render_inputs,
-            base_x_out,
-            candidate_state.visible.ly,
-        );
+        let pixel_scanout =
+            if obj_profile_enabled {
+                lib::ppu::rtl::mixer::emit_mixed_scanout(
+                    pipe_output.pixel_valid && !candidate_state.render.first_frame_blank && candidate_state.visible.ly < 144u8,
+                    pipe_output.pixel,
+                    obj_popped.pixel_valid,
+                    obj_popped.pixel,
+                    render_inputs,
+                    base_x_out,
+                    candidate_state.visible.ly,
+                )
+            } else {
+                lib::ppu::rtl::mixer::emit_bg_scanout(
+                    pipe_output.pixel_valid && !candidate_state.render.first_frame_blank && candidate_state.visible.ly < 144u8,
+                    pipe_output.pixel,
+                    render_inputs,
+                    base_x_out,
+                    candidate_state.visible.ly,
+                )
+            };
         let next_status = PpuStatusState$(
             run: candidate_state.status.run,
             phase:
@@ -1551,6 +1597,155 @@ fn apply_live_transfer(
     }
 }
 
+fn apply_live_transfer_bg_window(
+    state: PpuState,
+    candidate_state: PpuState,
+    mem_resp: PpuMemResp,
+    line_start: bool,
+    frame_start: bool,
+) -> (PpuState, PpuMemReqs, Option<ScanoutEvent>) {
+    let was_transfer = match state.status.phase {
+        PpuPhase::Transfer$(x_out: _, discard_scx: _) => true,
+        _ => false,
+    };
+    let next_is_transfer = match candidate_state.status.phase {
+        PpuPhase::Transfer$(x_out: _, discard_scx: _) => true,
+        _ => false,
+    };
+    if !was_transfer && !next_is_transfer {
+        (candidate_state, idle_ppu_mem_reqs(), Option::None)
+    } else {
+        let entering_transfer = !was_transfer && next_is_transfer;
+        let next_discard_seed = match candidate_state.status.phase {
+            PpuPhase::Transfer$(x_out: _, discard_scx: discard_scx) => discard_scx,
+            _ => 0u3,
+        };
+        let base_x_out = if entering_transfer { 0u8 } else { state.render.x_out };
+        let base_discard_scx = match state.status.phase {
+            PpuPhase::Transfer$(x_out: _, discard_scx: discard_scx) => discard_scx,
+            _ => next_discard_seed,
+        };
+        let render_inputs = sample_render_inputs(candidate_state.visible, candidate_state.sampled, candidate_state.status.phase);
+        let base_fetcher =
+            if entering_transfer {
+                start_bg_fetcher(candidate_state.render.fetcher, render_inputs, candidate_state.visible.ly, 0u5)
+            } else {
+                candidate_state.render.fetcher
+            };
+        let base_bg_fifo = if entering_transfer { clear_bg_fifo() } else { candidate_state.render.bg_fifo };
+        let fetcher_output = advance_bg_fetcher(
+            base_fetcher,
+            render_inputs,
+            candidate_state.visible.ly,
+            trunc(base_x_out >> 3),
+            candidate_state.render.window_line,
+            bg_fifo_has_room_for_row(base_bg_fifo),
+            mem_resp_valid(mem_resp),
+            mem_resp,
+            false,
+            false,
+            false,
+            false,
+        );
+        let pipe_output = advance_bg_pipe(
+            base_bg_fifo,
+            state.render.window_state,
+            state.render.window_line,
+            candidate_state.sampled,
+            render_inputs,
+            base_x_out,
+            frame_start,
+            line_start,
+            base_discard_scx,
+            fetcher_output.push_valid,
+            fetcher_output.push_row,
+            render_inputs.bgp_pop,
+        );
+        let next_window_state =
+            if fetcher_output.push_valid && !pipe_output.restart_fetcher {
+                note_window_tile_push(pipe_output.next_window_state)
+            } else {
+                pipe_output.next_window_state
+            };
+        let restart_window_line = window_fetch_line_for_restart(
+            pipe_output.next_window_state,
+            pipe_output.next_window_line,
+        );
+        let next_fetcher =
+            if pipe_output.restart_fetcher {
+                restart_window_fetcher(fetcher_output.next_state, restart_window_line)
+            } else {
+                fetcher_output.next_state
+            };
+        let next_stall_dots = pipe_output.stall_dots_added;
+        let next_x_out =
+            if pipe_output.pixel_valid {
+                trunc(base_x_out + 1u8)
+            } else {
+                base_x_out
+            };
+        let pixel_scanout = lib::ppu::rtl::mixer::emit_bg_scanout(
+            pipe_output.pixel_valid && !candidate_state.render.first_frame_blank && candidate_state.visible.ly < 144u8,
+            pipe_output.pixel,
+            render_inputs,
+            base_x_out,
+            candidate_state.visible.ly,
+        );
+        let next_status = PpuStatusState$(
+            run: candidate_state.status.run,
+            phase:
+                if next_is_transfer {
+                    PpuPhase::Transfer$(x_out: next_x_out, discard_scx: pipe_output.next_discard_scx)
+                } else {
+                    candidate_state.status.phase
+                },
+            stat_irq: candidate_state.status.stat_irq,
+            lyc_match_flag: candidate_state.status.lyc_match_flag,
+        );
+        (
+            PpuState$(
+                visible: candidate_state.visible,
+                status: next_status,
+                sampled: candidate_state.sampled,
+                render: PpuRenderState$(
+                    dot_in_line: candidate_state.render.dot_in_line,
+                    x_out: if next_is_transfer { next_x_out } else { 0u8 },
+                    stall_dots: if next_is_transfer { next_stall_dots } else { 0u5 },
+                    transfer_event_count: 0u16,
+                    transfer_event_hash: 0u64,
+                    transfer_window_restart_count: 0u2,
+                    transfer_obj_fetch_count: 0u4,
+                    window_state: next_window_state,
+                    window_line: pipe_output.next_window_line,
+                    oam_scan: lib::ppu::sem::types::empty_oam_scan_state(),
+                    line_objs: lib::ppu::sem::types::empty_line_obj_list(),
+                    line_obj_fetch_index: 0u4,
+                    line_obj_fetched_mask: 0u10,
+                    obj_fetch_ticket: zero_selected_obj_ticket(),
+                    obj_fetch_flags: zero_obj_flags(),
+                    bg_fetcher_resume:
+                        if next_is_transfer {
+                            candidate_state.render.bg_fetcher_resume
+                        } else {
+                            initial_bg_fetcher_state()
+                        },
+                    fetcher: if next_is_transfer { next_fetcher } else { initial_bg_fetcher_state() },
+                    bg_fifo: if next_is_transfer { pipe_output.next_fifo } else { clear_bg_fifo() },
+                    obj_fifo: empty_obj_fifo(),
+                    last_obj_penalty_tile: zero_obj_penalty_considered_tile(),
+                    first_frame_blank: candidate_state.render.first_frame_blank,
+                ),
+            ),
+            if pipe_output.restart_fetcher {
+                idle_ppu_mem_reqs()
+            } else {
+                fetcher_mem_reqs(fetcher_output.req_valid, fetcher_output.req)
+            },
+            pixel_scanout,
+        )
+    }
+}
+
 fn live_scanout_event(
     next_state: PpuState,
     line_start: bool,
@@ -1569,15 +1764,24 @@ fn live_scanout_event(
     }
 }
 
-fn live_mem_reqs(state: PpuState) -> PpuMemReqs {
-    match state.status.phase {
-        PpuPhase::OamScan$(index: _, found: _) => live_oam_scan_req(state.render.oam_scan),
-        _ => idle_ppu_mem_reqs(),
+fn live_mem_reqs(state: PpuState, obj_profile_enabled: bool) -> PpuMemReqs {
+    if !obj_profile_enabled {
+        idle_ppu_mem_reqs()
+    } else {
+        match state.status.phase {
+            PpuPhase::OamScan$(index: _, found: _) => live_oam_scan_req(state.render.oam_scan),
+            _ => idle_ppu_mem_reqs(),
+        }
     }
 }
 
-pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
-    let (written_regs, stat_write_seen, force_enable, force_disable) = fold_events(input, state.visible.regs);
+fn step_dot_with_profile(state: PpuState, input: DotInput, obj_profile_enabled: bool) -> DotOutput {
+    let (written_regs, stat_write_seen, force_enable, force_disable) =
+        if obj_profile_enabled {
+            fold_events(input, state.visible.regs)
+        } else {
+            fold_events_bg_window(input, state.visible.regs)
+        };
     let stored_lcd_enable =
         if force_disable {
             false
@@ -1636,6 +1840,187 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
                         next_phase,
                         frame_start,
                         line_start,
+                        obj_profile_enabled,
+                    ),
+                ),
+                line_start,
+                frame_start,
+            )
+        };
+    let candidate_lyc_match_flag =
+        next_lyc_match_flag(state, candidate_state, old_lcdc7, requested_lcd_enable, transition_taken);
+    let candidate_status = PpuStatusState$(
+        run: candidate_state.status.run,
+        phase: candidate_state.status.phase,
+        stat_irq: candidate_state.status.stat_irq,
+        lyc_match_flag: candidate_lyc_match_flag,
+    );
+    let candidate_state =
+        if obj_profile_enabled {
+            PpuState$(
+                visible: candidate_state.visible,
+                status: candidate_status,
+                sampled: candidate_state.sampled,
+                render: candidate_state.render,
+            )
+        } else {
+            PpuState$(
+                visible: candidate_state.visible,
+                status: candidate_status,
+                sampled: candidate_state.sampled,
+                render: PpuRenderState$(
+                    dot_in_line: candidate_state.render.dot_in_line,
+                    x_out: candidate_state.render.x_out,
+                    stall_dots: candidate_state.render.stall_dots,
+                    transfer_event_count: 0u16,
+                    transfer_event_hash: 0u64,
+                    transfer_window_restart_count: 0u2,
+                    transfer_obj_fetch_count: 0u4,
+                    window_state: candidate_state.render.window_state,
+                    window_line: candidate_state.render.window_line,
+                    oam_scan: lib::ppu::sem::types::empty_oam_scan_state(),
+                    line_objs: lib::ppu::sem::types::empty_line_obj_list(),
+                    line_obj_fetch_index: 0u4,
+                    line_obj_fetched_mask: 0u10,
+                    obj_fetch_ticket: zero_selected_obj_ticket(),
+                    obj_fetch_flags: zero_obj_flags(),
+                    bg_fetcher_resume: candidate_state.render.bg_fetcher_resume,
+                    fetcher: candidate_state.render.fetcher,
+                    bg_fifo: candidate_state.render.bg_fifo,
+                    obj_fifo: empty_obj_fifo(),
+                    last_obj_penalty_tile: zero_obj_penalty_considered_tile(),
+                    first_frame_blank: candidate_state.render.first_frame_blank,
+                ),
+            )
+        };
+    let (next_stat_irq, next_irq_req) = irq_req(
+        state.status,
+        candidate_state.status,
+        candidate_state.visible.regs,
+        candidate_state.visible.ly,
+        stat_write_seen,
+        dmg_behavior_config().features,
+    );
+    let next_irq_req = PpuIrqReq$(
+        vblank_req: next_irq_req.vblank_req,
+        stat_req:
+            (
+                next_irq_req.stat_req
+                && !lcd_reenable_lyc_level_hold(
+                    state,
+                    candidate_state.visible.regs,
+                    old_lcdc7,
+                    requested_lcd_enable,
+                    transition_taken,
+                    candidate_state.status.lyc_match_flag,
+                )
+            )
+            || lcd_reenable_lyc_rise_pulse(
+                state,
+                candidate_state.visible.regs,
+                old_lcdc7,
+                requested_lcd_enable,
+                transition_taken,
+                candidate_state.status.lyc_match_flag,
+            ),
+    );
+    let final_status = PpuStatusState$(
+        run: candidate_state.status.run,
+        phase: candidate_state.status.phase,
+        stat_irq: next_stat_irq,
+        lyc_match_flag: candidate_state.status.lyc_match_flag,
+    );
+    let final_state = PpuState$(
+        visible: candidate_state.visible,
+        status: final_status,
+        sampled: candidate_state.sampled,
+        render: candidate_state.render,
+    );
+    let (final_state, mem_reqs, pixel_scanout) =
+        apply_live_transfer(state, final_state, input.mem_resp, line_start, frame_start, obj_profile_enabled);
+    let line_summary = completed_line_summary(state, final_state);
+    let scanout = live_scanout_event(final_state, line_start, frame_start, pixel_scanout);
+    let semantic = PpuSemanticCommit$(
+        ly_after: final_state.visible.ly,
+        mode_after: visible_mode(final_state.status),
+        stat_line_after: final_state.status.stat_irq.line_high,
+        irq_edge: irq_edge(next_irq_req),
+        scanout: scanout,
+    );
+
+    DotOutput$(
+        next_state: final_state,
+        mem_reqs: mem_reqs,
+        mmio_resp: idle_ppu_mmio_resp(),
+        irq_req: next_irq_req,
+        scanout: scanout,
+        semantic: Option::Some(semantic),
+        line_summary: line_summary,
+    )
+}
+
+pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
+    step_dot_with_profile(state, input, true)
+}
+
+pub fn step_dot_bg_window(state: PpuState, input: DotInput) -> DotOutput {
+    let (written_regs, stat_write_seen, force_enable, force_disable) = fold_events_bg_window(input, state.visible.regs);
+    let stored_lcd_enable =
+        if force_disable {
+            false
+        } else if force_enable {
+            true
+        } else {
+            written_regs.lcdc.lcd_enable
+        };
+    let requested_lcd_enable =
+        if force_disable {
+            false
+        } else if force_enable {
+            true
+        } else {
+            state.visible.regs.lcdc.lcd_enable
+        };
+    let next_regs = set_lcd_enable(written_regs, stored_lcd_enable);
+    let state_with_regs = PpuState$(
+        visible: PpuVisibleState$(regs: next_regs, ly: state.visible.ly),
+        status: state.status,
+        sampled: state.sampled,
+        render: state.render,
+    );
+    let old_lcdc7 = state.visible.regs.lcdc.lcd_enable;
+    let transition_taken = old_lcdc7 != requested_lcd_enable;
+    let transition_state = handle_lcd_transition(state_with_regs, old_lcdc7, requested_lcd_enable);
+    let (candidate_state, line_start, frame_start) =
+        if transition_taken {
+            (transition_state, false, false)
+        } else {
+            let (next_phase, next_ly, next_sampled, line_start, frame_start) = advance_timing(state_with_regs, input, next_regs);
+            let next_run = advance_run_state(state.status.run, frame_start);
+            let next_visible = PpuVisibleState$(regs: next_regs, ly: next_ly);
+            (
+                PpuState$(
+                    visible: next_visible,
+                    status: PpuStatusState$(
+                        run: next_run,
+                        phase: next_phase,
+                        stat_irq: state.status.stat_irq,
+                        lyc_match_flag: state.status.lyc_match_flag,
+                    ),
+                    sampled: next_sampled,
+                    render: update_render_state(
+                        state.render,
+                        state.status.phase,
+                        state.visible.ly,
+                        next_regs,
+                        next_sampled,
+                        input.mem_resp,
+                        input.dma_state.active,
+                        next_run,
+                        next_phase,
+                        frame_start,
+                        line_start,
+                        false,
                     ),
                 ),
                 line_start,
@@ -1699,7 +2084,8 @@ pub fn step_dot(state: PpuState, input: DotInput) -> DotOutput {
         sampled: candidate_state.sampled,
         render: candidate_state.render,
     );
-    let (final_state, mem_reqs, pixel_scanout) = apply_live_transfer(state, final_state, input.mem_resp, line_start, frame_start);
+    let (final_state, mem_reqs, pixel_scanout) =
+        apply_live_transfer_bg_window(state, final_state, input.mem_resp, line_start, frame_start);
     let line_summary = completed_line_summary(state, final_state);
     let scanout = live_scanout_event(final_state, line_start, frame_start, pixel_scanout);
     let semantic = PpuSemanticCommit$(

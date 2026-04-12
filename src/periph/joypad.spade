@@ -57,8 +57,8 @@ fn encode_dpad_pressed(buttons: JoypButtons) -> uint<4> {
 fn selected_pressed_nibble(select_reg: uint<2>, buttons: JoypButtons) -> uint<4> {
     let action = encode_action_pressed(buttons);
     let dpad = encode_dpad_pressed(buttons);
-    let action_selected = (select_reg & 0x1u2) == 0u2;
-    let dpad_selected = (select_reg & 0x2u2) == 0u2;
+    let action_selected = (select_reg & 0x2u2) == 0u2;
+    let dpad_selected = (select_reg & 0x1u2) == 0u2;
 
     match (action_selected, dpad_selected) {
         (false, false) => 0u4,

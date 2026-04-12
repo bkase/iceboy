@@ -10,7 +10,7 @@ from bench.actions.generators import (
     SeededEventScript,
     load_action_script,
 )
-from tools.write_action_script_joypad_schedule import compile_joypad_schedule
+from tools.write_action_script_joypad_schedule import compile_joypad_schedule, encode_joypad_buttons
 
 
 class EventGeneratorTest(unittest.TestCase):
@@ -100,7 +100,17 @@ events:
 
             schedule = compile_joypad_schedule(script_path, frame_count=6)
 
-            self.assertEqual(schedule, [0x20, 0x20, 0x00, 0x00, 0x03, 0x03])
+            self.assertEqual(schedule, [0x02, 0x02, 0x00, 0x00, 0xC0, 0xC0])
+
+    def test_encode_joypad_buttons_matches_decode_buttons_bit_layout(self) -> None:
+        self.assertEqual(encode_joypad_buttons(JoypadButtons.from_pressed(["right"])), 0x01)
+        self.assertEqual(encode_joypad_buttons(JoypadButtons.from_pressed(["left"])), 0x02)
+        self.assertEqual(encode_joypad_buttons(JoypadButtons.from_pressed(["up"])), 0x04)
+        self.assertEqual(encode_joypad_buttons(JoypadButtons.from_pressed(["down"])), 0x08)
+        self.assertEqual(encode_joypad_buttons(JoypadButtons.from_pressed(["a"])), 0x10)
+        self.assertEqual(encode_joypad_buttons(JoypadButtons.from_pressed(["b"])), 0x20)
+        self.assertEqual(encode_joypad_buttons(JoypadButtons.from_pressed(["select"])), 0x40)
+        self.assertEqual(encode_joypad_buttons(JoypadButtons.from_pressed(["start"])), 0x80)
 
     def test_compile_joypad_schedule_rejects_non_joypad_events(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

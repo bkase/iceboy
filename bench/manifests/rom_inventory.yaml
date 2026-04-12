@@ -361,7 +361,7 @@ roms:
   - id: JOYPAD_BG_SMOKE
     <<: *dmg_entry
     path: bench/roms/out/joypad_bg_smoke.gb
-    rom_sha256: e5eba391ff574f79f84eb0aef61d6a1b14b56992b0dcb6cb948dbbec890b77b0
+    rom_sha256: e65a04b31b4584f2f5cc91716d5aad33eddd454aa6e57c43413c2a7df0ee542a
     requires: [cpu, ppu, joypad]
     oracle_mode: frame_hash
     raster_event_coord_space: frame_line_dot

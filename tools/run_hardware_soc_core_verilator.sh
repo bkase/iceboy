@@ -32,6 +32,7 @@ iceboy_log_tool "verilator" "$(iceboy_version_string "$VERILATOR_BIN" --version)
 export PATH="$(dirname "$VERILATOR_BIN"):$(dirname "$SWIM_BIN"):/opt/homebrew/bin:${PATH}"
 
 BUILD_DIR="${ICEBOY_ROOT}/build/rom_verilator/test_hardware_soc_core_native"
+JOYPAD_BUILD_DIR="${ICEBOY_ROOT}/build/rom_verilator/test_hardware_soc_core_joypad_native"
 VERILOG_SRC="${ICEBOY_ROOT}/build/spade.sv"
 VERILOG_DST="${ICEBOY_ROOT}/build/spade.verilator.sv"
 WRAPPER_SRC="${ICEBOY_ROOT}/test/harness/verilog/hardware_soc_core_verilator_wrapper.sv"
@@ -39,7 +40,10 @@ MAIN_SRC="${ICEBOY_ROOT}/tools/verilator/hardware_soc_core_main.cpp"
 RUNNER_BIN="${BUILD_DIR}/hardware_soc_core_runner"
 EXPECTED_TOOL="${ICEBOY_ROOT}/tools/write_rendered_shaded_frame.py"
 ROM_PATH="${ICEBOY_ROOT}/bench/roms/out/BG_STATIC.gb"
+ROM_SYM_PATH="${ICEBOY_ROOT}/bench/roms/out/BG_STATIC.sym"
 ROM_MEM_PATH="${BUILD_DIR}/bg_static_rom_1k.mem"
+JOYPAD_ROM_PATH="${ICEBOY_ROOT}/bench/roms/out/joypad_bg_smoke.gb"
+JOYPAD_ROM_MEM_PATH="${JOYPAD_BUILD_DIR}/joypad_bg_smoke_rom_2k.mem"
 EXPECTED_RAW="${BUILD_DIR}/hardware_soc_core.expected.raw"
 FRAME_CAPTURE="${BUILD_DIR}/hardware_soc_core.actual.raw"
 TRACE_PATH="${BUILD_DIR}/hardware_soc_core.trace.jsonl"
@@ -58,7 +62,10 @@ if [[ "$DRY_RUN" == "1" ]]; then
     echo "main ${MAIN_SRC}"
     echo "expected-tool ${EXPECTED_TOOL}"
     echo "rom ${ROM_PATH}"
+    echo "rom-sym ${ROM_SYM_PATH}"
     echo "rom-mem ${ROM_MEM_PATH}"
+    echo "joypad-rom ${JOYPAD_ROM_PATH}"
+    echo "joypad-rom-mem ${JOYPAD_ROM_MEM_PATH}"
     echo "expected-raw ${EXPECTED_RAW}"
     printf 'DRY RUN:'
     printf ' %q' "$UV_BIN" run --with-requirements "$ICEBOY_PYTHON_LOCK" python tools/prepare_verilator_sv.py "$VERILOG_SRC" "$VERILOG_DST"
@@ -67,13 +74,16 @@ if [[ "$DRY_RUN" == "1" ]]; then
     printf ' %q' python3 -c "from pathlib import Path; rom = Path('${ROM_PATH}').read_bytes()[:1024]; Path('${ROM_MEM_PATH}').write_text(''.join(f'{byte:02x}\\n' for byte in rom), encoding='utf-8')"
     printf '\n'
     printf 'DRY RUN:'
-    printf ' %q' "$UV_BIN" run --with-requirements "$ICEBOY_PYTHON_LOCK" python "$EXPECTED_TOOL" "--rom=${ROM_PATH}" "--output-raw=${EXPECTED_RAW}" "--frame-batches=3"
+    printf ' %q' python3 -c "from pathlib import Path; rom = Path('${JOYPAD_ROM_PATH}').read_bytes()[:2048]; Path('${JOYPAD_ROM_MEM_PATH}').write_text(''.join(f'{byte:02x}\\n' for byte in rom), encoding='utf-8')"
+    printf '\n'
+    printf 'DRY RUN:'
+    printf ' %q' "$UV_BIN" run --with-requirements "$ICEBOY_PYTHON_LOCK" python "$EXPECTED_TOOL" "--rom=${ROM_PATH}" "--sym=${ROM_SYM_PATH}" "--checkpoint-label=__checkpoint_scene_ready" "--settle-rendered-frames=2" "--output-raw=${EXPECTED_RAW}"
     printf '\n'
     printf 'DRY RUN:'
     printf ' %q' "$VERILATOR_BIN" --cc "$VERILOG_DST" "$WRAPPER_SRC" --top-module hardware_soc_core_verilator_wrapper --exe "$MAIN_SRC" --build -j 0 --Mdir "$BUILD_DIR" -o "$(basename "$RUNNER_BIN")"
     printf '\n'
     printf 'DRY RUN:'
-    printf ' %q' "$RUNNER_BIN" "--expected-raw=${EXPECTED_RAW}" "--frame-capture=${FRAME_CAPTURE}" "--max-cycles=${MAX_CYCLES}" "--completed-frames=${COMPLETED_FRAMES}" "--progress-interval=${PROGRESS_INTERVAL}"
+    printf ' %q' "$RUNNER_BIN" "--rom-id=bg_static" "--expected-raw=${EXPECTED_RAW}" "--frame-capture=${FRAME_CAPTURE}" "--max-cycles=${MAX_CYCLES}" "--completed-frames=${COMPLETED_FRAMES}" "--progress-interval=${PROGRESS_INTERVAL}"
     if [[ "$EMIT_TRACE" == "1" ]]; then
         printf ' %q' "--trace=${TRACE_PATH}"
     fi
@@ -81,13 +91,18 @@ if [[ "$DRY_RUN" == "1" ]]; then
     exit 0
 fi
 
-mkdir -p "$BUILD_DIR"
+mkdir -p "$BUILD_DIR" "$JOYPAD_BUILD_DIR"
 "${ICEBOY_ROOT}/tools/ensure_swim_python_deps.sh"
 
 python3 - <<PY
 from pathlib import Path
 rom = Path("${ROM_PATH}").read_bytes()[:1024]
 Path("${ROM_MEM_PATH}").write_text("".join(f"{byte:02x}\n" for byte in rom), encoding="utf-8")
+PY
+python3 - <<PY
+from pathlib import Path
+rom = Path("${JOYPAD_ROM_PATH}").read_bytes()[:2048]
+Path("${JOYPAD_ROM_MEM_PATH}").write_text("".join(f"{byte:02x}\n" for byte in rom), encoding="utf-8")
 PY
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
@@ -97,8 +112,10 @@ fi
 "$UV_BIN" run --with-requirements "$ICEBOY_PYTHON_LOCK" python tools/prepare_verilator_sv.py "$VERILOG_SRC" "$VERILOG_DST"
 "$UV_BIN" run --with-requirements "$ICEBOY_PYTHON_LOCK" python "$EXPECTED_TOOL" \
     "--rom=${ROM_PATH}" \
-    "--output-raw=${EXPECTED_RAW}" \
-    "--frame-batches=3"
+    "--sym=${ROM_SYM_PATH}" \
+    "--checkpoint-label=__checkpoint_scene_ready" \
+    "--settle-rendered-frames=2" \
+    "--output-raw=${EXPECTED_RAW}"
 
 "$VERILATOR_BIN" \
     --cc "$VERILOG_DST" "$WRAPPER_SRC" \
@@ -112,6 +129,7 @@ fi
 
 rm -f "$FRAME_CAPTURE" "$TRACE_PATH"
 RUNNER_ARGS=(
+    "--rom-id=bg_static"
     "--expected-raw=${EXPECTED_RAW}"
     "--frame-capture=${FRAME_CAPTURE}"
     "--max-cycles=${MAX_CYCLES}"

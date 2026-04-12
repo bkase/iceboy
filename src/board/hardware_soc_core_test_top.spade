@@ -25,7 +25,6 @@ entity hardware_soc_core_test_top(
         | (zext(core.phase_bits) << 5)
         | (zext(core.ppu_mode_bits) << 8)
         | (zext(core.ppu_ly) << 11)
-        | (zext(core.ppu_stat) << 19)
         | (zext(lib::util::bit(scanout_valid(core.scanout))) << 27)
         | (zext(lib::util::bit(core.rom_ready)) << 28);
 }

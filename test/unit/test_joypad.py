@@ -67,15 +67,15 @@ async def test_default_read_with_no_buttons_pressed_is_cf(dut):
 @cocotb.test()
 async def test_action_group_read_reports_a_pressed_active_low(dut):
     await reset_dut(dut)
-    snapshot = await step(dut, write_addr=P1_ADDR, write_data=0x20, buttons=BUTTON_A)
-    assert snapshot["p1"] == 0xEE
+    snapshot = await step(dut, write_addr=P1_ADDR, write_data=0x10, buttons=BUTTON_A)
+    assert snapshot["p1"] == 0xDE
 
 
 @cocotb.test()
 async def test_dpad_group_read_reports_up_pressed_active_low(dut):
     await reset_dut(dut)
-    snapshot = await step(dut, write_addr=P1_ADDR, write_data=0x10, buttons=BUTTON_UP)
-    assert snapshot["p1"] == 0xDB
+    snapshot = await step(dut, write_addr=P1_ADDR, write_data=0x20, buttons=BUTTON_UP)
+    assert snapshot["p1"] == 0xEB
 
 
 @cocotb.test()
@@ -96,13 +96,13 @@ async def test_neither_group_selected_returns_low_nibble_ff(dut):
 async def test_write_low_nibble_is_ignored(dut):
     await reset_dut(dut)
     snapshot = await step(dut, write_addr=P1_ADDR, write_data=0x2F, buttons=BUTTON_B)
-    assert snapshot["p1"] == 0xED
+    assert snapshot["p1"] == 0xEF
 
 
 @cocotb.test()
 async def test_irq_fires_on_button_press_in_selected_group(dut):
     await reset_dut(dut)
-    await step(dut, write_addr=P1_ADDR, write_data=0x20, buttons=0)
+    await step(dut, write_addr=P1_ADDR, write_data=0x10, buttons=0)
     snapshot = await step(dut, buttons=BUTTON_A)
     assert snapshot["joypad_irq"] is True
     snapshot = await step(dut, buttons=BUTTON_A)
@@ -112,7 +112,7 @@ async def test_irq_fires_on_button_press_in_selected_group(dut):
 @cocotb.test()
 async def test_irq_does_not_fire_on_button_release(dut):
     await reset_dut(dut)
-    await step(dut, write_addr=P1_ADDR, write_data=0x20, buttons=BUTTON_A)
+    await step(dut, write_addr=P1_ADDR, write_data=0x10, buttons=BUTTON_A)
     await step(dut, buttons=BUTTON_A)
     snapshot = await step(dut, buttons=0)
     assert snapshot["joypad_irq"] is False

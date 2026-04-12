@@ -136,6 +136,7 @@ class RunTestsTest(unittest.TestCase):
 
     def test_hardware_soc_core_native_runner_sources_exist(self) -> None:
         self.assertTrue((ROOT / "tools" / "run_hardware_soc_core_verilator.sh").is_file())
+        self.assertTrue((ROOT / "tools" / "run_hardware_soc_core_joypad_bg_smoke_verilator.sh").is_file())
         self.assertTrue((ROOT / "tools" / "verilator" / "hardware_soc_core_main.cpp").is_file())
         self.assertTrue((ROOT / "test" / "harness" / "verilog" / "hardware_soc_core_verilator_wrapper.sv").is_file())
         self.assertTrue((ROOT / "tools" / "write_rendered_shaded_frame.py").is_file())

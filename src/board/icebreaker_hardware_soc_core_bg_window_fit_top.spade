@@ -1,0 +1,80 @@
+use std::option::Option;
+
+use lib::board::hardware_soc_core::hardware_soc_core_bg_static_1k;
+use lib::board::reset_bridge::reset_bridge;
+use lib::periph::joypad::idle_joyp_buttons;
+use lib::ppu::sem::scanout::ScanoutEvent;
+
+fn scanout_valid(scanout: Option<ScanoutEvent>) -> bool {
+    match scanout {
+        Option::Some(_) => true,
+        Option::None => false,
+    }
+}
+
+#[no_mangle(all)]
+entity icebreaker_hardware_soc_core_bg_window_fit_top(
+    CLK: clock,
+    BTN_N: bool,
+    RX: bool,
+    BTN_D_UP: bool,
+    BTN_D_DOWN: bool,
+    BTN_D_LEFT: bool,
+    BTN_D_RIGHT: bool,
+    DIP_A: bool,
+    DIP_B: bool,
+    DIP_START: bool,
+    DIP_SELECT: bool,
+    TX: inv bool,
+    LEDR_N: inv bool,
+    LEDG_N: inv bool,
+    LCD_SCK: inv bool,
+    LCD_MOSI: inv bool,
+    LCD_CS: inv bool,
+    LCD_DC: inv bool,
+    LCD_RES: inv bool,
+    LCD_BL: inv bool,
+    DEBUG_GPIO0: inv bool,
+    DEBUG_GPIO1: inv bool,
+    DBG_PC0: inv bool,
+    DBG_PC1: inv bool,
+    DBG_PC2: inv bool,
+    DBG_PC3: inv bool,
+    DBG_MCE: inv bool,
+    DBG_PHASE0: inv bool,
+    DBG_PHASE1: inv bool,
+    DBG_PHASE2: inv bool,
+) {
+    let _ = RX;
+    let _ = BTN_D_UP;
+    let _ = BTN_D_DOWN;
+    let _ = BTN_D_LEFT;
+    let _ = BTN_D_RIGHT;
+    let _ = DIP_A;
+    let _ = DIP_B;
+    let _ = DIP_START;
+    let _ = DIP_SELECT;
+
+    let rst = inst reset_bridge(CLK, BTN_N, 48000u16, 16u16).rst;
+    let core = inst hardware_soc_core_bg_static_1k(CLK, rst, idle_joyp_buttons());
+
+    set TX = true;
+    set LEDR_N = core.rom_ready;
+    set LEDG_N = false;
+    set LCD_SCK = false;
+    set LCD_MOSI = false;
+    set LCD_CS = true;
+    set LCD_DC = false;
+    set LCD_RES = true;
+    set LCD_BL = false;
+    set DEBUG_GPIO0 = false;
+    set DEBUG_GPIO1 = scanout_valid(core.scanout);
+    set DBG_PC0 = (core.pc_low4 & 0x1u4) != 0u4;
+    set DBG_PC1 = false;
+    set DBG_PC2 = false;
+    set DBG_PC3 = false;
+    set DBG_MCE = false;
+    set DBG_PHASE0 = false;
+    set DBG_PHASE1 = false;
+    set DBG_PHASE2 = false;
+}

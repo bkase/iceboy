@@ -73,6 +73,26 @@ SCREEN_HEIGHT = 144
 TILEMAP_WIDTH = 32
 TILEMAP_HEIGHT = 32
 SPRITE_COUNT = 40
+JOYPAD_PRESS_EVENTS = {
+    "up": WindowEvent.PRESS_ARROW_UP,
+    "down": WindowEvent.PRESS_ARROW_DOWN,
+    "left": WindowEvent.PRESS_ARROW_LEFT,
+    "right": WindowEvent.PRESS_ARROW_RIGHT,
+    "a": WindowEvent.PRESS_BUTTON_A,
+    "b": WindowEvent.PRESS_BUTTON_B,
+    "start": WindowEvent.PRESS_BUTTON_START,
+    "select": WindowEvent.PRESS_BUTTON_SELECT,
+}
+JOYPAD_RELEASE_EVENTS = {
+    "up": WindowEvent.RELEASE_ARROW_UP,
+    "down": WindowEvent.RELEASE_ARROW_DOWN,
+    "left": WindowEvent.RELEASE_ARROW_LEFT,
+    "right": WindowEvent.RELEASE_ARROW_RIGHT,
+    "a": WindowEvent.RELEASE_BUTTON_A,
+    "b": WindowEvent.RELEASE_BUTTON_B,
+    "start": WindowEvent.RELEASE_BUTTON_START,
+    "select": WindowEvent.RELEASE_BUTTON_SELECT,
+}
 
 
 @dataclass(frozen=True)
@@ -583,9 +603,9 @@ class PyBoyOracle:
         if isinstance(ev, JoypadButtonsEvent):
             target = set(ev.joyp_buttons.pressed_buttons())
             for button in sorted(self._pressed_buttons - target):
-                pyboy.button_release(button)
+                pyboy.send_input(JOYPAD_RELEASE_EVENTS[button], 0)
             for button in sorted(target - self._pressed_buttons):
-                pyboy.button_press(button)
+                pyboy.send_input(JOYPAD_PRESS_EVENTS[button], 0)
             self._pressed_buttons = target
             return
         if isinstance(ev, MemoryWriteEvent):

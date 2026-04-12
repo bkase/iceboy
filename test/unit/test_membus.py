@@ -293,16 +293,16 @@ async def test_joypad_register_reads_selected_buttons_and_ignores_low_nibble_wri
     assert default["data"] == 0xCF
     assert default["region"] == REGION_IO
 
-    _, action = await write_then_read(dut, addr=0xFF00, value=0x20, buttons=0x10)
-    assert action["data"] == 0xEE
+    _, action = await write_then_read(dut, addr=0xFF00, value=0x10, buttons=0x10)
+    assert action["data"] == 0xDE
     assert action["region"] == REGION_IO
 
-    _, dpad = await write_then_read(dut, addr=0xFF00, value=0x10, buttons=0x04)
-    assert dpad["data"] == 0xDB
+    _, dpad = await write_then_read(dut, addr=0xFF00, value=0x20, buttons=0x04)
+    assert dpad["data"] == 0xEB
     assert dpad["region"] == REGION_IO
 
     _, low_nibble_ignored = await write_then_read(dut, addr=0xFF00, value=0x2F, buttons=0x20)
-    assert low_nibble_ignored["data"] == 0xED
+    assert low_nibble_ignored["data"] == 0xEF
     assert low_nibble_ignored["region"] == REGION_IO
 
 
