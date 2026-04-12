@@ -12,6 +12,7 @@ BOARD_TOP=""
 OUT_DIR="${ICEBOY_ROOT}/build/hw_verify"
 SPADE_SV="${ICEBOY_ROOT}/build/spade.sv"
 DEBUG_PATTERNS=("CommitTrace" "DebugTrace" "PpuDebugTrace" "SimStimulus" "BusObs" "SocLockstepTopOut")
+CHECK_HW_IMPORTS="${ICEBOY_ROOT}/tools/check_hw_imports.py"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -77,11 +78,15 @@ NETLIST_JSON="${OUT_DIR}/hardware.json"
 STAT_FILE="${OUT_DIR}/yosys-stat.txt"
 
 iceboy_require_file "${BOARD_TOP}" "hardware board top"
+iceboy_require_file "${CHECK_HW_IMPORTS}" "hardware import checker"
 
+UV_BIN="$(iceboy_require_command "uv" "ICEBOY_UV_BIN" "$(iceboy_uv_bin)")"
 SWIM_BIN="$(iceboy_require_command "swim" "ICEBOY_SWIM_BIN" "$(iceboy_swim_bin)")"
 YOSYS_BIN="$(iceboy_require_command "yosys" "ICEBOY_YOSYS_BIN" "$(iceboy_yosys_bin)")"
+UV_VERSION="$(iceboy_version_string "${UV_BIN}" --version)"
 SWIM_VERSION="$(iceboy_version_string "${SWIM_BIN}" --version)"
 YOSYS_VERSION="$(iceboy_version_string "${YOSYS_BIN}" -V)"
+iceboy_log_tool "uv" "${UV_VERSION}"
 iceboy_log_tool "swim" "${SWIM_VERSION}"
 iceboy_log_tool "yosys" "${YOSYS_VERSION}"
 
@@ -101,7 +106,7 @@ if [[ "${DRY_RUN}" == "1" ]]; then
     fi
     echo "DRY RUN: top ${TOP_LABEL}"
     echo "DRY RUN: module ${TOP_MODULE}"
-    echo "DRY RUN: source check ${BOARD_TOP} has no sim:: references"
+    echo "DRY RUN: source graph check ${BOARD_TOP} has no reachable lib::sim imports"
     echo "DRY RUN: forbid debug patterns ${DEBUG_PATTERNS[*]}"
     if [[ "${ENFORCE_BUDGET}" == "1" ]]; then
         echo "DRY RUN: enforce LUT4/DFF/SPRAM/EBR hardware budget"
@@ -113,9 +118,9 @@ if [[ "${DRY_RUN}" == "1" ]]; then
     exit 0
 fi
 
-if rg -n 'lib::sim::|sim::' "${BOARD_TOP}" >/dev/null; then
-    iceboy_die "hardware board top references simulation namespaces"
-fi
+"${UV_BIN}" run --with-requirements "${ICEBOY_PYTHON_LOCK}" python "${CHECK_HW_IMPORTS}" \
+    --board-top "${BOARD_TOP}" \
+    --src-root "${ICEBOY_ROOT}/src"
 
 mkdir -p "${OUT_DIR}"
 
