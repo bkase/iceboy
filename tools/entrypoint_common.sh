@@ -74,6 +74,10 @@ iceboy_icetime_bin() {
     iceboy_resolve_command "ICEBOY_ICETIME_BIN" "${ICEBOY_ROOT}/build/oss-cad-suite/bin/icetime"
 }
 
+iceboy_iceprog_bin() {
+    iceboy_resolve_command "ICEBOY_ICEPROG_BIN" "iceprog"
+}
+
 iceboy_sby_bin() {
     iceboy_resolve_command "ICEBOY_SBY_BIN" "${ICEBOY_ROOT}/build/oss-cad-suite/bin/sby"
 }

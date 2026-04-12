@@ -76,6 +76,7 @@ class LocalEntrypointsTest(unittest.TestCase):
                 "ICEBOY_NEXTPNR_BIN": str(make_fake_tool(bindir, "nextpnr-ice40", "nextpnr-0.10-15-g77ccf518")),
                 "ICEBOY_ICEPACK_BIN": str(make_fake_tool(bindir, "icepack", "icepack 1.0-test")),
                 "ICEBOY_ICETIME_BIN": str(make_fake_tool(bindir, "icetime", "icetime 1.0-test")),
+                "ICEBOY_ICEPROG_BIN": str(make_fake_tool(bindir, "iceprog", "iceprog 1.0-test")),
                 "ICEBOY_SBY_BIN": str(make_fake_tool(bindir, "sby", "SBY 0.63-11-g6424d15")),
                 "ICEBOY_EQY_BIN": str(make_fake_tool(bindir, "eqy", "EQY 0.1-test")),
             }
@@ -333,6 +334,83 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("build/bitstreams/icebreaker_top_baseline.bin", completed.stdout)
         self.assertIn("-d up5k", completed.stdout)
         self.assertIn("icebreaker.pcf", completed.stdout)
+
+    def test_program_icebreaker_dry_run_supports_explicit_bin_and_probe(self) -> None:
+        completed = self.run_script(
+            "program_icebreaker.sh",
+            "--dry-run",
+            "--check-device",
+            "--bin",
+            "build/bitstreams/icebreaker_top_baseline.bin",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] iceprog: ", completed.stdout)
+        self.assertIn("DRY RUN:", completed.stdout)
+        self.assertIn(" -t", completed.stdout)
+        self.assertIn("build/bitstreams/icebreaker_top_baseline.bin", completed.stdout)
+
+    def test_program_icebreaker_dry_run_defaults_to_most_recent_bitstream(self) -> None:
+        older = ROOT / "build" / "bitstreams" / "zzz_program_test_older.bin"
+        newer = ROOT / "build" / "bitstreams" / "zzz_program_test_newer.bin"
+        older.parent.mkdir(parents=True, exist_ok=True)
+        older.write_bytes(b"older")
+        newer.write_bytes(b"newer")
+        os.utime(older, (1_700_000_000, 1_700_000_000))
+        os.utime(newer, (1_900_000_000, 1_900_000_000))
+        try:
+            completed = self.run_script("program_icebreaker.sh", "--dry-run")
+        finally:
+            newer.unlink(missing_ok=True)
+            older.unlink(missing_ok=True)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn(str(newer), completed.stdout)
+
+    def test_program_icebreaker_reports_missing_bitstream_path(self) -> None:
+        completed = self.run_script(
+            "program_icebreaker.sh",
+            "--dry-run",
+            "--bin",
+            "build/bitstreams/does_not_exist.bin",
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("missing packed bitstream", completed.stderr)
+
+    def test_program_icebreaker_dry_run_allows_missing_iceprog_binary(self) -> None:
+        env = self.env.copy()
+        env.pop("ICEBOY_ICEPROG_BIN")
+        completed = subprocess.run(
+            [str(TOOLS / "program_icebreaker.sh"), "--dry-run", "--bin", "build/bitstreams/icebreaker_top_baseline.bin"],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] iceprog: iceprog", completed.stdout)
+        self.assertIn("build/bitstreams/icebreaker_top_baseline.bin", completed.stdout)
+
+    def test_program_icebreaker_reports_missing_device_cleanly(self) -> None:
+        failing_tool = Path(self.tempdir.name) / "iceprog-missing-device"
+        failing_tool.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "echo 'No FTDI devices found' >&2\n"
+            "exit 1\n",
+            encoding="utf-8",
+        )
+        failing_tool.chmod(failing_tool.stat().st_mode | stat.S_IXUSR)
+        env = self.env.copy()
+        env["ICEBOY_ICEPROG_BIN"] = str(failing_tool)
+        completed = subprocess.run(
+            [str(TOOLS / "program_icebreaker.sh"), "--check-device", "--bin", "build/bitstreams/icebreaker_top_baseline.bin"],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("could not find or talk to an attached iCEBreaker", completed.stderr)
+        self.assertIn("No FTDI devices found", completed.stderr)
 
     def test_multi_top_gate_probe_and_doc_are_checked_in(self) -> None:
         board_main = (ROOT / "src" / "board" / "main.spade").read_text(encoding="utf-8")
