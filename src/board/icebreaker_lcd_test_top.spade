@@ -1,0 +1,172 @@
+use lib::board::reset_bridge::reset_bridge;
+use lib::periph::st7789_lcd::st7789_lcd;
+
+fn frame_phase(frame_index: uint<32>) -> uint<3> {
+    trunc(frame_index >> 4)
+}
+
+fn checkerboard_shade(x: uint<8>, y: uint<8>) -> uint<8> {
+    let tile_x: uint<5> = trunc(x >> 3);
+    let tile_y: uint<5> = trunc(y >> 3);
+    if ((tile_x ^ tile_y) & 1u5) == 0u5 { 0u8 } else { 3u8 }
+}
+
+fn moving_bar_shade(x: uint<8>, frame_index: uint<32>) -> uint<8> {
+    let shifted_x: uint<8> = trunc(x + trunc(frame_index >> 1));
+    trunc(shifted_x >> 5)
+}
+
+fn quadrant_shade(x: uint<8>, y: uint<8>) -> uint<8> {
+    let right = x >= 80u8;
+    let bottom = y >= 72u8;
+    if !right && !bottom {
+        0u8
+    } else if right && !bottom {
+        1u8
+    } else if !right && bottom {
+        2u8
+    } else {
+        3u8
+    }
+}
+
+fn diagonal_shade(x: uint<8>, y: uint<8>) -> uint<8> {
+    trunc(((x >> 4) ^ (y >> 4)) & 0x3u8)
+}
+
+fn pattern_shade(frame_index: uint<32>, x: uint<8>, y: uint<8>) -> uint<8> {
+    match frame_phase(frame_index) {
+        0u3 => 0u8,
+        1u3 => 1u8,
+        2u3 => 2u8,
+        3u3 => 3u8,
+        4u3 => checkerboard_shade(x, y),
+        5u3 => moving_bar_shade(x, frame_index),
+        6u3 => quadrant_shade(x, y),
+        _ => diagonal_shade(x, y),
+    }
+}
+
+fn next_x(pixel_x: uint<8>, pixel_y: uint<8>, frame_start: bool, pixel_advance: bool) -> uint<8> {
+    if frame_start {
+        0u8
+    } else if pixel_advance {
+        if pixel_x == 159u8 {
+            0u8
+        } else {
+            trunc(pixel_x + 1u8)
+        }
+    } else {
+        pixel_x
+    }
+}
+
+fn next_y(pixel_x: uint<8>, pixel_y: uint<8>, frame_start: bool, pixel_advance: bool) -> uint<8> {
+    if frame_start {
+        0u8
+    } else if pixel_advance && pixel_x == 159u8 {
+        if pixel_y == 143u8 {
+            0u8
+        } else {
+            trunc(pixel_y + 1u8)
+        }
+    } else {
+        pixel_y
+    }
+}
+
+fn heartbeat_led(frame_index: uint<32>) -> bool {
+    ((frame_index >> 2) & 1u32) == 0u32
+}
+
+#[no_mangle(all)]
+entity icebreaker_lcd_test_top(
+    CLK: clock,
+    BTN_N: bool,
+    BTN_D_UP: bool,
+    BTN_D_DOWN: bool,
+    BTN_D_LEFT: bool,
+    BTN_D_RIGHT: bool,
+    DIP_A: bool,
+    DIP_B: bool,
+    DIP_START: bool,
+    DIP_SELECT: bool,
+    LEDR_N: inv bool,
+    LEDG_N: inv bool,
+    LCD_SCK: inv bool,
+    LCD_MOSI: inv bool,
+    LCD_CS: inv bool,
+    LCD_DC: inv bool,
+    LCD_RES: inv bool,
+    LCD_BL: inv bool,
+    DEBUG_GPIO0: inv bool,
+    DEBUG_GPIO1: inv bool,
+    DBG_PC0: inv bool,
+    DBG_PC1: inv bool,
+    DBG_PC2: inv bool,
+    DBG_PC3: inv bool,
+    DBG_MCE: inv bool,
+    DBG_PHASE0: inv bool,
+    DBG_PHASE1: inv bool,
+    DBG_PHASE2: inv bool,
+) {
+    let _ = (
+        BTN_D_UP,
+        BTN_D_DOWN,
+        BTN_D_LEFT,
+        BTN_D_RIGHT,
+        DIP_A,
+        DIP_B,
+        DIP_START,
+        DIP_SELECT,
+    );
+
+    let rst = inst reset_bridge(CLK, BTN_N, 48000u16, 16u16).rst;
+    decl prev_frame_idle_reg;
+    decl frame_index_reg;
+    decl pixel_x_reg;
+    decl pixel_y_reg;
+    decl frame_start_pulse;
+    decl pixel_stream_valid;
+
+    let lcd = inst st7789_lcd(
+        CLK,
+        rst,
+        120000u24,
+        120000u24,
+        1440000u24,
+        frame_start_pulse,
+        pixel_stream_valid,
+        pattern_shade(frame_index_reg, pixel_x_reg, pixel_y_reg),
+    );
+    let frame_idle = lcd.init_done && !lcd.frame_active;
+    let frame_start_pulse = frame_idle && !prev_frame_idle_reg;
+    let pixel_stream_valid = lcd.frame_active;
+
+    reg(CLK) prev_frame_idle_reg: bool reset(rst: false) = frame_idle;
+    reg(CLK) frame_index_reg: uint<32> reset(rst: 0u32) =
+        if frame_start_pulse { trunc(frame_index_reg + 1u32) } else { frame_index_reg };
+    reg(CLK) pixel_x_reg: uint<8> reset(rst: 0u8) =
+        next_x(pixel_x_reg, pixel_y_reg, frame_start_pulse, lcd.pixel_advance);
+    reg(CLK) pixel_y_reg: uint<8> reset(rst: 0u8) =
+        next_y(pixel_x_reg, pixel_y_reg, frame_start_pulse, lcd.pixel_advance);
+
+    set LEDR_N = heartbeat_led(frame_index_reg);
+    set LEDG_N = !lcd.frame_active;
+    set LCD_SCK = lcd.lcd_sck;
+    set LCD_MOSI = lcd.lcd_mosi;
+    set LCD_CS = lcd.lcd_cs;
+    set LCD_DC = lcd.lcd_dc;
+    set LCD_RES = lcd.lcd_res;
+    set LCD_BL = lcd.lcd_bl;
+    set DEBUG_GPIO0 = false;
+    set DEBUG_GPIO1 = false;
+    set DBG_PC0 = false;
+    set DBG_PC1 = false;
+    set DBG_PC2 = false;
+    set DBG_PC3 = false;
+    set DBG_MCE = false;
+    set DBG_PHASE0 = false;
+    set DBG_PHASE1 = false;
+    set DBG_PHASE2 = false;
+}
