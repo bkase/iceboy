@@ -86,6 +86,7 @@ class RunTestsTest(unittest.TestCase):
 
     def test_rom_tier_includes_wave_a_ppu_rom_and_mooneye_suites(self) -> None:
         rom_labels = [suite.label for suite in suites_for_tier("rom", nightly=False)]
+        self.assertIn("test_icebreaker_alu_loop.py", rom_labels)
         self.assertIn("test_cpu_instrs_blargg.py", rom_labels)
         self.assertIn("test_dma_mode2_hide.py", rom_labels)
         self.assertIn("test_obj_dma_metadata_corrupt.py", rom_labels)
@@ -94,6 +95,9 @@ class RunTestsTest(unittest.TestCase):
         self.assertIn("test_ppu_wave_b.py", rom_labels)
         self.assertIn("test_ppu_wave_c.py", rom_labels)
         self.assertIn("test_ppu_checker_ball.py", rom_labels)
+        alu_loop_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_icebreaker_alu_loop.py")
+        self.assertEqual(alu_loop_suite.runner, "shell")
+        self.assertEqual(alu_loop_suite.target, "tools/run_icebreaker_alu_loop_verilator.sh")
         blargg_suite = next(suite for suite in suites_for_tier("rom", nightly=False) if suite.label == "test_cpu_instrs_blargg.py")
         self.assertEqual(blargg_suite.runner, "shell")
         self.assertEqual(blargg_suite.target, "tools/run_cpu_instrs_blargg_verilator.sh")
@@ -122,6 +126,13 @@ class RunTestsTest(unittest.TestCase):
     def test_cpu_instrs_native_runner_sources_exist(self) -> None:
         self.assertTrue((ROOT / "tools" / "verilator" / "cpu_instrs_blargg_main.cpp").is_file())
         self.assertTrue((ROOT / "test" / "harness" / "verilog" / "cpu_test_top_verilator_wrapper.sv").is_file())
+
+    def test_icebreaker_alu_loop_native_runner_sources_exist(self) -> None:
+        self.assertTrue((ROOT / "tools" / "run_icebreaker_alu_loop_verilator.sh").is_file())
+        self.assertTrue((ROOT / "tools" / "verilator" / "icebreaker_alu_loop_main.cpp").is_file())
+        self.assertTrue((ROOT / "tools" / "export_alu_loop_oracle.py").is_file())
+        self.assertTrue((ROOT / "test" / "harness" / "verilog" / "icebreaker_alu_loop_top_verilator_wrapper.sv").is_file())
+        self.assertTrue((ROOT / "bench" / "roms" / "alu_loop.asm").is_file())
 
     def test_dmg_acid2_native_runner_sources_exist(self) -> None:
         self.assertTrue((ROOT / "tools" / "verilator" / "dmg_acid2_main.cpp").is_file())

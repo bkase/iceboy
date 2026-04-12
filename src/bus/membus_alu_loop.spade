@@ -280,17 +280,17 @@ pub entity membus_alu_loop(
         dma_oam_wdata,
     );
 
-    let resp = match visible_req {
+    let resp = match scheduled_req {
         BusReq::Read$(addr: _) => BusResp$(data:
-            if obs.blocked {
+            if scheduled_blocked {
                 blocked_read_data(memory_behavior_profile)
             } else {
-                match visible_region {
+                match region {
                     BusRegion::Rom => rom_data,
                     BusRegion::Wram => wram_data,
                     BusRegion::Echo => wram_data,
                     BusRegion::Oam => oam_data,
-                    BusRegion::Io => if visible_addr == 0xff00u16 { joypad_out.p1 } else { 0xffu8 },
+                    BusRegion::Io => if addr == 0xff00u16 { joypad_out.p1 } else { 0xffu8 },
                     BusRegion::Hram => hram_data,
                     BusRegion::NotUsable => not_usable_read_data(memory_behavior_profile),
                     _ => 0xffu8,

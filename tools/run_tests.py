@@ -238,6 +238,7 @@ SUITES: tuple[SuiteDefinition, ...] = (
     SuiteDefinition("rom", "test_alu16_sp.py", "swim", "test_alu16_sp"),
     SuiteDefinition("rom", "test_alu_flags.py", "swim", "test_alu_flags"),
     SuiteDefinition("rom", "test_alu_loop.py", "swim", "test_alu_loop"),
+    SuiteDefinition("rom", "test_icebreaker_alu_loop.py", "shell", "tools/run_icebreaker_alu_loop_verilator.sh"),
     SuiteDefinition("rom", "test_cb_bitops.py", "swim", "test_cb_bitops"),
     SuiteDefinition("rom", "test_dma_oam_copy.py", "swim", "test/rom/test_dma_oam_copy.py"),
     SuiteDefinition("rom", "test_dma_mode2_hide.py", "shell", "tools/run_dma_mode2_hide_verilator.sh"),

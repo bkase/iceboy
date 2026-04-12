@@ -117,6 +117,7 @@ PRECOMMIT_SWIM_TESTS_EXTENDED=(
     "test/rom/test_timer_div_basic.py"
     "test/rom/test_timer_irq_halt.py"
     "test/rom/test_loads_basic.py"
+    "tools/run_icebreaker_alu_loop_verilator.sh"
     "tools/run_cpu_instrs_blargg_verilator.sh"
     "test/ppu/unit/test_ppu_core_smoke.py"
     "test/ppu/unit/test_mixer.py"

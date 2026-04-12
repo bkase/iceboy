@@ -522,6 +522,21 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("cpu_test_top_verilator_wrapper.sv", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
+    def test_icebreaker_alu_loop_verilator_wrapper_dry_run_uses_native_board_runner(self) -> None:
+        completed = self.run_script("run_icebreaker_alu_loop_verilator.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("tools/prepare_verilator_sv.py", completed.stdout)
+        self.assertIn("build/spade.verilator.sv", completed.stdout)
+        self.assertIn("tools/export_alu_loop_oracle.py", completed.stdout)
+        self.assertIn("icebreaker_alu_loop_top_verilator_wrapper.sv", completed.stdout)
+        self.assertIn("tools/verilator/icebreaker_alu_loop_main.cpp", completed.stdout)
+        self.assertIn("--expected-trace=", completed.stdout)
+        self.assertIn("--reset-release-cycles=", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+
     def test_ppu_wave_b_mealybug_verilator_wrapper_dry_run_uses_sanitized_verilog_path(self) -> None:
         completed = self.run_script("run_ppu_wave_b_mealybug_verilator.sh", "--dry-run", "--skip-build")
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -782,6 +797,17 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((ROOT / "bench" / "ref" / "joypad_bg_smoke.py").exists())
         self.assertTrue((ROOT / "bench" / "actions" / "joypad_bg_smoke.yaml").exists())
 
+    def test_icebreaker_alu_loop_native_precommit_assets_exist(self) -> None:
+        run_tests_text = (TOOLS / "run_tests.py").read_text(encoding="utf-8")
+        hook_text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
+        self.assertIn('"tools/run_icebreaker_alu_loop_verilator.sh"', run_tests_text)
+        self.assertIn('"tools/run_icebreaker_alu_loop_verilator.sh"', hook_text)
+        self.assertTrue((TOOLS / "run_icebreaker_alu_loop_verilator.sh").exists())
+        self.assertTrue((TOOLS / "export_alu_loop_oracle.py").exists())
+        self.assertTrue((TOOLS / "verilator" / "icebreaker_alu_loop_main.cpp").exists())
+        self.assertTrue((ROOT / "test" / "harness" / "verilog" / "icebreaker_alu_loop_top_verilator_wrapper.sv").exists())
+        self.assertTrue((ROOT / "bench" / "roms" / "alu_loop.asm").exists())
+
     def test_pokered_playback_assets_exist(self) -> None:
         self.assertTrue((TOOLS / "run_pokered_playback_verilator.sh").exists())
         self.assertTrue((TOOLS / "verilator" / "pokered_playback_main.cpp").exists())
@@ -979,6 +1005,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/unit/test_hw_backend.py"', text)
         self.assertIn('"test/unit/test_vram_ebr.py"', text)
         self.assertIn('"tools/run_joypad_bg_smoke_verilator.sh"', text)
+        self.assertIn('"tools/run_icebreaker_alu_loop_verilator.sh"', text)
         self.assertIn('"test/lockstep/test_ei_halt_corners.py"', text)
         self.assertIn('"test/harness/test_arch_time_invariants.py"', text)
         self.assertIn('"test/harness/test_soc_lockstep_top.py"', text)
@@ -1029,6 +1056,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         extended_body = extended_match.group("body")
 
         self.assertNotIn('"tools/run_cpu_instrs_blargg_verilator.sh"', default_body)
+        self.assertNotIn('"tools/run_icebreaker_alu_loop_verilator.sh"', default_body)
         self.assertNotIn('"test/rom/test_loads_basic.py"', default_body)
         self.assertNotIn('"test/ppu/unit/test_ppu_core_smoke.py"', default_body)
         self.assertNotIn('"test/ppu/unit/test_mixer.py"', default_body)
@@ -1047,6 +1075,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertNotIn('"test/ppu/unit/test_tile.py"', default_body)
         self.assertNotIn('"test/power/test_ppu_power_quiescence.py"', default_body)
         self.assertIn('"tools/run_cpu_instrs_blargg_verilator.sh"', extended_body)
+        self.assertIn('"tools/run_icebreaker_alu_loop_verilator.sh"', extended_body)
         self.assertIn('"tools/run_joypad_bg_smoke_verilator.sh"', extended_body)
         self.assertIn('"test/rom/test_loads_basic.py"', extended_body)
         self.assertIn('"test/ppu/unit/test_ppu_core_smoke.py"', extended_body)
