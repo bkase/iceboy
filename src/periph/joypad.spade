@@ -76,6 +76,36 @@ fn visible_p1(select_reg: uint<2>, buttons: JoypButtons) -> uint<8> {
     0xc0u8 | (zext(select_reg) << 4) | zext(visible_low_nibble(select_reg, buttons))
 }
 
+fn next_select_reg_for_write(
+    curr_select_reg: uint<2>,
+    write_en: bool,
+    write_addr: uint<16>,
+    write_data: uint<8>,
+) -> uint<2> {
+    if lib::util::io_write(write_en, write_addr, 0xff00u16) {
+        trunc((write_data >> 4) & 0x3u8)
+    } else {
+        curr_select_reg
+    }
+}
+
+pub entity joypad_visible(
+    clk: clock,
+    rst: bool,
+    write_en: bool,
+    write_addr: uint<16>,
+    write_data: uint<8>,
+    buttons: JoypButtons,
+) -> uint<8> {
+    decl select_reg;
+
+    let next_select_reg = next_select_reg_for_write(select_reg, write_en, write_addr, write_data);
+
+    reg(clk) select_reg: uint<2> reset(rst: 0u2) = next_select_reg;
+
+    visible_p1(select_reg, buttons)
+}
+
 pub entity joypad(
     clk: clock,
     rst: bool,
@@ -84,17 +114,11 @@ pub entity joypad(
     write_data: uint<8>,
     buttons: JoypButtons,
 ) -> JoypadOut {
-    let write_p1 = lib::util::io_write(write_en, write_addr, 0xff00u16);
     decl select_reg;
     decl prev_pressed_reg;
     decl joypad_irq_reg;
 
-    let next_select_reg =
-        if write_p1 {
-            trunc((write_data >> 4) & 0x3u8)
-        } else {
-            select_reg
-        };
+    let next_select_reg = next_select_reg_for_write(select_reg, write_en, write_addr, write_data);
     let next_pressed = selected_pressed_nibble(next_select_reg, buttons);
     let fresh_pressed = next_pressed & ~prev_pressed_reg;
     let next_joypad_irq_reg = fresh_pressed != 0u4;

@@ -9,6 +9,7 @@ ENFORCE_BUDGET=0
 TOP_LABEL=""
 TOP_MODULE=""
 BOARD_TOP=""
+ROM_IMAGE=""
 OUT_DIR="${ICEBOY_ROOT}/build/hw_verify"
 SPADE_SV="${ICEBOY_ROOT}/build/spade.sv"
 DEBUG_PATTERNS=("CommitTrace" "DebugTrace" "PpuDebugTrace" "SimStimulus" "BusObs" "SocLockstepTopOut")
@@ -31,6 +32,11 @@ while [[ $# -gt 0 ]]; do
             TOP_LABEL="$2"
             shift
             ;;
+        --rom-image)
+            [[ $# -ge 2 ]] || iceboy_die "--rom-image requires a value"
+            ROM_IMAGE="$2"
+            shift
+            ;;
         --module)
             [[ $# -ge 2 ]] || iceboy_die "--module requires a Verilog module name"
             TOP_MODULE="$2"
@@ -51,6 +57,7 @@ while [[ $# -gt 0 ]]; do
 usage: tools/verify_icebreaker_variant.sh --top <spade-label> [options]
 
 options:
+  --rom-image <id>           Visible-top ROM image selector: bg_static or joypad_bg_smoke
   --module <verilog-module>   Verilog top module name; defaults to the tail of --top
   --board-top <path>          Board-top source path; defaults to src/board/<module>.spade
   --out-dir <dir>             Output directory; defaults to build/hw_verify
@@ -67,7 +74,20 @@ EOF
     shift
 done
 
-[[ -n "${TOP_LABEL}" ]] || iceboy_die "--top is required"
+if [[ -n "${ROM_IMAGE}" ]]; then
+    mapfile -t VISIBLE_VARIANT < <(iceboy_resolve_visible_rom_image "${ROM_IMAGE}")
+    if [[ -z "${TOP_LABEL}" ]]; then
+        TOP_LABEL="${VISIBLE_VARIANT[0]}"
+    fi
+    if [[ -z "${TOP_MODULE}" ]]; then
+        TOP_MODULE="${VISIBLE_VARIANT[1]}"
+    fi
+    if [[ -z "${BOARD_TOP}" ]]; then
+        BOARD_TOP="${VISIBLE_VARIANT[2]}"
+    fi
+fi
+
+[[ -n "${TOP_LABEL}" ]] || iceboy_die "--top or --rom-image is required"
 if [[ -z "${TOP_MODULE}" ]]; then
     TOP_MODULE="${TOP_LABEL##*::}"
 fi
@@ -105,6 +125,9 @@ if [[ "${DRY_RUN}" == "1" ]]; then
         echo "DRY RUN: skip swim build"
     else
         printf 'DRY RUN: %q build\n' "${SWIM_BIN}"
+    fi
+    if [[ -n "${ROM_IMAGE}" ]]; then
+        echo "DRY RUN: rom-image ${ROM_IMAGE}"
     fi
     echo "DRY RUN: top ${TOP_LABEL}"
     echo "DRY RUN: module ${TOP_MODULE}"

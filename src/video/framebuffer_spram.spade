@@ -30,8 +30,7 @@ fn framebuffer_word_addr(addr: uint<15>) -> uint<14> {
 fn framebuffer_pixel_addr(x: uint<8>, y: uint<8>) -> uint<15> {
     let y_wide: uint<16> = zext(y);
     let x_wide: uint<16> = zext(x);
-    let row_base_wide: uint<32> = y_wide * 160u16;
-    let row_base: uint<16> = trunc(row_base_wide);
+    let row_base: uint<16> = trunc((y_wide << 7) + (y_wide << 5));
     trunc(row_base + x_wide)
 }
 

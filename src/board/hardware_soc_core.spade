@@ -6,7 +6,7 @@ use lib::bus::io_decode::{blocked_read_data, dma_start, hram_write, not_usable_r
 use lib::bus::ppu_event_bridge::ppu_event_bridge;
 use lib::bus::types::{BusOwner, BusRegion, BusReq, BusResp, idle_bus_resp};
 use lib::cpu::core::cpu_core;
-use lib::cpu::types::{IrqAck, MemoryBehaviorProfile, Phase, no_irq_ack};
+use lib::cpu::types::{IrqAck, MemoryBehaviorProfile, Phase, no_irq_ack, no_irq_pending};
 use lib::mem::logical::map::{hram_addr, rom_addr, wram_addr};
 use lib::mem::phys::ebr::hram_ebr;
 use lib::mem::phys::rom_backend_types::{RomBackendOut, RomBackendPorts};
@@ -15,21 +15,23 @@ use lib::mem::phys::rom_baked_images::{alu_loop_rom_backend, bg_static_rom_backe
 use lib::mem::phys::rom_spram_rw::rom_spram_rw;
 use lib::mem::phys::spram::wram_spram;
 use lib::periph::interrupts::{InterruptsOut, interrupts};
-use lib::periph::joypad::{JoypButtons, JoypadOut, joypad};
+use lib::periph::joypad::{JoypButtons, JoypadOut, joypad, joypad_visible};
 use lib::periph::oam_dma::oam_dma;
 use lib::periph::serial::{SerialOut, serial};
 use lib::periph::timer::{TimerOut, timer};
 use lib::ppu::rtl::core_hw_bg_window::{PpuCoreHwBgWindowOut, ppu_core_hw_bg_window};
 use lib::ppu::rtl::regs::readback_register;
-use lib::ppu::sem::events::OamDmaState;
+use lib::ppu::sem::events::{OamDmaState, idle_oam_dma_state};
 use lib::ppu::sem::scanout::ScanoutEvent;
 use lib::ppu::sem::types::PpuMode;
 use lib::util::cpu_bus_req;
 use lib::video::hw_backend::hw_backend;
+use lib::video::hw_backend_vram_only::hw_backend_vram_only;
 
 pub struct HardwareSocCoreOut {
     rom_ports: RomBackendPorts,
     rom_ready: bool,
+    cpu_halted: bool,
     scanout: Option<ScanoutEvent>,
     pc: uint<16>,
     pc_low4: uint<4>,
@@ -39,6 +41,12 @@ pub struct HardwareSocCoreOut {
     phase_bits: uint<3>,
     ppu_mode_bits: uint<3>,
     ppu_ly: uint<8>,
+}
+
+pub struct VisibleHardwareSocCoreOut {
+    rom_ports: RomBackendPorts,
+    cpu_halted: bool,
+    scanout: Option<ScanoutEvent>,
 }
 
 fn preview_cpu_bus_req(cpu: lib::cpu::core::CpuCoreOut, m_ce: bool, fallback_pc: uint<16>) -> BusReq {
@@ -113,6 +121,13 @@ fn encode_ppu_mode(mode: PpuMode) -> uint<3> {
     }
 }
 
+fn cpu_is_halted(halt_state: lib::cpu::types::HaltState) -> bool {
+    match halt_state {
+        lib::cpu::types::HaltState::Halted => true,
+        _ => false,
+    }
+}
+
 fn ppu_vram_active(mode: PpuMode) -> bool {
     match mode {
         PpuMode::PixelTransfer => true,
@@ -156,6 +171,19 @@ fn visible_io_read_data(
         0xff49u16 => readback_register(0x49u8, ppu.regs, ppu.status, ppu.ly),
         0xff4au16 => readback_register(0x4au8, ppu.regs, ppu.status, ppu.ly),
         0xff4bu16 => readback_register(0x4bu8, ppu.regs, ppu.status, ppu.ly),
+        _ => 0xffu8,
+    }
+}
+
+fn visible_io_read_data_minimal(
+    addr: uint<16>,
+    joypad_p1: uint<8>,
+    ppu: PpuCoreHwBgWindowOut,
+) -> uint<8> {
+    match addr {
+        0xff00u16 => joypad_p1,
+        0xff40u16 => readback_register(0x40u8, ppu.regs, ppu.status, ppu.ly),
+        0xff44u16 => readback_register(0x44u8, ppu.regs, ppu.status, ppu.ly),
         _ => 0xffu8,
     }
 }
@@ -382,6 +410,7 @@ pub entity hardware_soc_core(
     HardwareSocCoreOut$(
         rom_ports: rom_ports,
         rom_ready: rom_backend_i.rom_ready,
+        cpu_halted: cpu_is_halted(cpu.halt_state),
         scanout: ppu.scanout,
         pc: cpu.pc,
         pc_low4: trunc(cpu.pc),
@@ -391,6 +420,146 @@ pub entity hardware_soc_core(
         phase_bits: encode_cpu_phase(cpu.phase),
         ppu_mode_bits: encode_ppu_mode(ppu.mode),
         ppu_ly: ppu.ly,
+    )
+}
+
+pub entity hardware_soc_core_visible(
+    clk: clock,
+    rst: bool,
+    joyp_buttons: JoypButtons,
+    rom_backend_i: RomBackendOut,
+) -> VisibleHardwareSocCoreOut {
+    decl bus_resp_next;
+    decl ppu_mem_resp;
+
+    let tb = inst timebase(clk, rst);
+    reg(clk) bus_read_data_reg: uint<8> reset(rst: 0x00u8) =
+        if tb.m_ce { bus_read_data_reg } else { bus_resp_next.data };
+    let cpu = inst cpu_core(
+        clk,
+        rst,
+        tb.m_ce,
+        BusResp$(data: bus_read_data_reg),
+        no_irq_pending(),
+    );
+    reg(clk) prefetch_pc_reg: uint<16> reset(rst: 0x0100u16) =
+        if tb.m_ce { cpu.pc } else { prefetch_pc_reg };
+
+    let req = preview_cpu_bus_req(cpu, tb.m_ce, prefetch_pc_reg);
+    let scheduled_req = if rst { BusReq::Idle } else { req };
+    let visible_req = active_req(rst, tb.m_ce, req);
+    let addr = req_addr(scheduled_req);
+    let region = decode_region(addr);
+    let visible_addr = req_addr(visible_req);
+    let visible_region = decode_region(visible_addr);
+
+    let (ppu_bus_events, ppu_bus_event_count) = inst ppu_event_bridge(
+        clk,
+        rst,
+        tb.m_ce,
+        req,
+        tb.frame_start,
+        tb.line_index,
+        tb.dot_in_line,
+    );
+
+    let rom_ports = RomBackendPorts$(
+        cpu_addr: rom_addr(region, addr),
+        dma_addr: 0u15,
+        loader_write_en: false,
+        loader_write_addr: 0u15,
+        loader_write_data: 0u8,
+    );
+    let rom_cpu_data = if rom_backend_i.rom_ready { rom_backend_i.cpu_data } else { 0xffu8 };
+
+    let ppu = inst ppu_core_hw_bg_window(
+        clk,
+        rst,
+        tb.dot_ce,
+        ppu_bus_events,
+        ppu_bus_event_count,
+        ppu_mem_resp,
+        idle_oam_dma_state(),
+    );
+    let ppu_vram_busy = ppu_vram_active(ppu.mode);
+    let scheduled_owner = region_owner(region, false, ppu_vram_busy, false);
+    let scheduled_blocked = blocked_req(scheduled_req, scheduled_owner);
+    let visible_owner = region_owner(visible_region, false, ppu_vram_busy, false);
+    let visible_blocked = blocked_req(visible_req, visible_owner);
+    let write_allowed = req_is_write(scheduled_req) && !scheduled_blocked;
+    let visible_write_en = req_is_write(visible_req) && !visible_blocked;
+    let visible_write_data = req_write_data(visible_req);
+
+    let joypad_p1 = inst joypad_visible(
+        clk,
+        rst,
+        visible_write_en,
+        visible_addr,
+        visible_write_data,
+        joyp_buttons,
+    );
+
+    let (wram_we, wram_waddr, wram_wdata) = wram_write(
+        region,
+        if write_allowed { scheduled_req } else { BusReq::Idle },
+    );
+    let (wram_data, _) = inst wram_spram(
+        clk,
+        tb.t_index,
+        wram_addr(region, addr),
+        0u13,
+        wram_we,
+        wram_waddr,
+        wram_wdata,
+    );
+    let (hram_we, hram_waddr, hram_wdata) = hram_write(
+        region,
+        if write_allowed { scheduled_req } else { BusReq::Idle },
+    );
+    let (hram_data, _) = inst hram_ebr(
+        clk,
+        hram_addr(region, addr),
+        0u7,
+        hram_we,
+        hram_waddr,
+        hram_wdata,
+    );
+    let (ppu_mem_resp, cpu_vram_read_data) = inst hw_backend_vram_only(
+        clk,
+        rst,
+        ppu.mem_reqs,
+        addr,
+        write_allowed,
+        req_write_data(scheduled_req),
+        is_vram_addr(addr),
+        ppu_vram_busy,
+    );
+
+    let bus_resp_next = match scheduled_req {
+        BusReq::Read$(addr: _) => BusResp$(data:
+            if scheduled_blocked {
+                blocked_read_data(MemoryBehaviorProfile::DmgConservative)
+            } else {
+                match region {
+                    BusRegion::Rom => rom_cpu_data,
+                    BusRegion::Vram => cpu_vram_read_data,
+                    BusRegion::Wram => wram_data,
+                    BusRegion::Echo => wram_data,
+                    BusRegion::Oam => 0xffu8,
+                    BusRegion::Io => visible_io_read_data_minimal(addr, joypad_p1, ppu),
+                    BusRegion::Hram => hram_data,
+                    BusRegion::Ie => 0x00u8,
+                    BusRegion::NotUsable => not_usable_read_data(MemoryBehaviorProfile::DmgConservative),
+                    _ => 0xffu8,
+                }
+            }),
+        _ => idle_bus_resp(),
+    };
+
+    VisibleHardwareSocCoreOut$(
+        rom_ports: rom_ports,
+        cpu_halted: cpu_is_halted(cpu.halt_state),
+        scanout: ppu.scanout,
     )
 }
 
@@ -494,5 +663,27 @@ pub entity hardware_soc_core_rw(
         rom_backend,
     );
     let rom_backend = inst rom_spram_rw(clk, core.t_index, core.rom_ports);
+    core
+}
+
+pub entity hardware_soc_core_visible_bg_static_1k(
+    clk: clock,
+    rst: bool,
+    joyp_buttons: JoypButtons,
+) -> VisibleHardwareSocCoreOut {
+    decl rom_backend;
+    let core = inst hardware_soc_core_visible(clk, rst, joyp_buttons, rom_backend);
+    let rom_backend = inst bg_static_rom_backend(clk, core.rom_ports);
+    core
+}
+
+pub entity hardware_soc_core_visible_joypad_bg_smoke_2k(
+    clk: clock,
+    rst: bool,
+    joyp_buttons: JoypButtons,
+) -> VisibleHardwareSocCoreOut {
+    decl rom_backend;
+    let core = inst hardware_soc_core_visible(clk, rst, joyp_buttons, rom_backend);
+    let rom_backend = inst joypad_bg_smoke_rom_backend(clk, core.rom_ports);
     core
 }

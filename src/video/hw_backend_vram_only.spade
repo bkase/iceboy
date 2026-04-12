@@ -1,0 +1,77 @@
+use lib::mem::phys::vram_ebr::vram_ebr;
+use lib::ppu::sem::memory::{MemRegion, PpuMemReq, PpuMemResp, PpuMemResult, idle_ppu_mem_req, idle_ppu_mem_resp};
+use lib::ppu::sem::observe::PpuMemReqs;
+
+fn req_is_vram(req: PpuMemReq) -> bool {
+    match req.tag.region {
+        MemRegion::Vram => true,
+        MemRegion::Oam => false,
+    }
+}
+
+fn req_vram_addr(req: PpuMemReq) -> uint<13> {
+    trunc(req.addr - 0x8000u16)
+}
+
+fn cpu_vram_addr(addr: uint<16>) -> uint<13> {
+    trunc(addr - 0x8000u16)
+}
+
+fn slot0_req(ppu_mem_reqs: PpuMemReqs) -> PpuMemReq {
+    if ppu_mem_reqs.count != 0u3 {
+        ppu_mem_reqs.slots[0]
+    } else {
+        idle_ppu_mem_req()
+    }
+}
+
+fn slot0_valid(ppu_mem_reqs: PpuMemReqs) -> bool {
+    ppu_mem_reqs.count != 0u3
+}
+
+fn ok_mem_resp(req: PpuMemReq, vram_data: uint<8>) -> PpuMemResp {
+    let data = if req_is_vram(req) { vram_data } else { 0xffu8 };
+    PpuMemResp$(tag: req.tag, result: PpuMemResult::Ok$(data: data))
+}
+
+pub entity hw_backend_vram_only(
+    clk: clock,
+    rst: bool,
+    ppu_mem_reqs: PpuMemReqs,
+    cpu_addr: uint<16>,
+    cpu_write_en: bool,
+    cpu_write_data: uint<8>,
+    cpu_is_vram: bool,
+    ppu_vram_active: bool,
+) -> (
+    PpuMemResp,
+    uint<8>,
+) {
+    let req_now = slot0_req(ppu_mem_reqs);
+    let req_valid_now = slot0_valid(ppu_mem_reqs);
+
+    reg(clk) pending_req_reg: PpuMemReq reset(rst: idle_ppu_mem_req()) = req_now;
+    reg(clk) pending_resp_valid_reg: bool reset(rst: false) = req_valid_now;
+
+    let cpu_vram_write_en = cpu_write_en && cpu_is_vram && !ppu_vram_active;
+    let vram_read_data = inst vram_ebr(
+        clk,
+        cpu_vram_addr(cpu_addr),
+        req_vram_addr(req_now),
+        0u13,
+        req_valid_now && req_is_vram(req_now),
+        false,
+        cpu_vram_write_en,
+        cpu_vram_addr(cpu_addr),
+        cpu_write_data,
+    );
+
+    let ppu_mem_resp = if pending_resp_valid_reg {
+        ok_mem_resp(pending_req_reg, vram_read_data)
+    } else {
+        idle_ppu_mem_resp()
+    };
+    let cpu_vram_read_data = if ppu_vram_active { 0xffu8 } else { vram_read_data };
+
+    (ppu_mem_resp, cpu_vram_read_data)
+}

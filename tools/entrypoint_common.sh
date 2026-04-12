@@ -157,6 +157,27 @@ iceboy_run_or_print() {
     "$@"
 }
 
+iceboy_resolve_visible_rom_image() {
+    local rom_image="$1"
+    case "$rom_image" in
+        bg_static)
+            printf '%s\n' \
+                "board::icebreaker_visible_top::icebreaker_visible_bg_static_top" \
+                "icebreaker_visible_bg_static_top" \
+                "${ICEBOY_ROOT}/src/board/icebreaker_visible_top.spade"
+            ;;
+        joypad_bg_smoke)
+            printf '%s\n' \
+                "board::icebreaker_visible_top::icebreaker_visible_joypad_bg_smoke_top" \
+                "icebreaker_visible_joypad_bg_smoke_top" \
+                "${ICEBOY_ROOT}/src/board/icebreaker_visible_top.spade"
+            ;;
+        *)
+            iceboy_die "unsupported --rom-image '${rom_image}'; expected bg_static or joypad_bg_smoke"
+            ;;
+    esac
+}
+
 iceboy_swim_verilog_sources() {
     python3 - <<'PY' "${ICEBOY_ROOT}/swim.toml"
 from pathlib import Path

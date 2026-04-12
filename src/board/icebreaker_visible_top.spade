@@ -1,0 +1,284 @@
+use std::option::Option;
+
+use lib::board::hardware_soc_core::{hardware_soc_core_visible_bg_static_1k, hardware_soc_core_visible_joypad_bg_smoke_2k};
+use lib::board::reset_bridge::reset_bridge;
+use lib::periph::joypad::JoypButtons;
+use lib::periph::st7789_lcd::st7789_lcd;
+use lib::ppu::sem::scanout::ScanoutEvent;
+use lib::video::framebuffer_spram::framebuffer_spram;
+
+fn joypad_buttons_from_inputs(dpad_bits: [bool; 4], dip_bits: [bool; 4]) -> JoypButtons {
+    JoypButtons$(
+        right: dpad_bits[0],
+        left: dpad_bits[1],
+        up: dpad_bits[2],
+        down: dpad_bits[3],
+        a: dip_bits[0],
+        b: dip_bits[1],
+        select: dip_bits[2],
+        start: dip_bits[3],
+    )
+}
+
+entity icebreaker_visible_bg_output_stage(
+    clk: clock,
+    scanout_i: Option<ScanoutEvent>,
+    cpu_halted_i: bool,
+    TX: inv bool,
+    LEDR_N: inv bool,
+    LEDG_N: inv bool,
+    LCD_SCK: inv bool,
+    LCD_MOSI: inv bool,
+    LCD_CS: inv bool,
+    LCD_DC: inv bool,
+    LCD_RES: inv bool,
+    LCD_BL: inv bool,
+    DEBUG_GPIO0: inv bool,
+    DEBUG_GPIO1: inv bool,
+    DBG_PC0: inv bool,
+    DBG_PC1: inv bool,
+    DBG_PC2: inv bool,
+    DBG_PC3: inv bool,
+    DBG_MCE: inv bool,
+    DBG_PHASE0: inv bool,
+    DBG_PHASE1: inv bool,
+    DBG_PHASE2: inv bool,
+) {
+    decl lcd;
+
+    let framebuffer = inst framebuffer_spram(clk, false, scanout_i, lcd.pixel_advance);
+    let lcd = inst st7789_lcd(
+        clk,
+        false,
+        120000u24,
+        120000u24,
+        1440000u24,
+        framebuffer.frame_start,
+        framebuffer.pixel_valid,
+        framebuffer.pixel_shade,
+    );
+
+    set TX = true;
+    let _ = clk;
+    set LEDR_N = false;
+    set LEDG_N = !cpu_halted_i;
+    set LCD_SCK = lcd.lcd_sck;
+    set LCD_MOSI = lcd.lcd_mosi;
+    set LCD_CS = lcd.lcd_cs;
+    set LCD_DC = lcd.lcd_dc;
+    set LCD_RES = lcd.lcd_res;
+    set LCD_BL = lcd.lcd_bl;
+    set DEBUG_GPIO0 = false;
+    set DEBUG_GPIO1 = false;
+    set DBG_PC0 = false;
+    set DBG_PC1 = false;
+    set DBG_PC2 = false;
+    set DBG_PC3 = false;
+    set DBG_MCE = false;
+    set DBG_PHASE0 = false;
+    set DBG_PHASE1 = false;
+    set DBG_PHASE2 = false;
+}
+
+entity icebreaker_visible_joypad_output_stage(
+    clk: clock,
+    scanout_i: Option<ScanoutEvent>,
+    cpu_halted_i: bool,
+    TX: inv bool,
+    LEDR_N: inv bool,
+    LEDG_N: inv bool,
+    LCD_SCK: inv bool,
+    LCD_MOSI: inv bool,
+    LCD_CS: inv bool,
+    LCD_DC: inv bool,
+    LCD_RES: inv bool,
+    LCD_BL: inv bool,
+    DEBUG_GPIO0: inv bool,
+    DEBUG_GPIO1: inv bool,
+    DBG_PC0: inv bool,
+    DBG_PC1: inv bool,
+    DBG_PC2: inv bool,
+    DBG_PC3: inv bool,
+    DBG_MCE: inv bool,
+    DBG_PHASE0: inv bool,
+    DBG_PHASE1: inv bool,
+    DBG_PHASE2: inv bool,
+) {
+    decl lcd;
+
+    let framebuffer = inst framebuffer_spram(clk, false, scanout_i, lcd.pixel_advance);
+    let lcd = inst st7789_lcd(
+        clk,
+        false,
+        120000u24,
+        120000u24,
+        1440000u24,
+        framebuffer.frame_start,
+        framebuffer.pixel_valid,
+        framebuffer.pixel_shade,
+    );
+    reg(clk) heartbeat_led_reg: bool initial(false) =
+        if framebuffer.frame_start {
+            !heartbeat_led_reg
+        } else {
+            heartbeat_led_reg
+        };
+
+    set TX = true;
+    set LEDR_N = heartbeat_led_reg;
+    set LEDG_N = !cpu_halted_i;
+    set LCD_SCK = lcd.lcd_sck;
+    set LCD_MOSI = lcd.lcd_mosi;
+    set LCD_CS = lcd.lcd_cs;
+    set LCD_DC = lcd.lcd_dc;
+    set LCD_RES = lcd.lcd_res;
+    set LCD_BL = lcd.lcd_bl;
+    set DEBUG_GPIO0 = false;
+    set DEBUG_GPIO1 = false;
+    set DBG_PC0 = false;
+    set DBG_PC1 = false;
+    set DBG_PC2 = false;
+    set DBG_PC3 = false;
+    set DBG_MCE = false;
+    set DBG_PHASE0 = false;
+    set DBG_PHASE1 = false;
+    set DBG_PHASE2 = false;
+}
+
+#[no_mangle(all)]
+entity icebreaker_visible_bg_static_top(
+    CLK: clock,
+    BTN_N: bool,
+    RX: bool,
+    BTN_D_UP: bool,
+    BTN_D_DOWN: bool,
+    BTN_D_LEFT: bool,
+    BTN_D_RIGHT: bool,
+    DIP_A: bool,
+    DIP_B: bool,
+    DIP_START: bool,
+    DIP_SELECT: bool,
+    TX: inv bool,
+    LEDR_N: inv bool,
+    LEDG_N: inv bool,
+    LCD_SCK: inv bool,
+    LCD_MOSI: inv bool,
+    LCD_CS: inv bool,
+    LCD_DC: inv bool,
+    LCD_RES: inv bool,
+    LCD_BL: inv bool,
+    DEBUG_GPIO0: inv bool,
+    DEBUG_GPIO1: inv bool,
+    DBG_PC0: inv bool,
+    DBG_PC1: inv bool,
+    DBG_PC2: inv bool,
+    DBG_PC3: inv bool,
+    DBG_MCE: inv bool,
+    DBG_PHASE0: inv bool,
+    DBG_PHASE1: inv bool,
+    DBG_PHASE2: inv bool,
+) {
+    let _ = RX;
+    let rst = inst reset_bridge(CLK, BTN_N, 48000u16, 16u16).rst;
+    let dpad_buttons = [BTN_D_RIGHT, BTN_D_LEFT, BTN_D_UP, BTN_D_DOWN];
+    let dip_switches = [DIP_A, DIP_B, DIP_SELECT, DIP_START];
+    let core = inst hardware_soc_core_visible_bg_static_1k(
+        CLK,
+        rst,
+        joypad_buttons_from_inputs(dpad_buttons, dip_switches),
+    );
+
+    inst icebreaker_visible_bg_output_stage(
+        CLK,
+        core.scanout,
+        core.cpu_halted,
+        TX,
+        LEDR_N,
+        LEDG_N,
+        LCD_SCK,
+        LCD_MOSI,
+        LCD_CS,
+        LCD_DC,
+        LCD_RES,
+        LCD_BL,
+        DEBUG_GPIO0,
+        DEBUG_GPIO1,
+        DBG_PC0,
+        DBG_PC1,
+        DBG_PC2,
+        DBG_PC3,
+        DBG_MCE,
+        DBG_PHASE0,
+        DBG_PHASE1,
+        DBG_PHASE2,
+    );
+}
+
+#[no_mangle(all)]
+entity icebreaker_visible_joypad_bg_smoke_top(
+    CLK: clock,
+    BTN_N: bool,
+    RX: bool,
+    BTN_D_UP: bool,
+    BTN_D_DOWN: bool,
+    BTN_D_LEFT: bool,
+    BTN_D_RIGHT: bool,
+    DIP_A: bool,
+    DIP_B: bool,
+    DIP_START: bool,
+    DIP_SELECT: bool,
+    TX: inv bool,
+    LEDR_N: inv bool,
+    LEDG_N: inv bool,
+    LCD_SCK: inv bool,
+    LCD_MOSI: inv bool,
+    LCD_CS: inv bool,
+    LCD_DC: inv bool,
+    LCD_RES: inv bool,
+    LCD_BL: inv bool,
+    DEBUG_GPIO0: inv bool,
+    DEBUG_GPIO1: inv bool,
+    DBG_PC0: inv bool,
+    DBG_PC1: inv bool,
+    DBG_PC2: inv bool,
+    DBG_PC3: inv bool,
+    DBG_MCE: inv bool,
+    DBG_PHASE0: inv bool,
+    DBG_PHASE1: inv bool,
+    DBG_PHASE2: inv bool,
+) {
+    let _ = RX;
+    let rst = inst reset_bridge(CLK, BTN_N, 48000u16, 16u16).rst;
+    let dpad_buttons = [BTN_D_RIGHT, BTN_D_LEFT, BTN_D_UP, BTN_D_DOWN];
+    let dip_switches = [DIP_A, DIP_B, DIP_SELECT, DIP_START];
+    let core = inst hardware_soc_core_visible_joypad_bg_smoke_2k(
+        CLK,
+        rst,
+        joypad_buttons_from_inputs(dpad_buttons, dip_switches),
+    );
+
+    inst icebreaker_visible_joypad_output_stage(
+        CLK,
+        core.scanout,
+        core.cpu_halted,
+        TX,
+        LEDR_N,
+        LEDG_N,
+        LCD_SCK,
+        LCD_MOSI,
+        LCD_CS,
+        LCD_DC,
+        LCD_RES,
+        LCD_BL,
+        DEBUG_GPIO0,
+        DEBUG_GPIO1,
+        DBG_PC0,
+        DBG_PC1,
+        DBG_PC2,
+        DBG_PC3,
+        DBG_MCE,
+        DBG_PHASE0,
+        DBG_PHASE1,
+        DBG_PHASE2,
+    );
+}

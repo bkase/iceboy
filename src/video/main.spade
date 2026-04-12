@@ -9,5 +9,6 @@ pub mod framebuffer_spram_test_top;
 pub mod frame_sink;
 pub mod frame_sink_test_top;
 pub mod hw_backend;
+pub mod hw_backend_vram_only;
 pub mod hw_backend_test_top;
 pub mod test_helpers;

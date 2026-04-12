@@ -7,6 +7,7 @@ pub mod icebreaker_alu_loop_top;
 pub mod icebreaker_hardware_soc_core_bg_window_fit_top;
 pub mod icebreaker_hardware_soc_core_fit_top;
 pub mod icebreaker_lcd_test_top;
+pub mod icebreaker_visible_top;
 mod icebreaker_top;
 pub mod reset_bridge;
 pub mod reset_bridge_test_top;

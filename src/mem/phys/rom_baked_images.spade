@@ -62,7 +62,7 @@ pub entity bg_static_rom_backend(clk: clock, ports: RomBackendPorts) -> RomBacke
 
 fn joypad_bg_smoke_rom_backend_out(cpu_addr: uint<15>, raw_cpu_data: uint<8>) -> RomBackendOut {
     RomBackendOut$(
-        cpu_data: if cpu_addr < 2048u15 { raw_cpu_data } else { 0xffu8 },
+        cpu_data: if cpu_addr < 1152u15 { raw_cpu_data } else { 0xffu8 },
         dma_data: 0xffu8,
         rom_ready: true,
     )

@@ -171,6 +171,25 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("synth_ice40 -top dummy_top", completed.stdout)
         self.assertIn("test/harness/verilog/rom_baked_ebr_raw.v", completed.stdout)
 
+    def test_verify_icebreaker_variant_dry_run_accepts_visible_rom_image_selector(self) -> None:
+        completed = self.run_script(
+            "verify_icebreaker_variant.sh",
+            "--dry-run",
+            "--skip-build",
+            "--rom-image",
+            "joypad_bg_smoke",
+            "--out-dir",
+            "build/hw_verify_visible",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("rom-image joypad_bg_smoke", completed.stdout)
+        self.assertIn("top board::icebreaker_visible_top::icebreaker_visible_joypad_bg_smoke_top", completed.stdout)
+        self.assertIn("module icebreaker_visible_joypad_bg_smoke_top", completed.stdout)
+        self.assertIn("src/board/icebreaker_visible_top.spade", completed.stdout)
+        self.assertIn("build/hw_verify_visible/hardware.json", completed.stdout)
+        self.assertIn("build/hw_verify_visible/yosys-stat.txt", completed.stdout)
+        self.assertIn("synth_ice40 -top icebreaker_visible_joypad_bg_smoke_top", completed.stdout)
+
     def test_hardware_baseline_dry_run_emits_synth_and_pnr_steps(self) -> None:
         completed = self.run_script("run_hardware_baseline.sh", "--dry-run")
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -342,6 +361,23 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("synth_ice40 -top dummy_top", completed.stdout)
         self.assertIn("test/harness/verilog/rom_baked_ebr_raw.v", completed.stdout)
 
+    def test_build_icebreaker_variant_dry_run_accepts_visible_rom_image_selector(self) -> None:
+        completed = self.run_script(
+            "build_icebreaker_variant.sh",
+            "--dry-run",
+            "--skip-build",
+            "--rom-image",
+            "bg_static",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("rom-image bg_static", completed.stdout)
+        self.assertIn("top board::icebreaker_visible_top::icebreaker_visible_bg_static_top", completed.stdout)
+        self.assertIn("module icebreaker_visible_bg_static_top", completed.stdout)
+        self.assertIn("src/board/icebreaker_visible_top.spade", completed.stdout)
+        self.assertIn("build/variants/icebreaker_visible_bg_static_top/synth/icebreaker_visible_bg_static_top.json", completed.stdout)
+        self.assertIn("build/variants/icebreaker_visible_bg_static_top/icebreaker_visible_bg_static_top.asc", completed.stdout)
+        self.assertIn("synth_ice40 -top icebreaker_visible_bg_static_top", completed.stdout)
+
     def test_build_icebreaker_variant_dry_run_accepts_explicit_module_and_baseline_outputs(self) -> None:
         completed = self.run_script(
             "build_icebreaker_variant.sh",
@@ -376,7 +412,7 @@ class LocalEntrypointsTest(unittest.TestCase):
     def test_build_icebreaker_variant_requires_explicit_top(self) -> None:
         completed = self.run_script("build_icebreaker_variant.sh", "--dry-run")
         self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("--top is required", completed.stderr)
+        self.assertIn("--top or --rom-image is required", completed.stderr)
 
     def test_build_icebreaker_variant_dry_run_includes_pack_step_and_bin_output(self) -> None:
         completed = self.run_script(
