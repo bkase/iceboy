@@ -156,3 +156,46 @@ iceboy_run_or_print() {
     fi
     "$@"
 }
+
+iceboy_swim_verilog_sources() {
+    python3 - <<'PY' "${ICEBOY_ROOT}/swim.toml"
+from pathlib import Path
+import ast
+import re
+import sys
+
+swim_toml = Path(sys.argv[1])
+if not swim_toml.is_file():
+    raise SystemExit(0)
+
+verilog_sources_re = re.compile(r"^sources\s*=\s*(\[.*\])\s*$")
+in_verilog_block = False
+
+for raw_line in swim_toml.read_text(encoding="utf-8").splitlines():
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        continue
+    if line.startswith("[") and line.endswith("]"):
+        in_verilog_block = line == "[verilog]"
+        continue
+    if not in_verilog_block:
+        continue
+    match = verilog_sources_re.match(line)
+    if match is None:
+        continue
+    parsed = ast.literal_eval(match.group(1))
+    if not isinstance(parsed, list):
+        raise SystemExit("error: [verilog].sources must be a list")
+    for item in parsed:
+        print((swim_toml.parent / item).resolve())
+    break
+PY
+}
+
+iceboy_yosys_read_swim_verilog_commands() {
+    local source
+    while IFS= read -r source; do
+        [[ -n "${source}" ]] || continue
+        printf 'read_verilog -sv "%s";\n' "${source}"
+    done < <(iceboy_swim_verilog_sources)
+}

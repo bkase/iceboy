@@ -26,6 +26,7 @@ NEXTPNR_REPORT_NAME="nextpnr-report.json"
 NEXTPNR_LOG_NAME="nextpnr.log"
 RECORD_VERIFIED_BY="tools/build_icebreaker_variant.sh"
 DEBUG_PATTERNS=("CommitTrace" "DebugTrace" "PpuDebugTrace" "SimStimulus" "BusObs" "SocLockstepTopOut")
+SWIM_VERILOG_SOURCES=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -198,6 +199,7 @@ iceboy_log_tool "nextpnr-ice40" "${NEXTPNR_VERSION}"
 YOSYS_SCRIPT=$(
     cat <<EOF
 read_verilog -sv "${SPADE_SV}";
+$(iceboy_yosys_read_swim_verilog_commands)
 synth_ice40 -top ${TOP_MODULE} -json "${SYNTH_JSON}";
 tee -q -o "${YOSYS_STAT}" stat;
 EOF
@@ -249,6 +251,13 @@ if [[ "${SKIP_BUILD}" != "1" ]]; then
 fi
 
 iceboy_require_file "${SPADE_SV}" "generated Verilog"
+while IFS= read -r source; do
+    [[ -n "${source}" ]] || continue
+    SWIM_VERILOG_SOURCES+=("${source}")
+done < <(iceboy_swim_verilog_sources)
+for source in "${SWIM_VERILOG_SOURCES[@]}"; do
+    iceboy_require_file "${source}" "repo Verilog source"
+done
 if ! rg -n "module ${TOP_MODULE}\\b" "${SPADE_SV}" >/dev/null; then
     iceboy_die "generated Verilog does not contain top '${TOP_MODULE}'"
 fi

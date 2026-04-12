@@ -1,4 +1,4 @@
-module \iceboy::periph::button_bank::button_bank_raw[2862] #(
+module \iceboy::periph::button_bank::button_bank_raw[2874] #(
     parameter integer N = 8,
     parameter integer DEBOUNCE_BITS = 8,
     parameter integer O = N * 4

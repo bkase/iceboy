@@ -13,6 +13,7 @@ OUT_DIR="${ICEBOY_ROOT}/build/hw_verify"
 SPADE_SV="${ICEBOY_ROOT}/build/spade.sv"
 DEBUG_PATTERNS=("CommitTrace" "DebugTrace" "PpuDebugTrace" "SimStimulus" "BusObs" "SocLockstepTopOut")
 CHECK_HW_IMPORTS="${ICEBOY_ROOT}/tools/check_hw_imports.py"
+SWIM_VERILOG_SOURCES=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -93,6 +94,7 @@ iceboy_log_tool "yosys" "${YOSYS_VERSION}"
 YOSYS_SCRIPT=$(
     cat <<EOF
 read_verilog -sv "${SPADE_SV}";
+$(iceboy_yosys_read_swim_verilog_commands)
 synth_ice40 -top ${TOP_MODULE} -json "${NETLIST_JSON}";
 tee -q -o "${STAT_FILE}" stat;
 EOF
@@ -129,6 +131,13 @@ if [[ "${SKIP_BUILD}" != "1" ]]; then
 fi
 
 iceboy_require_file "${SPADE_SV}" "generated Verilog"
+while IFS= read -r source; do
+    [[ -n "${source}" ]] || continue
+    SWIM_VERILOG_SOURCES+=("${source}")
+done < <(iceboy_swim_verilog_sources)
+for source in "${SWIM_VERILOG_SOURCES[@]}"; do
+    iceboy_require_file "${source}" "repo Verilog source"
+done
 "${YOSYS_BIN}" -q -p "${YOSYS_SCRIPT}"
 iceboy_require_file "${NETLIST_JSON}" "synthesized hardware netlist"
 iceboy_require_file "${STAT_FILE}" "Yosys resource report"

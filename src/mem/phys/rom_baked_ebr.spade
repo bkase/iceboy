@@ -1,0 +1,91 @@
+use std::ports::{new_mut_wire, read_mut_wire};
+use lib::mem::phys::rom_backend_types::{RomBackendOut, RomBackendPorts};
+
+// This backend is intentionally single-port. CPU reads are backed by one EBR ROM
+// image, while DMA reads from the ROM window return 0xff to avoid mirroring the
+// image into a second block-backed port and blowing the UP5K EBR budget.
+// Loader writes are ignored because the image is baked at synthesis time.
+
+#[no_mangle(all)]
+pub extern entity rom_baked_ebr_raw_1k(
+    CLK: clock,
+    CPU_ADDR: uint<10>,
+    CPU_DATA: inv uint<8>,
+);
+
+#[no_mangle(all)]
+pub extern entity rom_baked_ebr_raw_2k(
+    CLK: clock,
+    CPU_ADDR: uint<11>,
+    CPU_DATA: inv uint<8>,
+);
+
+#[no_mangle(all)]
+pub extern entity rom_baked_ebr_raw_4k(
+    CLK: clock,
+    CPU_ADDR: uint<12>,
+    CPU_DATA: inv uint<8>,
+);
+
+#[no_mangle(all)]
+pub extern entity rom_baked_ebr_raw_8k(
+    CLK: clock,
+    CPU_ADDR: uint<13>,
+    CPU_DATA: inv uint<8>,
+);
+
+fn bounded_cpu_data(cpu_addr: uint<15>, limit: uint<15>, raw_cpu_data: uint<8>) -> uint<8> {
+    if cpu_addr < limit { raw_cpu_data } else { 0xffu8 }
+}
+
+fn rom_backend_out(cpu_addr: uint<15>, limit: uint<15>, raw_cpu_data: uint<8>) -> RomBackendOut {
+    RomBackendOut$(
+        cpu_data: bounded_cpu_data(cpu_addr, limit, raw_cpu_data),
+        dma_data: 0xffu8,
+        rom_ready: true,
+    )
+}
+
+pub entity rom_baked_ebr_1k(clk: clock, ports: RomBackendPorts) -> RomBackendOut {
+    let raw_cpu_data_wire = inst new_mut_wire();
+    inst rom_baked_ebr_raw_1k(clk, trunc(ports.cpu_addr), raw_cpu_data_wire);
+    let raw_cpu_data = inst read_mut_wire(raw_cpu_data_wire);
+    let _ = ports.dma_addr;
+    let _ = ports.loader_write_en;
+    let _ = ports.loader_write_addr;
+    let _ = ports.loader_write_data;
+    rom_backend_out(ports.cpu_addr, 1024u15, raw_cpu_data)
+}
+
+pub entity rom_baked_ebr_2k(clk: clock, ports: RomBackendPorts) -> RomBackendOut {
+    let raw_cpu_data_wire = inst new_mut_wire();
+    inst rom_baked_ebr_raw_2k(clk, trunc(ports.cpu_addr), raw_cpu_data_wire);
+    let raw_cpu_data = inst read_mut_wire(raw_cpu_data_wire);
+    let _ = ports.dma_addr;
+    let _ = ports.loader_write_en;
+    let _ = ports.loader_write_addr;
+    let _ = ports.loader_write_data;
+    rom_backend_out(ports.cpu_addr, 2048u15, raw_cpu_data)
+}
+
+pub entity rom_baked_ebr_4k(clk: clock, ports: RomBackendPorts) -> RomBackendOut {
+    let raw_cpu_data_wire = inst new_mut_wire();
+    inst rom_baked_ebr_raw_4k(clk, trunc(ports.cpu_addr), raw_cpu_data_wire);
+    let raw_cpu_data = inst read_mut_wire(raw_cpu_data_wire);
+    let _ = ports.dma_addr;
+    let _ = ports.loader_write_en;
+    let _ = ports.loader_write_addr;
+    let _ = ports.loader_write_data;
+    rom_backend_out(ports.cpu_addr, 4096u15, raw_cpu_data)
+}
+
+pub entity rom_baked_ebr_8k(clk: clock, ports: RomBackendPorts) -> RomBackendOut {
+    let raw_cpu_data_wire = inst new_mut_wire();
+    inst rom_baked_ebr_raw_8k(clk, trunc(ports.cpu_addr), raw_cpu_data_wire);
+    let raw_cpu_data = inst read_mut_wire(raw_cpu_data_wire);
+    let _ = ports.dma_addr;
+    let _ = ports.loader_write_en;
+    let _ = ports.loader_write_addr;
+    let _ = ports.loader_write_data;
+    rom_backend_out(ports.cpu_addr, 8192u15, raw_cpu_data)
+}

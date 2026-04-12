@@ -142,6 +142,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("LUT4/DFF/SPRAM/EBR", completed.stdout)
         self.assertIn("CommitTrace", completed.stdout)
         self.assertIn("BusObs", completed.stdout)
+        self.assertIn("test/harness/verilog/rom_baked_ebr_raw.v", completed.stdout)
 
     def test_verify_icebreaker_variant_dry_run_supports_explicit_variant_contract(self) -> None:
         completed = self.run_script(
@@ -168,6 +169,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("build/hw_verify_dummy/hardware.json", completed.stdout)
         self.assertIn("build/hw_verify_dummy/yosys-stat.txt", completed.stdout)
         self.assertIn("synth_ice40 -top dummy_top", completed.stdout)
+        self.assertIn("test/harness/verilog/rom_baked_ebr_raw.v", completed.stdout)
 
     def test_hardware_baseline_dry_run_emits_synth_and_pnr_steps(self) -> None:
         completed = self.run_script("run_hardware_baseline.sh", "--dry-run")
@@ -183,6 +185,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("--freq 12", completed.stdout)
         self.assertIn("icebreaker.pcf", completed.stdout)
         self.assertIn("docs/hardware/icebreaker_up5k_baseline.json", completed.stdout)
+        self.assertIn("test/harness/verilog/rom_baked_ebr_raw.v", completed.stdout)
         self.assertTrue((ROOT / "tools" / "run_hardware_baseline.sh").exists())
 
     def test_vram_ebr_synth_smoke_dry_run_targets_exact_vram_top(self) -> None:
@@ -244,6 +247,36 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("SB_SPRAM256KA", completed.stdout)
         self.assertIn("SB_RAM40_4K", completed.stdout)
 
+    def test_rom_baked_ebr_synth_smoke_dry_run_targets_1k_top(self) -> None:
+        completed = self.run_script("run_rom_baked_ebr_synth_smoke.sh", "--dry-run", "--skip-build", "--size", "1024")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+        self.assertIn("top mem::phys::rom_baked_ebr_synth_top::rom_baked_ebr_1k_synth_top", completed.stdout)
+        self.assertIn("module rom_baked_ebr_1k_synth_top", completed.stdout)
+        self.assertIn("src/mem/phys/rom_baked_ebr_synth_top.spade", completed.stdout)
+        self.assertIn("build/rom_baked_ebr_synth_1024/hardware.json", completed.stdout)
+        self.assertIn("build/rom_baked_ebr_synth_1024/yosys-stat.txt", completed.stdout)
+        self.assertIn("require 2", completed.stdout)
+        self.assertIn("test/harness/verilog/rom_baked_ebr_raw.v", completed.stdout)
+
+    def test_rom_baked_ebr_synth_smoke_dry_run_targets_4k_top(self) -> None:
+        completed = self.run_script("run_rom_baked_ebr_synth_smoke.sh", "--dry-run", "--skip-build", "--size", "4096")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+        self.assertIn("top mem::phys::rom_baked_ebr_synth_top::rom_baked_ebr_4k_synth_top", completed.stdout)
+        self.assertIn("module rom_baked_ebr_4k_synth_top", completed.stdout)
+        self.assertIn("src/mem/phys/rom_baked_ebr_synth_top.spade", completed.stdout)
+        self.assertIn("build/rom_baked_ebr_synth_4096/hardware.json", completed.stdout)
+        self.assertIn("build/rom_baked_ebr_synth_4096/yosys-stat.txt", completed.stdout)
+        self.assertIn("require 8", completed.stdout)
+        self.assertIn("test/harness/verilog/rom_baked_ebr_raw.v", completed.stdout)
+
     def test_build_icebreaker_variant_dry_run_supports_alternate_top(self) -> None:
         completed = self.run_script("build_icebreaker_variant.sh", "--dry-run", "--skip-build", "--top", "dummy_top")
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -259,6 +292,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("build/variants/dummy_top/synth/yosys-stat.txt", completed.stdout)
         self.assertIn("build/variants/dummy_top/dummy_top.asc", completed.stdout)
         self.assertIn("synth_ice40 -top dummy_top", completed.stdout)
+        self.assertIn("test/harness/verilog/rom_baked_ebr_raw.v", completed.stdout)
 
     def test_build_icebreaker_variant_dry_run_accepts_explicit_module_and_baseline_outputs(self) -> None:
         completed = self.run_script(

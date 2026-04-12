@@ -1,0 +1,21 @@
+use lib::mem::phys::rom_backend_types::read_ports;
+use lib::mem::phys::rom_baked_ebr::{rom_baked_ebr_1k, rom_baked_ebr_4k};
+
+fn pack_backend(backend: lib::mem::phys::rom_backend_types::RomBackendOut) -> uint<17> {
+    let cpu_bits: uint<17> = zext(backend.cpu_data) << 9;
+    let dma_bits: uint<17> = zext(backend.dma_data) << 1;
+    let ready_bits: uint<17> = zext(lib::util::bit(backend.rom_ready));
+    cpu_bits | dma_bits | ready_bits
+}
+
+#[no_mangle(all)]
+entity rom_baked_ebr_1k_synth_top(clk: clock, addr_i: uint<15>, data_o: inv uint<17>) {
+    let backend = inst rom_baked_ebr_1k(clk, read_ports(addr_i, 0x1234u15));
+    set data_o = pack_backend(backend);
+}
+
+#[no_mangle(all)]
+entity rom_baked_ebr_4k_synth_top(clk: clock, addr_i: uint<15>, data_o: inv uint<17>) {
+    let backend = inst rom_baked_ebr_4k(clk, read_ports(addr_i, 0x1234u15));
+    set data_o = pack_backend(backend);
+}
