@@ -38,6 +38,7 @@ PRECOMMIT_SWIM_TESTS_DEFAULT=(
     "test/unit/test_memory_map.py"
     "test/unit/test_oam_ebr.py"
     "test/unit/test_rom_baked_ebr.py"
+    "test/unit/test_rom_spram_rw.py"
     "test/unit/test_rom_spram.py"
     "test/unit/test_regs.py"
     "test/unit/test_semantics_alu.py"

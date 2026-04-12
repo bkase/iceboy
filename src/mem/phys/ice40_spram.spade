@@ -115,6 +115,26 @@ pub fn rom_schedule(t_index: uint<2>, cpu_addr: uint<15>, dma_addr: uint<15>) ->
     }
 }
 
+pub fn rom_rw_schedule(
+    t_index: uint<2>,
+    cpu_addr: uint<15>,
+    dma_addr: uint<15>,
+    loader_write_en: bool,
+    loader_write_addr: uint<15>,
+    loader_write_data: uint<8>,
+) -> SpramDrive {
+    match t_index {
+        0u2 => read_drive(rom_word_addr(cpu_addr), byte_is_high(trunc(cpu_addr)), false),
+        1u2 => read_drive(rom_word_addr(dma_addr), byte_is_high(trunc(dma_addr)), true),
+        2u2 => if loader_write_en {
+            write_drive(rom_word_addr(loader_write_addr), loader_write_data, byte_is_high(trunc(loader_write_addr)))
+        } else {
+            idle_drive()
+        },
+        _ => idle_drive(),
+    }
+}
+
 pub fn rw8k_schedule(
     t_index: uint<2>,
     cpu_addr: uint<13>,

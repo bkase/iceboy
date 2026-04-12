@@ -1,0 +1,27 @@
+use lib::mem::phys::ice40_spram::rom_rw_schedule;
+use lib::mem::phys::rom_backend_types::{RomBackendOut, RomBackendPorts};
+use lib::mem::phys::spram::spram_dual_read_port;
+
+pub entity rom_spram_rw(
+    clk: clock,
+    t_index: uint<2>,
+    ports: RomBackendPorts,
+) -> RomBackendOut {
+    let drive = rom_rw_schedule(
+        t_index,
+        ports.cpu_addr,
+        ports.dma_addr,
+        ports.loader_write_en,
+        ports.loader_write_addr,
+        ports.loader_write_data,
+    );
+    let (cpu_data, dma_data) = inst spram_dual_read_port(clk, drive);
+
+    // SPRAM contents are undefined after configuration; the uploader keeps the
+    // CPU held in reset until the loader has written a complete image.
+    RomBackendOut$(
+        cpu_data: cpu_data,
+        dma_data: dma_data,
+        rom_ready: !ports.loader_write_en,
+    )
+}

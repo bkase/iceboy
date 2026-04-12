@@ -1,0 +1,31 @@
+use lib::mem::phys::rom_backend_types::RomBackendPorts;
+use lib::mem::phys::rom_spram_rw::rom_spram_rw;
+
+#[no_mangle(all)]
+entity rom_spram_rw_synth_top(
+    clk: clock,
+    t_index_i: uint<2>,
+    cpu_addr_i: uint<15>,
+    dma_addr_i: uint<15>,
+    loader_write_en_i: bool,
+    loader_write_addr_i: uint<15>,
+    loader_write_data_i: uint<8>,
+    data_o: inv uint<17>,
+) {
+    let backend = inst rom_spram_rw(
+        clk,
+        t_index_i,
+        RomBackendPorts$(
+            cpu_addr: cpu_addr_i,
+            dma_addr: dma_addr_i,
+            loader_write_en: loader_write_en_i,
+            loader_write_addr: loader_write_addr_i,
+            loader_write_data: loader_write_data_i,
+        ),
+    );
+
+    set data_o =
+        (zext(backend.cpu_data) << 9)
+        | (zext(backend.dma_data) << 1)
+        | zext(lib::util::bit(backend.rom_ready));
+}
