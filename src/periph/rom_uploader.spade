@@ -1,0 +1,306 @@
+use lib::periph::uart_rx::uart_rx;
+use lib::periph::uart_tx::uart_tx;
+
+pub struct RomUploaderOut {
+    hold_reset: bool,
+    tx_o: bool,
+    tx_busy: bool,
+    state: uint<4>,
+    bytes_remaining: uint<16>,
+    loader_write_en: bool,
+    loader_write_addr: uint<15>,
+    loader_write_data: uint<8>,
+}
+
+pub struct RomUploaderCoreOut {
+    hold_reset: bool,
+    state: uint<4>,
+    bytes_remaining: uint<16>,
+    loader_write_en: bool,
+    loader_write_addr: uint<15>,
+    loader_write_data: uint<8>,
+    ack_start: bool,
+    ack_byte: uint<8>,
+}
+
+fn magic_word() -> uint<32> {
+    0x214d4f52u32
+}
+
+fn crc32_init() -> uint<32> {
+    0xffffffffu32
+}
+
+fn crc32_poly() -> uint<32> {
+    0xedb88320u32
+}
+
+fn crc32_shift(crc: uint<32>) -> uint<32> {
+    if (crc & 0x1u32) != 0u32 {
+        trunc((crc >> 1) ^ crc32_poly())
+    } else {
+        trunc(crc >> 1)
+    }
+}
+
+fn crc32_step(crc: uint<32>, byte: uint<8>) -> uint<32> {
+    let mixed = crc ^ zext(byte);
+    let s0 = crc32_shift(mixed);
+    let s1 = crc32_shift(s0);
+    let s2 = crc32_shift(s1);
+    let s3 = crc32_shift(s2);
+    let s4 = crc32_shift(s3);
+    let s5 = crc32_shift(s4);
+    let s6 = crc32_shift(s5);
+    crc32_shift(s6)
+}
+
+fn crc32_final(crc: uint<32>) -> uint<32> {
+    crc ^ 0xffffffffu32
+}
+
+fn next_magic_window(window: uint<32>, byte: uint<8>) -> uint<32> {
+    trunc((window >> 8) | (zext(byte) << 24))
+}
+
+fn le32_with_byte(current: uint<32>, index: uint<2>, byte: uint<8>) -> uint<32> {
+    match index {
+        0u2 => (current & 0xffffff00u32) | zext(byte),
+        1u2 => (current & 0xffff00ffu32) | (zext(byte) << 8),
+        2u2 => (current & 0xff00ffffu32) | (zext(byte) << 16),
+        _ => (current & 0x00ffffffu32) | (zext(byte) << 24),
+    }
+}
+
+fn state_wait_magic() -> uint<4> { 0u4 }
+fn state_length0() -> uint<4> { 1u4 }
+fn state_length1() -> uint<4> { 2u4 }
+fn state_length2() -> uint<4> { 3u4 }
+fn state_length3() -> uint<4> { 4u4 }
+fn state_payload() -> uint<4> { 5u4 }
+fn state_crc0() -> uint<4> { 6u4 }
+fn state_crc1() -> uint<4> { 7u4 }
+fn state_crc2() -> uint<4> { 8u4 }
+fn state_crc3() -> uint<4> { 9u4 }
+fn state_running() -> uint<4> { 10u4 }
+
+fn is_magic_scan_state(state: uint<4>) -> bool {
+    state == state_wait_magic() || state == state_running()
+}
+
+fn is_protocol_state(state: uint<4>) -> bool {
+    state == state_length0()
+        || state == state_length1()
+        || state == state_length2()
+        || state == state_length3()
+        || state == state_payload()
+        || state == state_crc0()
+        || state == state_crc1()
+        || state == state_crc2()
+        || state == state_crc3()
+}
+
+pub entity rom_uploader_core(
+    clk: clock,
+    rst: bool,
+    t_index: uint<2>,
+    rx_byte_valid_i: bool,
+    rx_byte_i: uint<8>,
+    rx_framing_error_i: bool,
+) -> RomUploaderCoreOut {
+    decl state_reg;
+    decl magic_window_reg;
+    decl length_reg;
+    decl crc_reg;
+    decl received_crc_reg;
+    decl bytes_remaining_reg;
+    decl write_addr_reg;
+    decl payload_staged_reg;
+    decl staged_payload_reg;
+
+    let scan_magic_state = is_magic_scan_state(state_reg);
+    let candidate_magic_window = next_magic_window(magic_window_reg, rx_byte_i);
+    let magic_match = rx_byte_valid_i && scan_magic_state && candidate_magic_window == magic_word();
+
+    let length3_candidate = le32_with_byte(length_reg, 3u2, rx_byte_i);
+    let oversize_length = length3_candidate > 32768u32;
+    let payload_write_slot = state_reg == state_payload() && payload_staged_reg && t_index == 2u2;
+    let payload_stage_now = state_reg == state_payload() && !payload_staged_reg && rx_byte_valid_i;
+    let payload_overrun = state_reg == state_payload() && payload_staged_reg && rx_byte_valid_i;
+    let payload_last_byte = bytes_remaining_reg == 1u16;
+    let crc3_candidate = le32_with_byte(received_crc_reg, 3u2, rx_byte_i);
+    let crc_match = crc3_candidate == crc32_final(crc_reg);
+    let protocol_framing_error = rx_framing_error_i && is_protocol_state(state_reg);
+    let start_fail_ack =
+        protocol_framing_error
+        || payload_overrun
+        || (state_reg == state_length3() && rx_byte_valid_i && oversize_length)
+        || (state_reg == state_crc3() && rx_byte_valid_i && !crc_match);
+    let start_success_ack = state_reg == state_crc3() && rx_byte_valid_i && crc_match;
+
+    let next_state_reg =
+        if start_success_ack {
+            state_running()
+        } else if start_fail_ack {
+            state_wait_magic()
+        } else if magic_match {
+            state_length0()
+        } else if state_reg == state_length0() && rx_byte_valid_i {
+            state_length1()
+        } else if state_reg == state_length1() && rx_byte_valid_i {
+            state_length2()
+        } else if state_reg == state_length2() && rx_byte_valid_i {
+            state_length3()
+        } else if state_reg == state_length3() && rx_byte_valid_i {
+            if length3_candidate == 0u32 {
+                state_crc0()
+            } else {
+                state_payload()
+            }
+        } else if state_reg == state_payload() && payload_write_slot && payload_last_byte {
+            state_crc0()
+        } else if state_reg == state_crc0() && rx_byte_valid_i {
+            state_crc1()
+        } else if state_reg == state_crc1() && rx_byte_valid_i {
+            state_crc2()
+        } else if state_reg == state_crc2() && rx_byte_valid_i {
+            state_crc3()
+        } else {
+            state_reg
+        };
+
+    let next_magic_window_reg =
+        if rx_byte_valid_i && scan_magic_state {
+            candidate_magic_window
+        } else {
+            magic_window_reg
+        };
+    let next_length_reg =
+        if magic_match {
+            0u32
+        } else if state_reg == state_length0() && rx_byte_valid_i {
+            le32_with_byte(length_reg, 0u2, rx_byte_i)
+        } else if state_reg == state_length1() && rx_byte_valid_i {
+            le32_with_byte(length_reg, 1u2, rx_byte_i)
+        } else if state_reg == state_length2() && rx_byte_valid_i {
+            le32_with_byte(length_reg, 2u2, rx_byte_i)
+        } else if state_reg == state_length3() && rx_byte_valid_i && !oversize_length {
+            length3_candidate
+        } else {
+            length_reg
+        };
+    let next_crc_reg =
+        if magic_match {
+            crc32_init()
+        } else if payload_write_slot {
+            crc32_step(crc_reg, staged_payload_reg)
+        } else {
+            crc_reg
+        };
+    let next_received_crc_reg =
+        if magic_match {
+            0u32
+        } else if state_reg == state_crc0() && rx_byte_valid_i {
+            le32_with_byte(received_crc_reg, 0u2, rx_byte_i)
+        } else if state_reg == state_crc1() && rx_byte_valid_i {
+            le32_with_byte(received_crc_reg, 1u2, rx_byte_i)
+        } else if state_reg == state_crc2() && rx_byte_valid_i {
+            le32_with_byte(received_crc_reg, 2u2, rx_byte_i)
+        } else if state_reg == state_crc3() && rx_byte_valid_i {
+            crc3_candidate
+        } else {
+            received_crc_reg
+        };
+    let next_bytes_remaining_reg =
+        if magic_match {
+            0u16
+        } else if state_reg == state_length3() && rx_byte_valid_i && !oversize_length {
+            trunc(length3_candidate)
+        } else if payload_write_slot {
+            trunc(bytes_remaining_reg - 1u16)
+        } else {
+            bytes_remaining_reg
+        };
+    let next_write_addr_reg =
+        if magic_match {
+            0u15
+        } else if payload_write_slot {
+            trunc(write_addr_reg + 1u15)
+        } else {
+            write_addr_reg
+        };
+    let next_payload_staged_reg =
+        if magic_match || start_fail_ack || start_success_ack {
+            false
+        } else if payload_stage_now {
+            true
+        } else if payload_write_slot {
+            false
+        } else {
+            payload_staged_reg
+        };
+    let next_staged_payload_reg =
+        if payload_stage_now {
+            rx_byte_i
+        } else {
+            staged_payload_reg
+        };
+
+    reg(clk) state_reg: uint<4> reset(rst: state_wait_magic()) = next_state_reg;
+    reg(clk) magic_window_reg: uint<32> reset(rst: 0u32) = next_magic_window_reg;
+    reg(clk) length_reg: uint<32> reset(rst: 0u32) = next_length_reg;
+    reg(clk) crc_reg: uint<32> reset(rst: crc32_init()) = next_crc_reg;
+    reg(clk) received_crc_reg: uint<32> reset(rst: 0u32) = next_received_crc_reg;
+    reg(clk) bytes_remaining_reg: uint<16> reset(rst: 0u16) = next_bytes_remaining_reg;
+    reg(clk) write_addr_reg: uint<15> reset(rst: 0u15) = next_write_addr_reg;
+    reg(clk) payload_staged_reg: bool reset(rst: false) = next_payload_staged_reg;
+    reg(clk) staged_payload_reg: uint<8> reset(rst: 0u8) = next_staged_payload_reg;
+
+    RomUploaderCoreOut$(
+        hold_reset: state_reg != state_running(),
+        state: state_reg,
+        bytes_remaining: bytes_remaining_reg,
+        loader_write_en: payload_write_slot,
+        loader_write_addr: write_addr_reg,
+        loader_write_data: staged_payload_reg,
+        ack_start: start_success_ack || start_fail_ack,
+        ack_byte: if start_success_ack { 0x41u8 } else { 0x4eu8 },
+    )
+}
+
+pub entity rom_uploader(
+    clk: clock,
+    rst: bool,
+    t_index: uint<2>,
+    rx_i: bool,
+    bit_ticks_i: uint<16>,
+    half_bit_ticks_i: uint<16>,
+) -> RomUploaderOut {
+    let rx = inst uart_rx(clk, rst, rx_i, bit_ticks_i, half_bit_ticks_i);
+    let core = inst rom_uploader_core(
+        clk,
+        rst,
+        t_index,
+        rx.rx_byte_valid,
+        rx.rx_byte,
+        rx.rx_framing_error,
+    );
+    let tx = inst uart_tx(
+        clk,
+        rst,
+        core.ack_start,
+        core.ack_byte,
+        bit_ticks_i,
+    );
+
+    RomUploaderOut$(
+        hold_reset: core.hold_reset,
+        tx_o: tx.tx_o,
+        tx_busy: tx.busy,
+        state: core.state,
+        bytes_remaining: core.bytes_remaining,
+        loader_write_en: core.loader_write_en,
+        loader_write_addr: core.loader_write_addr,
+        loader_write_data: core.loader_write_data,
+    )
+}

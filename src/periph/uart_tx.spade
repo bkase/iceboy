@@ -1,0 +1,93 @@
+pub struct UartTxOut {
+    tx_o: bool,
+    busy: bool,
+    done: bool,
+}
+
+fn reload_ticks(bit_ticks: uint<16>) -> uint<16> {
+    if bit_ticks == 0u16 {
+        0u16
+    } else {
+        trunc(bit_ticks - 1u16)
+    }
+}
+
+fn decrement_ticks(ticks_until_shift: uint<16>) -> uint<16> {
+    if ticks_until_shift == 0u16 {
+        0u16
+    } else {
+        trunc(ticks_until_shift - 1u16)
+    }
+}
+
+fn tx_frame(data: uint<8>) -> uint<10> {
+    (0x1u10 << 9) | (zext(data) << 1)
+}
+
+fn shift_frame(frame: uint<10>) -> uint<10> {
+    trunc((frame >> 1) | (0x1u10 << 9))
+}
+
+pub entity uart_tx(
+    clk: clock,
+    rst: bool,
+    start_i: bool,
+    data_i: uint<8>,
+    bit_ticks_i: uint<16>,
+) -> UartTxOut {
+    decl frame_reg;
+    decl bits_left_reg;
+    decl ticks_until_shift_reg;
+    decl busy_reg;
+
+    let start_tx = start_i && !busy_reg;
+    let shift_now = busy_reg && ticks_until_shift_reg == 0u16;
+    let finish_now = shift_now && bits_left_reg == 1u4;
+
+    let next_frame_reg =
+        if start_tx {
+            tx_frame(data_i)
+        } else if shift_now && bits_left_reg > 1u4 {
+            shift_frame(frame_reg)
+        } else {
+            frame_reg
+        };
+    let next_bits_left_reg =
+        if start_tx {
+            10u4
+        } else if shift_now {
+            trunc(bits_left_reg - 1u4)
+        } else {
+            bits_left_reg
+        };
+    let next_ticks_until_shift_reg =
+        if start_tx {
+            reload_ticks(bit_ticks_i)
+        } else if busy_reg && ticks_until_shift_reg != 0u16 {
+            decrement_ticks(ticks_until_shift_reg)
+        } else if shift_now && bits_left_reg > 1u4 {
+            reload_ticks(bit_ticks_i)
+        } else {
+            0u16
+        };
+    let next_busy_reg =
+        if start_tx {
+            true
+        } else if finish_now {
+            false
+        } else {
+            busy_reg
+        };
+
+    reg(clk) frame_reg: uint<10> reset(rst: 0x3ffu10) = next_frame_reg;
+    reg(clk) bits_left_reg: uint<4> reset(rst: 0u4) = next_bits_left_reg;
+    reg(clk) ticks_until_shift_reg: uint<16> reset(rst: 0u16) = next_ticks_until_shift_reg;
+    reg(clk) busy_reg: bool reset(rst: false) = next_busy_reg;
+    reg(clk) done_reg: bool reset(rst: false) = finish_now;
+
+    UartTxOut$(
+        tx_o: if busy_reg { (frame_reg & 0x1u10) != 0u10 } else { true },
+        busy: busy_reg,
+        done: done_reg,
+    )
+}

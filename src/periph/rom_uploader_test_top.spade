@@ -1,0 +1,41 @@
+use lib::mem::phys::rom_backend_types::RomBackendPorts;
+use lib::mem::phys::rom_spram_rw::rom_spram_rw;
+use lib::periph::rom_uploader::rom_uploader;
+
+pub entity rom_uploader_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    t_index_i: uint<2>,
+    rx_i: bool,
+    bit_ticks_i: uint<16>,
+    half_bit_ticks_i: uint<16>,
+    read_addr_i: uint<15>,
+) -> uint<32> {
+    let uploader = inst rom_uploader(
+        clk_i,
+        rst_i,
+        t_index_i,
+        rx_i,
+        bit_ticks_i,
+        half_bit_ticks_i,
+    );
+    let backend = inst rom_spram_rw(
+        clk_i,
+        t_index_i,
+        RomBackendPorts$(
+            cpu_addr: read_addr_i,
+            dma_addr: 0u15,
+            loader_write_en: uploader.loader_write_en,
+            loader_write_addr: uploader.loader_write_addr,
+            loader_write_data: uploader.loader_write_data,
+        ),
+    );
+
+    zext(backend.cpu_data)
+        | (zext(lib::util::bit(uploader.hold_reset)) << 8)
+        | (zext(lib::util::bit(uploader.tx_o)) << 9)
+        | (zext(lib::util::bit(backend.rom_ready)) << 10)
+        | (zext(lib::util::bit(uploader.tx_busy)) << 11)
+        | (zext(uploader.state) << 12)
+        | (zext(uploader.bytes_remaining) << 16)
+}

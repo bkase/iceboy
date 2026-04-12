@@ -263,6 +263,22 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("SB_LUT4", completed.stdout)
         self.assertIn("SB_DFF", completed.stdout)
 
+    def test_rom_uploader_synth_smoke_dry_run_targets_budgeted_loader_top(self) -> None:
+        completed = self.run_script("run_rom_uploader_synth_smoke.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+        self.assertIn("top periph::rom_uploader_synth_top::rom_uploader_synth_top", completed.stdout)
+        self.assertIn("module rom_uploader_synth_top", completed.stdout)
+        self.assertIn("src/periph/rom_uploader_synth_top.spade", completed.stdout)
+        self.assertIn("build/hw_probes/rom_uploader/hardware.json", completed.stdout)
+        self.assertIn("build/hw_probes/rom_uploader/yosys-stat.txt", completed.stdout)
+        self.assertIn("synth_ice40 -top rom_uploader_synth_top", completed.stdout)
+        self.assertIn("SB_LUT4", completed.stdout)
+        self.assertIn("SB_RAM40_4K", completed.stdout)
+
     def test_rom_baked_ebr_synth_smoke_dry_run_targets_1k_top(self) -> None:
         completed = self.run_script("run_rom_baked_ebr_synth_smoke.sh", "--dry-run", "--skip-build", "--size", "1024")
         self.assertEqual(completed.returncode, 0, completed.stderr)

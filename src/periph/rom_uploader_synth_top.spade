@@ -1,0 +1,30 @@
+use lib::periph::rom_uploader::rom_uploader_core;
+
+#[no_mangle(all)]
+entity rom_uploader_synth_top(
+    clk: clock,
+    rst_i: bool,
+    t_index_i: uint<2>,
+    rx_byte_valid_i: bool,
+    rx_byte_i: uint<8>,
+    rx_framing_error_i: bool,
+    data_o: inv uint<32>,
+) {
+    let uploader = inst rom_uploader_core(
+        clk,
+        rst_i,
+        t_index_i,
+        rx_byte_valid_i,
+        rx_byte_i,
+        rx_framing_error_i,
+    );
+
+    set data_o =
+        zext(uploader.loader_write_data)
+        | (zext(lib::util::bit(uploader.hold_reset)) << 8)
+        | (zext(lib::util::bit(uploader.ack_start)) << 9)
+        | (zext(uploader.ack_byte) << 10)
+        | (zext(uploader.state) << 18)
+        | (zext(lib::util::bit(uploader.loader_write_en)) << 22)
+        | (zext(uploader.loader_write_addr) << 23);
+}
