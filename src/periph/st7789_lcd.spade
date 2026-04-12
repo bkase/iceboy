@@ -160,6 +160,8 @@ fn lo_byte(word: uint<16>) -> uint<8> {
 }
 
 fn dmglike_rgb565(shade: uint<8>) -> uint<16> {
+    // Keep these four RGB565 constants aligned with
+    // tools/verilator/icebreaker_visible_palette.h and tools/ref_st7789_transcript.py.
     let shade_code: uint<2> = trunc(shade);
     match shade_code {
         0u2 => 0xFFFFu16,

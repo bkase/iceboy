@@ -26,13 +26,17 @@ def compile_joypad_schedule(
     action_script_path: str | Path,
     *,
     frame_count: int | None = None,
+    settle_frames: int = 0,
 ) -> list[int]:
     script = SeededEventScript.from_action_script(action_script_path)
     commit_indices = [event.commit_index for event in script.events if event.commit_index is not None]
     if frame_count is None:
         frame_count = (max(commit_indices) + 1) if commit_indices else 0
+    frame_count += settle_frames
     if frame_count < 0:
         raise ValueError("frame_count must be non-negative")
+    if settle_frames < 0:
+        raise ValueError("settle_frames must be non-negative")
 
     current_mask = 0
     schedule: list[int] = []
@@ -51,12 +55,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--action-script", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--frame-count", type=int, default=None)
+    parser.add_argument("--settle-frames", type=int, default=0)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    schedule = compile_joypad_schedule(args.action_script, frame_count=args.frame_count)
+    schedule = compile_joypad_schedule(
+        args.action_script,
+        frame_count=args.frame_count,
+        settle_frames=args.settle_frames,
+    )
     args.output.write_text("".join(f"0x{mask:02X}\n" for mask in schedule), encoding="utf-8")
     return 0
 

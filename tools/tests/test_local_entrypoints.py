@@ -784,6 +784,24 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("--joypad-schedule=", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
+    def test_icebreaker_visible_full_stack_verilator_wrapper_dry_run_targets_both_visible_variants(self) -> None:
+        completed = self.run_script("run_icebreaker_full_stack_verilator.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("test/harness/verilog/icebreaker_visible_top_verilator_wrapper.sv", completed.stdout)
+        self.assertIn("tools/verilator/icebreaker_visible_top_main.cpp", completed.stdout)
+        self.assertIn("bench/ref/BG_STATIC.py", completed.stdout)
+        self.assertIn("bench/ref/joypad_bg_smoke.py", completed.stdout)
+        self.assertIn("--captured-png=", completed.stdout)
+        self.assertIn("--reference-png=", completed.stdout)
+        self.assertIn("--diff-png=", completed.stdout)
+        self.assertIn("-GROM_SELECT=0", completed.stdout)
+        self.assertIn("-GROM_SELECT=1", completed.stdout)
+        self.assertIn("--joypad-schedule=", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+
     def test_pokered_playback_verilator_wrapper_dry_run_uses_native_restore_runner(self) -> None:
         completed = self.run_script("run_pokered_playback_verilator.sh", "--dry-run", "--skip-build")
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -948,6 +966,13 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertTrue((TOOLS / "export_pokered_restore.py").exists())
         self.assertTrue((TOOLS / "export_pokered_walk_script.py").exists())
         self.assertTrue((TOOLS / "pokered_walk_script.yaml").exists())
+
+    def test_icebreaker_visible_full_stack_assets_exist(self) -> None:
+        self.assertTrue((TOOLS / "run_icebreaker_full_stack_verilator.sh").exists())
+        self.assertTrue((TOOLS / "verilator" / "icebreaker_visible_top_main.cpp").exists())
+        self.assertTrue((TOOLS / "verilator" / "icebreaker_visible_palette.h").exists())
+        self.assertTrue((ROOT / "test" / "harness" / "verilog" / "icebreaker_visible_top_verilator_wrapper.sv").exists())
+        self.assertTrue((ROOT / "bench" / "ref" / "BG_STATIC.py").exists())
 
     def test_pack_icebreaker_bitstream_assets_exist(self) -> None:
         self.assertTrue((TOOLS / "pack_icebreaker_bitstream.sh").exists())

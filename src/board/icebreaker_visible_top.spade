@@ -20,6 +20,28 @@ fn joypad_buttons_from_inputs(dpad_bits: [bool; 4], dip_bits: [bool; 4]) -> Joyp
     )
 }
 
+fn scanout_valid(scanout: Option<ScanoutEvent>) -> bool {
+    match scanout {
+        Option::Some(_) => true,
+        Option::None => false,
+    }
+}
+
+fn scanout_is_frame_start(scanout: Option<ScanoutEvent>) -> bool {
+    match scanout {
+        Option::Some(ScanoutEvent::FrameStart) => true,
+        _ => false,
+    }
+}
+
+fn scanout_when_ready(scanout: Option<ScanoutEvent>, ready: bool) -> Option<ScanoutEvent> {
+    if ready {
+        scanout
+    } else {
+        Option::None
+    }
+}
+
 entity icebreaker_visible_bg_output_stage(
     clk: clock,
     scanout_i: Option<ScanoutEvent>,
@@ -46,7 +68,7 @@ entity icebreaker_visible_bg_output_stage(
 ) {
     decl lcd;
 
-    let framebuffer = inst framebuffer_spram(clk, false, scanout_i, lcd.pixel_advance);
+    let framebuffer = inst framebuffer_spram(clk, false, scanout_when_ready(scanout_i, lcd.init_done), lcd.pixel_advance);
     let lcd = inst st7789_lcd(
         clk,
         false,
@@ -68,16 +90,16 @@ entity icebreaker_visible_bg_output_stage(
     set LCD_DC = lcd.lcd_dc;
     set LCD_RES = lcd.lcd_res;
     set LCD_BL = lcd.lcd_bl;
-    set DEBUG_GPIO0 = false;
-    set DEBUG_GPIO1 = false;
-    set DBG_PC0 = false;
-    set DBG_PC1 = false;
-    set DBG_PC2 = false;
-    set DBG_PC3 = false;
-    set DBG_MCE = false;
-    set DBG_PHASE0 = false;
-    set DBG_PHASE1 = false;
-    set DBG_PHASE2 = false;
+    set DEBUG_GPIO0 = framebuffer.frame_start;
+    set DEBUG_GPIO1 = scanout_valid(scanout_i);
+    set DBG_PC0 = framebuffer.reader_active;
+    set DBG_PC1 = framebuffer.pixel_valid;
+    set DBG_PC2 = lcd.frame_active;
+    set DBG_PC3 = lcd.tx_active;
+    set DBG_MCE = lcd.init_done;
+    set DBG_PHASE0 = lcd.pixel_advance;
+    set DBG_PHASE1 = cpu_halted_i;
+    set DBG_PHASE2 = scanout_is_frame_start(scanout_i);
 }
 
 entity icebreaker_visible_joypad_output_stage(
@@ -106,7 +128,7 @@ entity icebreaker_visible_joypad_output_stage(
 ) {
     decl lcd;
 
-    let framebuffer = inst framebuffer_spram(clk, false, scanout_i, lcd.pixel_advance);
+    let framebuffer = inst framebuffer_spram(clk, false, scanout_when_ready(scanout_i, lcd.init_done), lcd.pixel_advance);
     let lcd = inst st7789_lcd(
         clk,
         false,
@@ -133,16 +155,16 @@ entity icebreaker_visible_joypad_output_stage(
     set LCD_DC = lcd.lcd_dc;
     set LCD_RES = lcd.lcd_res;
     set LCD_BL = lcd.lcd_bl;
-    set DEBUG_GPIO0 = false;
-    set DEBUG_GPIO1 = false;
-    set DBG_PC0 = false;
-    set DBG_PC1 = false;
-    set DBG_PC2 = false;
-    set DBG_PC3 = false;
-    set DBG_MCE = false;
-    set DBG_PHASE0 = false;
-    set DBG_PHASE1 = false;
-    set DBG_PHASE2 = false;
+    set DEBUG_GPIO0 = framebuffer.frame_start;
+    set DEBUG_GPIO1 = scanout_valid(scanout_i);
+    set DBG_PC0 = framebuffer.reader_active;
+    set DBG_PC1 = framebuffer.pixel_valid;
+    set DBG_PC2 = lcd.frame_active;
+    set DBG_PC3 = lcd.tx_active;
+    set DBG_MCE = lcd.init_done;
+    set DBG_PHASE0 = lcd.pixel_advance;
+    set DBG_PHASE1 = cpu_halted_i;
+    set DBG_PHASE2 = scanout_is_frame_start(scanout_i);
 }
 
 #[no_mangle(all)]

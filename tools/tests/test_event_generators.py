@@ -102,6 +102,25 @@ events:
 
             self.assertEqual(schedule, [0x02, 0x02, 0x00, 0x00, 0xC0, 0xC0])
 
+    def test_compile_joypad_schedule_appends_settle_frames_with_held_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            script_path = Path(tmpdir) / "events.yaml"
+            script_path.write_text(
+                """\
+seed: 0
+events:
+  - commit_index: 0
+    event:
+      kind: joypad_buttons
+      buttons: [a, start]
+""",
+                encoding="utf-8",
+            )
+
+            schedule = compile_joypad_schedule(script_path, settle_frames=2)
+
+            self.assertEqual(schedule, [0x90, 0x90, 0x90])
+
     def test_encode_joypad_buttons_matches_decode_buttons_bit_layout(self) -> None:
         self.assertEqual(encode_joypad_buttons(JoypadButtons.from_pressed(["right"])), 0x01)
         self.assertEqual(encode_joypad_buttons(JoypadButtons.from_pressed(["left"])), 0x02)

@@ -17,6 +17,8 @@ RGB565_PALETTE = (
     0x52AA,
     0x0000,
 )
+# Keep these constants aligned with src/periph/st7789_lcd.spade and
+# tools/verilator/icebreaker_visible_palette.h.
 
 TranscriptEntry = Tuple[bool, int, Optional[str]]
 
