@@ -1,12 +1,39 @@
 # top = periph::st7789_lcd_test_top::st7789_lcd_test_top
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
+
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge, Timer
 
 
-def decode_output(value: int) -> dict[str, int | bool]:
+def find_repo_root() -> Path:
+    cwd = Path.cwd().resolve()
+    if (cwd / "tools" / "ref_st7789_transcript.py").is_file():
+        return cwd
+
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "tools" / "ref_st7789_transcript.py").is_file():
+            return candidate
+
+    raise RuntimeError("could not locate repo root for ref_st7789_transcript.py")
+
+
+ROOT = find_repo_root()
+TOOLS = ROOT / "tools"
+if str(TOOLS) not in sys.path:
+    sys.path.insert(0, str(TOOLS))
+
+from ref_st7789_transcript import generate_frame_transcript, generate_init_transcript
+
+
+TranscriptByte = Tuple[bool, int]
+
+
+def decode_output(value: int) -> Dict[str, int | bool]:
     return {
         "lcd_sck": bool(value & 0x1),
         "lcd_mosi": bool((value >> 1) & 0x1),
@@ -28,7 +55,7 @@ def decode_output(value: int) -> dict[str, int | bool]:
 
 
 async def reset_dut(dut) -> None:
-    cocotb.start_soon(Clock(dut.clk_i, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk_i, 84, units="ns").start())
     dut.reset_ticks_i.value = 2
     dut.post_reset_ticks_i.value = 3
     dut.sleep_out_ticks_i.value = 4
@@ -48,7 +75,7 @@ async def step(
     frame_start: bool = False,
     pixel_valid: bool = False,
     pixel_shade: int = 0,
-) -> dict[str, int | bool]:
+) -> Dict[str, int | bool]:
     dut.frame_start_i.value = int(frame_start)
     dut.pixel_valid_i.value = int(pixel_valid)
     dut.pixel_shade_i.value = pixel_shade & 0xFF
@@ -63,22 +90,26 @@ async def collect_bytes(
     dut,
     *,
     expected_count: int,
-    frame_start_at_cycle: int | None = None,
-    pixel_valid_after_init: bool = False,
-    pixel_shade: int = 0,
+    frame_start_at_cycle: Optional[int] = None,
+    pixel_stream: Optional[Sequence[int]] = None,
     max_cycles: int = 4000,
-) -> list[tuple[int, int]]:
-    transcript: list[tuple[int, int]] = []
+) -> List[TranscriptByte]:
+    transcript: List[TranscriptByte] = []
     prev = decode_output(int(dut.output__.value))
     byte = 0
     bit_count = 0
-    byte_dc = 0
+    byte_dc = False
+    pixel_stream = [] if pixel_stream is None else list(pixel_stream)
+    pixel_index = 0
+    pixel_count_seen = int(prev["pixel_count"])
 
     for cycle in range(max_cycles):
+        pixel_valid = pixel_index < len(pixel_stream)
+        pixel_shade = pixel_stream[pixel_index] if pixel_valid else 0
         snapshot = await step(
             dut,
             frame_start=frame_start_at_cycle is not None and cycle == frame_start_at_cycle,
-            pixel_valid=pixel_valid_after_init,
+            pixel_valid=pixel_valid,
             pixel_shade=pixel_shade,
         )
 
@@ -87,7 +118,7 @@ async def collect_bytes(
             bit_count = 0
         elif (not prev["lcd_sck"]) and snapshot["lcd_sck"]:
             if bit_count == 0:
-                byte_dc = int(snapshot["lcd_dc"])
+                byte_dc = bool(snapshot["lcd_dc"])
             byte = ((byte << 1) | int(snapshot["lcd_mosi"])) & 0xFF
             bit_count += 1
             if bit_count == 8:
@@ -97,12 +128,22 @@ async def collect_bytes(
                 byte = 0
                 bit_count = 0
 
+        current_pixel_count = int(snapshot["pixel_count"])
+        if current_pixel_count > pixel_count_seen and pixel_index < len(pixel_stream):
+            pixel_index += current_pixel_count - pixel_count_seen
+        pixel_count_seen = current_pixel_count
+
         prev = snapshot
 
     raise AssertionError(f"Timed out collecting {expected_count} bytes, got {len(transcript)}")
 
 
-async def wait_until(dut, predicate, *, max_cycles: int = 4000) -> dict[str, int | bool]:
+async def wait_until(
+    dut,
+    predicate: Callable[[Dict[str, int | bool]], bool],
+    *,
+    max_cycles: int = 4000,
+) -> Dict[str, int | bool]:
     for _ in range(max_cycles):
         snapshot = await step(dut)
         if predicate(snapshot):
@@ -110,8 +151,24 @@ async def wait_until(dut, predicate, *, max_cycles: int = 4000) -> dict[str, int
     raise AssertionError("condition not reached before timeout")
 
 
+def assert_transcript_matches(
+    actual: Sequence[TranscriptByte],
+    expected_entries: Sequence[Tuple[bool, int, Optional[str]]],
+) -> None:
+    expected = [(dc, byte) for dc, byte, _ in expected_entries]
+    assert len(actual) == len(expected), f"byte_count mismatch: expected {len(expected)} actual {len(actual)}"
+    for index, (actual_entry, expected_entry) in enumerate(zip(actual, expected_entries)):
+        actual_dc, actual_byte = actual_entry
+        expected_dc, expected_byte, label = expected_entry
+        if actual_dc != expected_dc or actual_byte != expected_byte:
+            raise AssertionError(
+                f"byte[{index}] mismatch label={label} expected=(dc={int(expected_dc)}, byte=0x{expected_byte:02X}) "
+                f"actual=(dc={int(actual_dc)}, byte=0x{actual_byte:02X})"
+            )
+
+
 @cocotb.test()
-async def test_reset_and_init_sequence_emit_expected_commands(dut):
+async def test_reset_and_init_sequence_matches_golden_transcript(dut):
     await reset_dut(dut)
 
     snapshot = await step(dut)
@@ -119,29 +176,9 @@ async def test_reset_and_init_sequence_emit_expected_commands(dut):
     assert snapshot["lcd_bl"] is False
     assert snapshot["init_done"] is False
 
-    transcript = await collect_bytes(dut, expected_count=19)
-    expected = [
-        (0, 0x01),
-        (0, 0x11),
-        (0, 0x3A),
-        (1, 0x55),
-        (0, 0x36),
-        (1, 0x00),
-        (0, 0x2A),
-        (1, 0x00),
-        (1, 0x00),
-        (1, 0x01),
-        (1, 0x3F),
-        (0, 0x2B),
-        (1, 0x00),
-        (1, 0x00),
-        (1, 0x00),
-        (1, 0xEF),
-        (0, 0x21),
-        (0, 0x13),
-        (0, 0x29),
-    ]
-    assert transcript == expected, transcript
+    expected = generate_init_transcript()
+    transcript = await collect_bytes(dut, expected_count=len(expected))
+    assert_transcript_matches(transcript, expected)
 
     final = await wait_until(dut, lambda snap: bool(snap["init_done"]) and not bool(snap["frame_active"]) and not bool(snap["tx_active"]))
     assert final["lcd_res"] is True
@@ -149,41 +186,42 @@ async def test_reset_and_init_sequence_emit_expected_commands(dut):
 
 
 @cocotb.test()
-async def test_frame_start_emits_window_commands_and_first_pixel(dut):
+async def test_frame_start_matches_full_frame_transcript_prefix_for_small_tile(dut):
     await reset_dut(dut)
     await wait_until(dut, lambda snap: bool(snap["init_done"]) and not bool(snap["frame_active"]))
 
+    tile = [0, 1, 2, 3]
+    frame = bytearray(160 * 144)
+    frame[: len(tile)] = bytes(tile)
+    expected = generate_frame_transcript(bytes(frame))
+    expected_prefix = expected[: 11 + (len(tile) * 2)]
+
     transcript = await collect_bytes(
         dut,
-        expected_count=13,
+        expected_count=len(expected_prefix),
         frame_start_at_cycle=0,
-        pixel_valid_after_init=True,
-        pixel_shade=0,
+        pixel_stream=tile,
         max_cycles=5000,
     )
-    expected_prefix = [
-        (0, 0x2A),
-        (1, 0x00),
-        (1, 0x50),
-        (1, 0x00),
-        (1, 0xEF),
-        (0, 0x2B),
-        (1, 0x00),
-        (1, 0x30),
-        (1, 0x00),
-        (1, 0xBF),
-        (0, 0x2C),
-        (1, 0xFF),
-        (1, 0xFF),
-    ]
-    assert transcript == expected_prefix, transcript
+    assert_transcript_matches(transcript, expected_prefix)
+
+    for index, shade in enumerate(tile):
+        expected_hi = expected_prefix[11 + (index * 2)][1]
+        expected_lo = expected_prefix[12 + (index * 2)][1]
+        actual_hi = transcript[11 + (index * 2)][1]
+        actual_lo = transcript[12 + (index * 2)][1]
+        expected_word = (expected_hi << 8) | expected_lo
+        actual_word = (actual_hi << 8) | actual_lo
+        assert abs(actual_word - expected_word) <= 1, (
+            f"pixel[{index}] shade={shade} expected_rgb565=0x{expected_word:04X} actual_rgb565=0x{actual_word:04X}"
+        )
 
     for _ in range(2000):
-        advanced = await step(dut, pixel_valid=True, pixel_shade=0)
-        if advanced["pixel_advance"]:
+        advanced = await step(dut, pixel_valid=False, pixel_shade=0)
+        if advanced["pixel_count"] >= len(tile):
             break
     else:
-        raise AssertionError("pixel_advance did not pulse while pixel stream was enabled")
+        raise AssertionError("pixel_count did not advance through the requested tile")
 
     assert advanced["frame_active"] is True
-    assert advanced["pixel_count"] >= 1
+    assert advanced["pixel_count"] >= len(tile)
