@@ -1,0 +1,31 @@
+use std::option::Option;
+
+use lib::board::hardware_soc_core::hardware_soc_core_alu_loop;
+use lib::periph::joypad::idle_joyp_buttons;
+use lib::ppu::sem::scanout::ScanoutEvent;
+
+fn scanout_valid(scanout: Option<ScanoutEvent>) -> bool {
+    match scanout {
+        Option::Some(_) => true,
+        Option::None => false,
+    }
+}
+
+#[no_mangle(all)]
+entity hardware_soc_core_test_top(
+    clk: clock,
+    rst_i: bool,
+    status_o: inv uint<32>,
+) {
+    let core = inst hardware_soc_core_alu_loop(clk, rst_i, idle_joyp_buttons());
+
+    set status_o =
+        zext(core.pc_low4)
+        | (zext(lib::util::bit(core.m_ce)) << 4)
+        | (zext(core.phase_bits) << 5)
+        | (zext(core.ppu_mode_bits) << 8)
+        | (zext(core.ppu_ly) << 11)
+        | (zext(core.ppu_stat) << 19)
+        | (zext(lib::util::bit(scanout_valid(core.scanout))) << 27)
+        | (zext(lib::util::bit(core.rom_ready)) << 28);
+}

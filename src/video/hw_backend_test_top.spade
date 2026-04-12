@@ -100,13 +100,15 @@ pub entity hw_backend_test_top(
     cpu_is_vram_i: bool,
     cpu_is_oam_i: bool,
     dma_active_i: bool,
+    dma_vram_read_addr_i: uint<13>,
+    dma_vram_read_active_i: bool,
     dma_oam_write_en_i: bool,
     dma_oam_write_addr_i: uint<8>,
     dma_oam_write_data_i: uint<8>,
     ppu_vram_active_i: bool,
     ppu_oam_active_i: bool,
-) -> uint<38> {
-    let (ppu_mem_resp, cpu_vram_read_data, cpu_oam_read_data) = inst hw_backend(
+) -> uint<46> {
+    let (ppu_mem_resp, cpu_vram_read_data, cpu_oam_read_data, dma_vram_read_data) = inst hw_backend(
         clk,
         rst_i,
         build_reqs(req_valid_i, req_region_i, req_client_i, req_id_i, req_addr_i),
@@ -116,6 +118,8 @@ pub entity hw_backend_test_top(
         cpu_is_vram_i,
         cpu_is_oam_i,
         dma_active_i,
+        dma_vram_read_addr_i,
+        dma_vram_read_active_i,
         dma_oam_write_en_i,
         dma_oam_write_addr_i,
         dma_oam_write_data_i,
@@ -132,4 +136,5 @@ pub entity hw_backend_test_top(
         | (zext(result_bits(ppu_mem_resp.result)) << 32)
         | (zext(reason_bits(ppu_mem_resp.result)) << 34)
         | (zext(lib::util::bit(resp_valid(ppu_mem_resp))) << 37)
+        | (zext(dma_vram_read_data) << 38)
 }

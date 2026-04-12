@@ -53,6 +53,8 @@ pub entity hw_backend(
     cpu_is_vram: bool,
     cpu_is_oam: bool,
     dma_active: bool,
+    dma_vram_read_addr: uint<13>,
+    dma_vram_read_active: bool,
     dma_oam_write_en: bool,
     dma_oam_write_addr: uint<8>,
     dma_oam_write_data: uint<8>,
@@ -60,6 +62,7 @@ pub entity hw_backend(
     ppu_oam_active: bool,
 ) -> (
     PpuMemResp,
+    uint<8>,
     uint<8>,
     uint<8>,
 ) {
@@ -79,9 +82,9 @@ pub entity hw_backend(
         clk,
         cpu_vram_addr(cpu_addr),
         req_vram_addr(req_now),
-        0u13,
+        dma_vram_read_addr,
         req_valid_now && req_is_vram(req_now),
-        false,
+        dma_vram_read_active,
         cpu_vram_write_en,
         cpu_vram_addr(cpu_addr),
         cpu_write_data,
@@ -104,8 +107,9 @@ pub entity hw_backend(
     } else {
         idle_ppu_mem_resp()
     };
-    let cpu_vram_read_data = if ppu_vram_active { 0xffu8 } else { vram_read_data };
+    let cpu_vram_read_data = if ppu_vram_active || dma_vram_read_active { 0xffu8 } else { vram_read_data };
     let cpu_oam_read_data = if ppu_oam_active || dma_active { 0xffu8 } else { oam_read_data };
+    let dma_vram_read_data = if dma_vram_read_active { vram_read_data } else { 0xffu8 };
 
-    (ppu_mem_resp, cpu_vram_read_data, cpu_oam_read_data)
+    (ppu_mem_resp, cpu_vram_read_data, cpu_oam_read_data, dma_vram_read_data)
 }

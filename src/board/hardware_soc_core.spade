@@ -1,0 +1,456 @@
+use std::option::Option;
+
+use lib::board::clockgen::timebase;
+use lib::bus::address_decode::{decode_region, is_oam_addr, is_vram_addr, region_owner, req_addr};
+use lib::bus::io_decode::{blocked_read_data, dma_start, hram_write, not_usable_read_data, wram_write};
+use lib::bus::ppu_event_bridge::ppu_event_bridge;
+use lib::bus::types::{BusOwner, BusRegion, BusReq, BusResp, idle_bus_resp};
+use lib::cpu::core::cpu_core;
+use lib::cpu::types::{IrqAck, MemoryBehaviorProfile, Phase, no_irq_ack};
+use lib::mem::logical::map::{hram_addr, rom_addr, wram_addr};
+use lib::mem::phys::ebr::hram_ebr;
+use lib::mem::phys::rom_backend_types::{RomBackendOut, RomBackendPorts};
+use lib::mem::phys::rom_baked_ebr::rom_baked_ebr_1k;
+use lib::mem::phys::rom_baked_images::alu_loop_rom_backend;
+use lib::mem::phys::rom_spram_rw::rom_spram_rw;
+use lib::mem::phys::spram::wram_spram;
+use lib::periph::interrupts::{InterruptsOut, interrupts};
+use lib::periph::joypad::{JoypButtons, JoypadOut, joypad};
+use lib::periph::oam_dma::oam_dma;
+use lib::periph::serial::{SerialOut, serial};
+use lib::periph::timer::{TimerOut, timer};
+use lib::ppu::rtl::core_hw::{PpuCoreHwOut, ppu_core_hw};
+use lib::ppu::rtl::regs::readback_register;
+use lib::ppu::sem::events::OamDmaState;
+use lib::ppu::sem::scanout::ScanoutEvent;
+use lib::ppu::sem::types::PpuMode;
+use lib::util::cpu_bus_req;
+use lib::video::hw_backend::hw_backend;
+
+pub struct HardwareSocCoreOut {
+    rom_ports: RomBackendPorts,
+    rom_ready: bool,
+    scanout: Option<ScanoutEvent>,
+    pc_low4: uint<4>,
+    m_ce: bool,
+    t_index: uint<2>,
+    phase_bits: uint<3>,
+    ppu_mode_bits: uint<3>,
+    ppu_ly: uint<8>,
+    ppu_stat: uint<8>,
+}
+
+fn preview_cpu_bus_req(cpu: lib::cpu::core::CpuCoreOut, m_ce: bool, fallback_pc: uint<16>) -> BusReq {
+    if m_ce {
+        cpu_bus_req(cpu.bus_req_kind, cpu.bus_req_addr, cpu.bus_req_data)
+    } else if cpu.preview_bus_req_kind != 0u2 {
+        cpu_bus_req(cpu.preview_bus_req_kind, cpu.preview_bus_req_addr, cpu.preview_bus_req_data)
+    } else {
+        BusReq::Read$(addr: fallback_pc)
+    }
+}
+
+fn active_req(rst: bool, m_ce: bool, req: BusReq) -> BusReq {
+    if rst || !m_ce { BusReq::Idle } else { req }
+}
+
+fn blocked_req(req: BusReq, owner: BusOwner) -> bool {
+    match req {
+        BusReq::Idle => false,
+        _ => match owner {
+            BusOwner::Cpu => false,
+            _ => true,
+        },
+    }
+}
+
+fn req_is_write(req: BusReq) -> bool {
+    match req {
+        BusReq::Write$(addr: _, data: _) => true,
+        _ => false,
+    }
+}
+
+fn req_write_data(req: BusReq) -> uint<8> {
+    match req {
+        BusReq::Write$(addr: _, data: data) => data,
+        _ => 0u8,
+    }
+}
+
+fn irq_ack_from_cpu(valid: bool, bit: uint<3>) -> IrqAck {
+    if valid {
+        IrqAck$(ack_bit: Option::Some(bit))
+    } else {
+        no_irq_ack()
+    }
+}
+
+fn encode_cpu_phase(phase: Phase) -> uint<3> {
+    match phase {
+        Phase::Fetch => 0u3,
+        Phase::Halted => 1u3,
+        Phase::Execute$(op: _) => 2u3,
+        Phase::ReadImm8$(k: _) => 3u3,
+        Phase::ReadImm16Lo$(k: _) => 4u3,
+        Phase::ReadImm16Hi$(lo: _, k: _) => 5u3,
+        Phase::ReadMem$(addr: _, k: _) => 6u3,
+        Phase::WriteMem$(addr: _, data: _, k: _) => 7u3,
+        Phase::FetchPrefix$(prefix: _) => 0u3,
+        Phase::ServiceInterrupt$(irq: _, subphase: _) => 1u3,
+        _ => 7u3,
+    }
+}
+
+fn encode_ppu_mode(mode: PpuMode) -> uint<3> {
+    match mode {
+        PpuMode::HBlank => 0u3,
+        PpuMode::VBlank => 1u3,
+        PpuMode::OamScan => 2u3,
+        PpuMode::PixelTransfer => 3u3,
+        PpuMode::LcdOff => 4u3,
+    }
+}
+
+fn ppu_vram_active(mode: PpuMode) -> bool {
+    match mode {
+        PpuMode::PixelTransfer => true,
+        _ => false,
+    }
+}
+
+fn ppu_oam_active(mode: PpuMode) -> bool {
+    match mode {
+        PpuMode::OamScan => true,
+        PpuMode::PixelTransfer => true,
+        _ => false,
+    }
+}
+
+fn visible_io_read_data(
+    addr: uint<16>,
+    joypad_out: JoypadOut,
+    serial_out: SerialOut,
+    timer_out: TimerOut,
+    irq_out: InterruptsOut,
+    ppu: PpuCoreHwOut,
+) -> uint<8> {
+    match addr {
+        0xff00u16 => joypad_out.p1,
+        0xff01u16 => serial_out.sb,
+        0xff02u16 => serial_out.sc,
+        0xff04u16 => timer_out.div,
+        0xff05u16 => timer_out.tima,
+        0xff06u16 => timer_out.tma,
+        0xff07u16 => 0xf8u8 | zext(timer_out.tac),
+        0xff0fu16 => irq_out.iflags,
+        0xff40u16 => readback_register(0x40u8, ppu.regs, ppu.status, ppu.ly),
+        0xff41u16 => readback_register(0x41u8, ppu.regs, ppu.status, ppu.ly),
+        0xff42u16 => readback_register(0x42u8, ppu.regs, ppu.status, ppu.ly),
+        0xff43u16 => readback_register(0x43u8, ppu.regs, ppu.status, ppu.ly),
+        0xff44u16 => readback_register(0x44u8, ppu.regs, ppu.status, ppu.ly),
+        0xff45u16 => readback_register(0x45u8, ppu.regs, ppu.status, ppu.ly),
+        0xff47u16 => readback_register(0x47u8, ppu.regs, ppu.status, ppu.ly),
+        0xff48u16 => readback_register(0x48u8, ppu.regs, ppu.status, ppu.ly),
+        0xff49u16 => readback_register(0x49u8, ppu.regs, ppu.status, ppu.ly),
+        0xff4au16 => readback_register(0x4au8, ppu.regs, ppu.status, ppu.ly),
+        0xff4bu16 => readback_register(0x4bu8, ppu.regs, ppu.status, ppu.ly),
+        _ => 0xffu8,
+    }
+}
+
+fn dma_source_data(
+    region: BusRegion,
+    rom_data: uint<8>,
+    vram_data: uint<8>,
+    wram_data: uint<8>,
+    hram_data: uint<8>,
+) -> uint<8> {
+    match region {
+        BusRegion::Rom => rom_data,
+        BusRegion::Vram => vram_data,
+        BusRegion::Wram => wram_data,
+        BusRegion::Echo => wram_data,
+        BusRegion::Hram => hram_data,
+        _ => 0xffu8,
+    }
+}
+
+pub entity hardware_soc_core(
+    clk: clock,
+    rst: bool,
+    joyp_buttons: JoypButtons,
+    memory_behavior_profile: MemoryBehaviorProfile,
+    loader_write_en_i: bool,
+    loader_write_addr_i: uint<15>,
+    loader_write_data_i: uint<8>,
+    rom_backend_i: RomBackendOut,
+) -> HardwareSocCoreOut {
+    decl bus_resp_next;
+    decl irq_pending;
+    decl ppu_mem_resp;
+
+    let tb = inst timebase(clk, rst);
+    reg(clk) bus_read_data_reg: uint<8> reset(rst: 0xffu8) =
+        if tb.m_ce { bus_resp_next.data } else { bus_read_data_reg };
+    let cpu = inst cpu_core(
+        clk,
+        rst,
+        tb.m_ce,
+        BusResp$(data: bus_read_data_reg),
+        irq_pending,
+    );
+    reg(clk) prefetch_pc_reg: uint<16> reset(rst: 0x0100u16) =
+        if tb.m_ce { cpu.pc } else { prefetch_pc_reg };
+
+    let req = preview_cpu_bus_req(cpu, tb.m_ce, prefetch_pc_reg);
+    let scheduled_req = if rst { BusReq::Idle } else { req };
+    let visible_req = active_req(rst, tb.m_ce, req);
+    let addr = req_addr(scheduled_req);
+    let region = decode_region(addr);
+    let visible_addr = req_addr(visible_req);
+    let visible_region = decode_region(visible_addr);
+
+    let (dma_start_valid, dma_start_source_high) = dma_start(visible_req);
+    let dma = inst oam_dma(clk, rst, tb.m_ce, dma_start_valid, dma_start_source_high);
+    let dma_visible_active = dma.active || dma_start_valid;
+    let dma_visible_source_high = if dma_start_valid { dma_start_source_high } else { dma.source_high };
+
+    let (ppu_bus_events, ppu_bus_event_count) = inst ppu_event_bridge(
+        clk,
+        rst,
+        tb.m_ce,
+        req,
+        tb.frame_start,
+        tb.line_index,
+        tb.dot_in_line,
+    );
+
+    let dma_source_region = decode_region(dma.source_addr);
+    let rom_ports = RomBackendPorts$(
+        cpu_addr: rom_addr(region, addr),
+        dma_addr: rom_addr(dma_source_region, dma.source_addr),
+        loader_write_en: loader_write_en_i,
+        loader_write_addr: loader_write_addr_i,
+        loader_write_data: loader_write_data_i,
+    );
+    let rom_cpu_data = if rom_backend_i.rom_ready { rom_backend_i.cpu_data } else { 0xffu8 };
+    let rom_dma_data = if rom_backend_i.rom_ready { rom_backend_i.dma_data } else { 0xffu8 };
+
+    let ppu = inst ppu_core_hw(
+        clk,
+        rst,
+        tb.dot_ce,
+        ppu_bus_events,
+        ppu_bus_event_count,
+        ppu_mem_resp,
+        OamDmaState$(active: dma_visible_active, source_high: dma_visible_source_high),
+    );
+    let ppu_vram_busy = ppu_vram_active(ppu.mode);
+    let ppu_oam_busy = ppu_oam_active(ppu.mode);
+    let scheduled_owner = region_owner(region, dma_visible_active, ppu_vram_busy, ppu_oam_busy);
+    let scheduled_blocked = blocked_req(scheduled_req, scheduled_owner);
+    let visible_owner = region_owner(visible_region, dma_visible_active, ppu_vram_busy, ppu_oam_busy);
+    let visible_blocked = blocked_req(visible_req, visible_owner);
+    let write_allowed = req_is_write(scheduled_req) && !scheduled_blocked;
+    let visible_write_en = req_is_write(visible_req) && !visible_blocked;
+    let visible_write_data = req_write_data(visible_req);
+
+    let joypad_out = inst joypad(
+        clk,
+        rst,
+        visible_write_en,
+        visible_addr,
+        visible_write_data,
+        joyp_buttons,
+    );
+    let timer_out = inst timer(
+        clk,
+        rst,
+        tb.sys_counter,
+        visible_write_en,
+        visible_addr,
+        visible_write_data,
+    );
+    let serial_out = inst serial(
+        clk,
+        rst,
+        tb.m_ce,
+        visible_write_en,
+        visible_addr,
+        visible_write_data,
+        0xffu8,
+    );
+    let irq_out = inst interrupts(
+        clk,
+        rst,
+        visible_write_en,
+        visible_addr,
+        visible_write_data,
+        ppu.irq_req.vblank_req,
+        ppu.irq_req.stat_req,
+        timer_out.timer_irq,
+        serial_out.serial_irq,
+        joypad_out.joypad_irq,
+        irq_ack_from_cpu(cpu.irq_ack_valid, cpu.irq_ack_bit),
+    );
+    let irq_pending = irq_out.irq_pending;
+
+    let (wram_we, wram_waddr, wram_wdata) = wram_write(
+        region,
+        if write_allowed { scheduled_req } else { BusReq::Idle },
+    );
+    let (wram_data, dma_wram_data) = inst wram_spram(
+        clk,
+        tb.t_index,
+        wram_addr(region, addr),
+        wram_addr(dma_source_region, dma.source_addr),
+        wram_we,
+        wram_waddr,
+        wram_wdata,
+    );
+    let (hram_we, hram_waddr, hram_wdata) = hram_write(
+        region,
+        if write_allowed { scheduled_req } else { BusReq::Idle },
+    );
+    let (hram_data, dma_hram_data) = inst hram_ebr(
+        clk,
+        hram_addr(region, addr),
+        hram_addr(dma_source_region, dma.source_addr),
+        hram_we,
+        hram_waddr,
+        hram_wdata,
+    );
+    let dma_vram_read_active = match dma_source_region {
+        BusRegion::Vram => dma_visible_active,
+        _ => false,
+    };
+    let (ppu_mem_resp, cpu_vram_read_data, cpu_oam_read_data, dma_vram_read_data) = inst hw_backend(
+        clk,
+        rst,
+        ppu.mem_reqs,
+        addr,
+        write_allowed,
+        req_write_data(scheduled_req),
+        is_vram_addr(addr),
+        is_oam_addr(addr),
+        dma_visible_active,
+        trunc(dma.source_addr - 0x8000u16),
+        dma_vram_read_active,
+        dma.write_en,
+        trunc(dma.dest_addr - 0xfe00u16),
+        dma_source_data(
+            dma_source_region,
+            rom_dma_data,
+            0xffu8,
+            dma_wram_data,
+            dma_hram_data,
+        ),
+        ppu_vram_busy,
+        ppu_oam_busy,
+    );
+
+    let bus_resp_next = match visible_req {
+        BusReq::Read$(addr: _) => BusResp$(data:
+            if visible_blocked {
+                blocked_read_data(memory_behavior_profile)
+            } else {
+                match visible_region {
+                    BusRegion::Rom => rom_cpu_data,
+                    BusRegion::Vram => cpu_vram_read_data,
+                    BusRegion::Wram => wram_data,
+                    BusRegion::Echo => wram_data,
+                    BusRegion::Oam => cpu_oam_read_data,
+                    BusRegion::Io => visible_io_read_data(
+                        visible_addr,
+                        joypad_out,
+                        serial_out,
+                        timer_out,
+                        irq_out,
+                        ppu,
+                    ),
+                    BusRegion::Hram => hram_data,
+                    BusRegion::Ie => irq_out.ie,
+                    BusRegion::NotUsable => not_usable_read_data(memory_behavior_profile),
+                    _ => 0xffu8,
+                }
+            }),
+        _ => idle_bus_resp(),
+    };
+
+    HardwareSocCoreOut$(
+        rom_ports: rom_ports,
+        rom_ready: rom_backend_i.rom_ready,
+        scanout: ppu.scanout,
+        pc_low4: trunc(cpu.pc),
+        m_ce: tb.m_ce,
+        t_index: tb.t_index,
+        phase_bits: encode_cpu_phase(cpu.phase),
+        ppu_mode_bits: encode_ppu_mode(ppu.mode),
+        ppu_ly: ppu.ly,
+        ppu_stat: ppu.stat_readback,
+    )
+}
+
+pub entity hardware_soc_core_alu_loop(
+    clk: clock,
+    rst: bool,
+    joyp_buttons: JoypButtons,
+) -> HardwareSocCoreOut {
+    decl rom_backend;
+    let core = inst hardware_soc_core(
+        clk,
+        rst,
+        joyp_buttons,
+        MemoryBehaviorProfile::DmgConservative,
+        false,
+        0u15,
+        0u8,
+        rom_backend,
+    );
+    let rom_backend = inst alu_loop_rom_backend(clk, core.rom_ports);
+    core
+}
+
+pub entity hardware_soc_core_baked_ebr_1k(
+    clk: clock,
+    rst: bool,
+    joyp_buttons: JoypButtons,
+) -> HardwareSocCoreOut {
+    decl rom_backend;
+    let core = inst hardware_soc_core(
+        clk,
+        rst,
+        joyp_buttons,
+        MemoryBehaviorProfile::DmgConservative,
+        false,
+        0u15,
+        0u8,
+        rom_backend,
+    );
+    let rom_backend = inst rom_baked_ebr_1k(clk, core.rom_ports);
+    core
+}
+
+pub entity hardware_soc_core_rw(
+    clk: clock,
+    rst: bool,
+    joyp_buttons: JoypButtons,
+    loader_write_en_i: bool,
+    loader_write_addr_i: uint<15>,
+    loader_write_data_i: uint<8>,
+) -> HardwareSocCoreOut {
+    decl rom_backend;
+    let core = inst hardware_soc_core(
+        clk,
+        rst,
+        joyp_buttons,
+        MemoryBehaviorProfile::DmgConservative,
+        loader_write_en_i,
+        loader_write_addr_i,
+        loader_write_data_i,
+        rom_backend,
+    );
+    let rom_backend = inst rom_spram_rw(clk, core.t_index, core.rom_ports);
+    core
+}

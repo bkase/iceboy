@@ -1,5 +1,6 @@
 use std::option::Option;
 
+use lib::ppu::rtl::regs::read_stat;
 use lib::ppu::sem::events::{DotInput, OamDmaState, TimedPpuEvent};
 use lib::ppu::sem::memory::PpuMemResp;
 use lib::ppu::sem::observe::{PpuMemReqs, PpuMmioResp};
@@ -9,6 +10,7 @@ use lib::ppu::sem::types::{
     LcdRunState,
     Lcdc,
     PpuIrqReq,
+    PpuMode,
     PpuPhase,
     PpuRegs,
     PpuSamplingState,
@@ -18,9 +20,15 @@ use lib::ppu::sem::types::{
     StatSelect,
     initial_ppu_render_state,
     initial_stat_irq_state,
+    visible_mode,
 };
 
 pub struct PpuCoreHwOut {
+    regs: PpuRegs,
+    status: PpuStatusState,
+    ly: uint<8>,
+    mode: PpuMode,
+    stat_readback: uint<8>,
     mmio_resp: PpuMmioResp,
     mem_reqs: PpuMemReqs,
     irq_req: PpuIrqReq,
@@ -88,6 +96,11 @@ pub entity ppu_core_hw(
     reg(clk) state_reg: PpuState reset(rst: dmg_skipboot_state()) = visible_state;
 
     PpuCoreHwOut$(
+        regs: visible_state.visible.regs,
+        status: visible_state.status,
+        ly: visible_state.visible.ly,
+        mode: visible_mode(visible_state.status),
+        stat_readback: read_stat(visible_state.visible.regs, visible_state.status),
         mmio_resp: visible.mmio_resp,
         mem_reqs: visible.mem_reqs,
         irq_req: visible.irq_req,

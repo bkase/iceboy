@@ -33,6 +33,7 @@ def decode_output(value: int) -> dict[str, int | bool]:
         "resp_result": (value >> 32) & 0x3,
         "resp_reason": (value >> 34) & 0x7,
         "resp_valid": bool((value >> 37) & 0x1),
+        "dma_vram_read_data": (value >> 38) & 0xFF,
     }
 
 
@@ -50,6 +51,8 @@ async def reset_dut(dut) -> None:
     dut.cpu_is_vram_i.value = 0
     dut.cpu_is_oam_i.value = 0
     dut.dma_active_i.value = 0
+    dut.dma_vram_read_addr_i.value = 0
+    dut.dma_vram_read_active_i.value = 0
     dut.dma_oam_write_en_i.value = 0
     dut.dma_oam_write_addr_i.value = 0
     dut.dma_oam_write_data_i.value = 0
@@ -75,6 +78,8 @@ async def step(
     cpu_is_vram: bool = False,
     cpu_is_oam: bool = False,
     dma_active: bool = False,
+    dma_vram_read_addr: int = 0,
+    dma_vram_read_active: bool = False,
     dma_oam_write_en: bool = False,
     dma_oam_write_addr: int = 0,
     dma_oam_write_data: int = 0,
@@ -92,6 +97,8 @@ async def step(
     dut.cpu_is_vram_i.value = int(cpu_is_vram)
     dut.cpu_is_oam_i.value = int(cpu_is_oam)
     dut.dma_active_i.value = int(dma_active)
+    dut.dma_vram_read_addr_i.value = dma_vram_read_addr & 0x1FFF
+    dut.dma_vram_read_active_i.value = int(dma_vram_read_active)
     dut.dma_oam_write_en_i.value = int(dma_oam_write_en)
     dut.dma_oam_write_addr_i.value = dma_oam_write_addr & 0xFF
     dut.dma_oam_write_data_i.value = dma_oam_write_data & 0xFF
@@ -123,6 +130,12 @@ async def read_cpu_oam(dut, addr: int, *, ppu_oam_active: bool = False, dma_acti
     await step(dut, cpu_addr=addr, cpu_is_oam=True, ppu_oam_active=ppu_oam_active, dma_active=dma_active)
     snapshot = await step(dut, cpu_addr=addr, cpu_is_oam=True, ppu_oam_active=ppu_oam_active, dma_active=dma_active)
     return int(snapshot["cpu_oam_read_data"])
+
+
+async def read_dma_vram(dut, addr: int) -> int:
+    await step(dut, dma_vram_read_addr=addr - 0x8000, dma_vram_read_active=True)
+    snapshot = await step(dut, dma_vram_read_addr=addr - 0x8000, dma_vram_read_active=True)
+    return int(snapshot["dma_vram_read_data"])
 
 
 @cocotb.test()
@@ -193,3 +206,22 @@ async def test_dma_oam_writes_fill_the_oam_array_and_override_cpu_writes(dut):
         assert resp["resp_valid"] is True
         assert resp["resp_result"] == RESULT_OK
         assert resp["resp_data"] == (offset * 3) & 0xFF
+
+
+@cocotb.test()
+async def test_dma_vram_source_reads_fall_back_to_ff_and_mask_cpu_vram_port(dut):
+    await reset_dut(dut)
+
+    await step(dut, cpu_addr=0x8008, cpu_write_en=True, cpu_write_data=0x77, cpu_is_vram=True)
+
+    assert await read_cpu_vram(dut, 0x8008, ppu_vram_active=False) == 0x77
+    assert await read_dma_vram(dut, 0x8008) == 0xFF
+
+    snapshot = await step(
+        dut,
+        cpu_addr=0x8008,
+        cpu_is_vram=True,
+        dma_vram_read_addr=0x0008,
+        dma_vram_read_active=True,
+    )
+    assert snapshot["cpu_vram_read_data"] == 0xFF
