@@ -1,0 +1,3 @@
+pub mod alu_loop_rom_data;
+pub mod bg_static_rom_data;
+pub mod joypad_bg_smoke_rom_data;
