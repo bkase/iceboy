@@ -1,0 +1,54 @@
+{
+  "artifacts": {
+    "asc": "build/bitstreams/lcd_test_pattern.asc",
+    "nextpnr_log": "build/bitstreams/nextpnr.log",
+    "nextpnr_report": "build/bitstreams/nextpnr-report.json",
+    "yosys_stat": "build/bitstreams/synth_lcd_test_pattern/yosys-stat.txt"
+  },
+  "board": "iCEBreaker",
+  "captured_on": "2026-04-12",
+  "clock_constraint": {
+    "achieved_mhz": 34.768096923828125,
+    "clock_name": "CLK$SB_IO_IN_$glb_clk",
+    "constraint_mhz": 12.00004768371582,
+    "target_mhz": 12.0,
+    "timing_met": true
+  },
+  "clock_enable": {
+    "board_top_loads": 0,
+    "method": "source_occurrence_count",
+    "signal": "tb.m_ce"
+  },
+  "debug_free": {
+    "forbidden_debug_symbols_present": false,
+    "verified_by": "tools/build_icebreaker_variant.sh"
+  },
+  "device": "iCE40UP5K-SG48",
+  "pin_constraints": "icebreaker.pcf",
+  "pnr": {
+    "error": null,
+    "status": "passed",
+    "timing_report_available": true
+  },
+  "tool_versions": {
+    "nextpnr-ice40": "\"nextpnr-ice40\" -- Next Generation Place and Route (Version nextpnr-0.10-15-g77ccf518)",
+    "swim": "swim v0.17.0-r314-a9f0731",
+    "yosys": "Yosys 0.63+188 (git sha1 cede13a74-dirty, aarch64-apple-darwin23.5-clang++ 18.1.8 -fPIC -O3)"
+  },
+  "top": "board::icebreaker_lcd_test_top::icebreaker_lcd_test_top",
+  "utilization": {
+    "carry_used": 137,
+    "dff_available": 1024,
+    "dff_used": 114,
+    "ebr_available": 30,
+    "ebr_used": 0,
+    "fits_up5k_dff": true,
+    "fits_up5k_lut4": true,
+    "logic_cells_available": 5280,
+    "logic_cells_used": 389,
+    "lut4_available": 5280,
+    "lut4_used": 283,
+    "spram_available": 4,
+    "spram_used": 0
+  }
+}
