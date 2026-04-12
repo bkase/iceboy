@@ -1,0 +1,54 @@
+{
+  "artifacts": {
+    "asc": "build/hw_probes/hardware_soc_core_full/icebreaker_hardware_soc_core_fit_top.asc",
+    "nextpnr_log": "build/hw_probes/hardware_soc_core_full/nextpnr.log",
+    "nextpnr_report": "build/hw_probes/hardware_soc_core_full/nextpnr-report.json",
+    "yosys_stat": "build/hw_probes/hardware_soc_core_full/synth/yosys-stat.txt"
+  },
+  "board": "iCEBreaker",
+  "captured_on": "2026-04-12",
+  "clock_constraint": {
+    "achieved_mhz": null,
+    "clock_name": "CLK",
+    "constraint_mhz": 12.0,
+    "target_mhz": 12.0,
+    "timing_met": null
+  },
+  "clock_enable": {
+    "board_top_loads": 0,
+    "method": "source_occurrence_count",
+    "signal": "tb.m_ce"
+  },
+  "debug_free": {
+    "forbidden_debug_symbols_present": false,
+    "verified_by": "tools/build_icebreaker_variant.sh"
+  },
+  "device": "iCE40UP5K-SG48",
+  "pin_constraints": "icebreaker.pcf",
+  "pnr": {
+    "error": "ERROR: Unable to place cell 'DBG_PC1_SB_LUT4_O_I3_SB_LUT4_O_I3_SB_LUT4_O_I2_SB_LUT4_O_I1_SB_LUT4_I3_O_SB_LUT4_O_I2_SB_LUT4_I2_O_SB_LUT4_I3_O_SB_LUT4_I3_O_SB_LUT4_O_I3_SB_LUT4_O_I3_SB_LUT4_I3_O_SB_LUT4_I3_I1_SB_CARRY_CO_CI_SB_CARRY_CO_CI_SB_CARRY_CO_I1_SB_LUT4_O_LC', no BELs remaining to implement cell type 'ICESTORM_LC'",
+    "status": "failed",
+    "timing_report_available": false
+  },
+  "tool_versions": {
+    "nextpnr-ice40": "\"nextpnr-ice40\" -- Next Generation Place and Route (Version nextpnr-0.10-15-g77ccf518)",
+    "swim": "swim v0.17.0-r314-a9f0731",
+    "yosys": "Yosys 0.63+188 (git sha1 cede13a74-dirty, aarch64-apple-darwin23.5-clang++ 18.1.8 -fPIC -O3)"
+  },
+  "top": "board::icebreaker_hardware_soc_core_fit_top::icebreaker_hardware_soc_core_fit_top",
+  "utilization": {
+    "carry_used": 987,
+    "dff_available": 1024,
+    "dff_used": 1055,
+    "ebr_available": 30,
+    "ebr_used": 21,
+    "fits_up5k_dff": false,
+    "fits_up5k_lut4": false,
+    "logic_cells_available": 5280,
+    "logic_cells_used": 7650,
+    "lut4_available": 5280,
+    "lut4_used": 6637,
+    "spram_available": 4,
+    "spram_used": 1
+  }
+}

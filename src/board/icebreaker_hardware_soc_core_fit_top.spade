@@ -1,0 +1,102 @@
+use std::option::Option;
+
+use lib::board::hardware_soc_core::hardware_soc_core_bg_static_1k;
+use lib::board::reset_bridge::reset_bridge;
+use lib::periph::button_bank::button_bank;
+use lib::periph::joypad::{JoypButtons, decode_buttons};
+use lib::ppu::sem::scanout::ScanoutEvent;
+
+fn pack_bool8(bits: [bool; 8]) -> uint<8> {
+    (zext(lib::util::bit(bits[7])) << 7)
+        | (zext(lib::util::bit(bits[6])) << 6)
+        | (zext(lib::util::bit(bits[5])) << 5)
+        | (zext(lib::util::bit(bits[4])) << 4)
+        | (zext(lib::util::bit(bits[3])) << 3)
+        | (zext(lib::util::bit(bits[2])) << 2)
+        | (zext(lib::util::bit(bits[1])) << 1)
+        | zext(lib::util::bit(bits[0]))
+}
+
+fn joypad_buttons_from_bank(bits: [bool; 8]) -> JoypButtons {
+    decode_buttons(pack_bool8(bits))
+}
+
+fn scanout_valid(scanout: Option<ScanoutEvent>) -> bool {
+    match scanout {
+        Option::Some(_) => true,
+        Option::None => false,
+    }
+}
+
+#[no_mangle(all)]
+entity icebreaker_hardware_soc_core_fit_top(
+    CLK: clock,
+    BTN_N: bool,
+    RX: bool,
+    BTN_D_UP: bool,
+    BTN_D_DOWN: bool,
+    BTN_D_LEFT: bool,
+    BTN_D_RIGHT: bool,
+    DIP_A: bool,
+    DIP_B: bool,
+    DIP_START: bool,
+    DIP_SELECT: bool,
+    TX: inv bool,
+    LEDR_N: inv bool,
+    LEDG_N: inv bool,
+    LCD_SCK: inv bool,
+    LCD_MOSI: inv bool,
+    LCD_CS: inv bool,
+    LCD_DC: inv bool,
+    LCD_RES: inv bool,
+    LCD_BL: inv bool,
+    DEBUG_GPIO0: inv bool,
+    DEBUG_GPIO1: inv bool,
+    DBG_PC0: inv bool,
+    DBG_PC1: inv bool,
+    DBG_PC2: inv bool,
+    DBG_PC3: inv bool,
+    DBG_MCE: inv bool,
+    DBG_PHASE0: inv bool,
+    DBG_PHASE1: inv bool,
+    DBG_PHASE2: inv bool,
+) {
+    let _ = RX;
+    let rst = inst reset_bridge(CLK, BTN_N, 48000u16, 16u16).rst;
+    let buttons = [
+        BTN_D_RIGHT,
+        BTN_D_LEFT,
+        BTN_D_UP,
+        BTN_D_DOWN,
+        DIP_A,
+        DIP_B,
+        DIP_SELECT,
+        DIP_START,
+    ];
+    let button_bank_out = inst button_bank::<8, 8>(CLK, buttons);
+    let core = inst hardware_soc_core_bg_static_1k(
+        CLK,
+        rst,
+        joypad_buttons_from_bank(button_bank_out.debounced),
+    );
+
+    set TX = true;
+    set LEDR_N = core.rom_ready;
+    set LEDG_N = scanout_valid(core.scanout);
+    set LCD_SCK = false;
+    set LCD_MOSI = false;
+    set LCD_CS = true;
+    set LCD_DC = false;
+    set LCD_RES = true;
+    set LCD_BL = false;
+    set DEBUG_GPIO0 = core.m_ce;
+    set DEBUG_GPIO1 = core.rom_ready;
+    set DBG_PC0 = (core.pc_low4 & 0x1u4) != 0u4;
+    set DBG_PC1 = (core.pc_low4 & 0x2u4) != 0u4;
+    set DBG_PC2 = (core.pc_low4 & 0x4u4) != 0u4;
+    set DBG_PC3 = (core.pc_low4 & 0x8u4) != 0u4;
+    set DBG_MCE = core.m_ce;
+    set DBG_PHASE0 = (core.ppu_mode_bits & 0x1u3) != 0u3;
+    set DBG_PHASE1 = (core.ppu_mode_bits & 0x2u3) != 0u3;
+    set DBG_PHASE2 = (core.ppu_mode_bits & 0x4u3) != 0u3;
+}
