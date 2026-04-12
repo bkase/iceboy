@@ -1,4 +1,6 @@
 pub mod membus;
+pub mod membus_alu_loop;
+pub mod membus_alu_loop_test_top;
 pub mod membus_test_top;
 pub mod observe_req_test_top;
 pub mod ppu_bridge_core_test_top;

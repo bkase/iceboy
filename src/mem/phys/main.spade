@@ -4,6 +4,7 @@ pub mod ebr_rom_probe_top;
 pub mod ebr_test_top;
 pub mod generated;
 pub mod rom_baked_ebr;
+pub mod rom_baked_images;
 pub mod rom_baked_ebr_synth_top;
 pub mod rom_baked_ebr_test_top;
 pub mod rom_backend_types;

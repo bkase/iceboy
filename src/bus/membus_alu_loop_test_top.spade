@@ -1,0 +1,77 @@
+use lib::bus::membus_alu_loop::membus_alu_loop;
+use lib::bus::types::{BusObs, BusOwner, BusRegion, BusReq, BusResp};
+use lib::cpu::types::MemoryBehaviorProfile;
+use lib::periph::joypad::decode_buttons;
+
+fn encode_region(region: BusRegion) -> uint<4> {
+    match region {
+        BusRegion::Rom => 0u4,
+        BusRegion::Vram => 1u4,
+        BusRegion::CartRam => 2u4,
+        BusRegion::Wram => 3u4,
+        BusRegion::Echo => 4u4,
+        BusRegion::Oam => 5u4,
+        BusRegion::NotUsable => 6u4,
+        BusRegion::Io => 7u4,
+        BusRegion::Hram => 8u4,
+        BusRegion::Ie => 9u4,
+    }
+}
+
+fn encode_owner(owner: BusOwner) -> uint<2> {
+    match owner {
+        BusOwner::Cpu => 0u2,
+        BusOwner::OamDma => 1u2,
+        BusOwner::Ppu => 2u2,
+        BusOwner::Idle => 3u2,
+    }
+}
+
+fn encode_output(resp: BusResp, obs: BusObs) -> uint<15> {
+    (zext(resp.data) << 7)
+        | (zext(encode_region(obs.region)) << 3)
+        | (zext(encode_owner(obs.owner)) << 1)
+        | zext(lib::util::bit(obs.blocked))
+}
+
+fn decode_memory_behavior_profile(profile: uint<2>) -> MemoryBehaviorProfile {
+    match profile {
+        1u2 => MemoryBehaviorProfile::DmgRevisionSpecific,
+        _ => MemoryBehaviorProfile::DmgConservative,
+    }
+}
+
+pub entity membus_alu_loop_test_top(
+    clk: clock,
+    rst: bool,
+    m_ce_i: bool,
+    t_index_i: uint<2>,
+    req_kind_i: uint<2>,
+    addr_i: uint<16>,
+    data_i: uint<8>,
+    buttons_i: uint<8>,
+    memory_behavior_profile_i: uint<2>,
+    oam_dma_active_i: bool,
+    ppu_vram_active_i: bool,
+    ppu_oam_active_i: bool,
+) -> uint<15> {
+    let req = match req_kind_i {
+        1u2 => BusReq::Read$(addr: addr_i),
+        2u2 => BusReq::Write$(addr: addr_i, data: data_i),
+        _ => BusReq::Idle,
+    };
+    let (resp, obs) = inst membus_alu_loop(
+        clk,
+        rst,
+        m_ce_i,
+        t_index_i,
+        req,
+        decode_buttons(buttons_i),
+        decode_memory_behavior_profile(memory_behavior_profile_i),
+        oam_dma_active_i,
+        ppu_vram_active_i,
+        ppu_oam_active_i,
+    );
+
+    encode_output(resp, obs)
+}

@@ -1,5 +1,6 @@
 pub mod clockgen;
 mod dummy_top;
+pub mod icebreaker_alu_loop_top;
 pub mod icebreaker_lcd_test_top;
 mod icebreaker_top;
 pub mod reset_bridge;
