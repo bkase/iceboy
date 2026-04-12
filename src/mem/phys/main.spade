@@ -2,6 +2,7 @@ pub mod ice40_spram;
 pub mod ebr;
 pub mod ebr_rom_probe_top;
 pub mod ebr_test_top;
+pub mod rom_backend_types;
 pub mod spram;
 pub mod spram_test_top;
 pub mod vram_ebr;

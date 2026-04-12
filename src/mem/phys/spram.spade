@@ -1,5 +1,6 @@
 use std::ports::{new_mut_wire, read_mut_wire};
 use lib::mem::phys::ice40_spram::{SB_SPRAM256KA, rom_schedule, rw8k_schedule, update_read_capture};
+use lib::mem::phys::rom_backend_types::{RomBackendOut, RomBackendPorts, backend_ready_out};
 
 pub entity spram_dual_read_port(clk: clock, drive: lib::mem::phys::ice40_spram::SpramDrive) -> (uint<8>, uint<8>) {
     let dataout = inst new_mut_wire();
@@ -30,11 +31,11 @@ pub entity spram_dual_read_port(clk: clock, drive: lib::mem::phys::ice40_spram::
 pub entity rom_image_spram(
     clk: clock,
     t_index: uint<2>,
-    cpu_addr: uint<15>,
-    dma_addr: uint<15>,
-) -> (uint<8>, uint<8>) {
-    let drive = rom_schedule(t_index, cpu_addr, dma_addr);
-    inst spram_dual_read_port(clk, drive)
+    ports: RomBackendPorts,
+) -> RomBackendOut {
+    let drive = rom_schedule(t_index, ports.cpu_addr, ports.dma_addr);
+    let (cpu_data, dma_data) = inst spram_dual_read_port(clk, drive);
+    backend_ready_out(cpu_data, dma_data)
 }
 
 pub entity wram_spram(

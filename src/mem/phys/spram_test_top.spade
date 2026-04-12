@@ -1,4 +1,5 @@
 use lib::mem::phys::ice40_spram::{rom_schedule, rw8k_schedule};
+use lib::mem::phys::rom_backend_types::read_ports;
 use lib::mem::phys::spram::{rom_image_spram, wram_spram};
 
 fn pack_drive(drive: lib::mem::phys::ice40_spram::SpramDrive) -> uint<60> {
@@ -59,13 +60,15 @@ pub entity rom_image_spram_test_top(
     t_index_i: uint<2>,
     cpu_addr_i: uint<15>,
     dma_addr_i: uint<15>,
-) -> uint<60> {
+) -> uint<61> {
     let drive = rom_schedule(t_index_i, cpu_addr_i, dma_addr_i);
-    let (cpu_data, dma_data) = inst rom_image_spram(clk_i, t_index_i, cpu_addr_i, dma_addr_i);
-    let cpu_bits: uint<60> = zext(cpu_data) << 52;
-    let dma_bits: uint<60> = zext(dma_data) << 44;
+    let rom_backend = inst rom_image_spram(clk_i, t_index_i, read_ports(cpu_addr_i, dma_addr_i));
+    let cpu_bits: uint<61> = zext(rom_backend.cpu_data) << 53;
+    let dma_bits: uint<61> = zext(rom_backend.dma_data) << 45;
+    let ready_bits: uint<61> = zext(lib::util::bit(rom_backend.rom_ready)) << 44;
 
     cpu_bits
     | dma_bits
-    | pack_drive(drive)
+    | ready_bits
+    | zext(pack_drive(drive))
 }

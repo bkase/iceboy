@@ -6,8 +6,9 @@ from cocotb.triggers import RisingEdge, Timer
 
 def decode_output(value: int) -> dict[str, int | bool]:
     return {
-        "cpu_data": (value >> 52) & 0xFF,
-        "dma_data": (value >> 44) & 0xFF,
+        "cpu_data": (value >> 53) & 0xFF,
+        "dma_data": (value >> 45) & 0xFF,
+        "rom_ready": bool((value >> 44) & 0x1),
         "address": (value >> 30) & 0x3FFF,
         "maskwren": (value >> 26) & 0xF,
         "read_high": bool((value >> 25) & 0x1),
@@ -52,6 +53,7 @@ async def test_rom_schedule_keeps_write_disabled_and_tracks_byte_selects(dut):
     assert cpu_issue["maskwren"] == 0x0
     assert cpu_issue["datain"] == 0x0000
     assert cpu_issue["chipselect"] is True
+    assert cpu_issue["rom_ready"] is True
 
     dma_issue = await step(dut, t_index=1, dma_addr=0x0200)
     assert dma_issue["address"] == 0x0100
@@ -59,6 +61,7 @@ async def test_rom_schedule_keeps_write_disabled_and_tracks_byte_selects(dut):
     assert dma_issue["read_aux"] is True
     assert dma_issue["read_high"] is False
     assert dma_issue["wren"] is False
+    assert dma_issue["rom_ready"] is True
 
     idle = await step(dut, t_index=2)
     assert idle["read_valid"] is False
@@ -79,5 +82,7 @@ async def test_rom_model_starts_deterministic_and_holds_outputs(dut):
 
     assert captured["cpu_data"] == 0x00
     assert captured["dma_data"] == 0x00
+    assert captured["rom_ready"] is True
     assert held["cpu_data"] == 0x00
     assert held["dma_data"] == 0x00
+    assert held["rom_ready"] is True

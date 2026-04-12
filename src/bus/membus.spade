@@ -2,6 +2,7 @@ use lib::bus::types::{BusObs, BusOwner, BusRegion, BusReq, BusResp, idle_bus_obs
 use lib::cpu::types::MemoryBehaviorProfile;
 use lib::mem::logical::map::{hram_addr, oam_addr, rom_addr, wram_addr};
 use lib::mem::phys::ebr::{hram_ebr, oam_ebr};
+use lib::mem::phys::rom_backend_types::read_ports;
 use lib::mem::phys::spram::{rom_image_spram, wram_spram};
 use lib::periph::joypad::{JoypButtons, joypad};
 use lib::periph::oam_dma::oam_dma;
@@ -226,12 +227,13 @@ pub entity membus(
         joyp_buttons,
     );
     let dma_source_region = decode_region(dma.source_addr);
-    let (rom_data, dma_rom_data) = inst rom_image_spram(
+    let rom_backend = inst rom_image_spram(
         clk,
         t_index,
-        rom_addr(region, addr),
-        rom_addr(dma_source_region, dma.source_addr),
+        read_ports(rom_addr(region, addr), rom_addr(dma_source_region, dma.source_addr)),
     );
+    let rom_data = rom_backend.cpu_data;
+    let dma_rom_data = rom_backend.dma_data;
 
     let write_req = match scheduled_req {
         BusReq::Write$(addr: _, data: _) => {

@@ -1,0 +1,41 @@
+pub struct RomBackendPorts {
+    cpu_addr: uint<15>,
+    dma_addr: uint<15>,
+    loader_write_en: bool,
+    loader_write_addr: uint<15>,
+    loader_write_data: uint<8>,
+}
+
+pub struct RomBackendOut {
+    cpu_data: uint<8>,
+    dma_data: uint<8>,
+    rom_ready: bool,
+}
+
+pub fn idle_ports() -> RomBackendPorts {
+    RomBackendPorts$(
+        cpu_addr: 0u15,
+        dma_addr: 0u15,
+        loader_write_en: false,
+        loader_write_addr: 0u15,
+        loader_write_data: 0u8,
+    )
+}
+
+pub fn read_ports(cpu_addr: uint<15>, dma_addr: uint<15>) -> RomBackendPorts {
+    RomBackendPorts$(
+        cpu_addr: cpu_addr,
+        dma_addr: dma_addr,
+        loader_write_en: false,
+        loader_write_addr: 0u15,
+        loader_write_data: 0u8,
+    )
+}
+
+pub fn backend_ready_out(cpu_data: uint<8>, dma_data: uint<8>) -> RomBackendOut {
+    RomBackendOut$(
+        cpu_data: cpu_data,
+        dma_data: dma_data,
+        rom_ready: true,
+    )
+}
