@@ -355,6 +355,19 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("--checkpoint-completed-frames=3", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
+    def test_joypad_bg_smoke_verilator_wrapper_dry_run_uses_scripted_native_soc_rom_runner(self) -> None:
+        completed = self.run_script("run_joypad_bg_smoke_verilator.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] verilator: Verilator 5.046", completed.stdout)
+        self.assertIn("bench/ref/joypad_bg_smoke.py", completed.stdout)
+        self.assertIn("tools/write_action_script_joypad_schedule.py", completed.stdout)
+        self.assertIn("bench/actions/joypad_bg_smoke.yaml", completed.stdout)
+        self.assertIn("--completed-frames=20", completed.stdout)
+        self.assertIn("--joypad-schedule=", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+
     def test_pokered_playback_verilator_wrapper_dry_run_uses_native_restore_runner(self) -> None:
         completed = self.run_script("run_pokered_playback_verilator.sh", "--dry-run", "--skip-build")
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -493,6 +506,14 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"tools/run_obj_dma_metadata_corrupt_verilator.sh"', hook_text)
         self.assertTrue((TOOLS / "run_obj_dma_metadata_corrupt_verilator.sh").exists())
         self.assertTrue((ROOT / "bench" / "roms" / "OBJ_DMA_METADATA_CORRUPT.asm").exists())
+
+    def test_joypad_bg_smoke_native_precommit_assets_exist(self) -> None:
+        hook_text = (TOOLS / "run_precommit_checks.sh").read_text(encoding="utf-8")
+        self.assertIn('"tools/run_joypad_bg_smoke_verilator.sh"', hook_text)
+        self.assertTrue((TOOLS / "run_joypad_bg_smoke_verilator.sh").exists())
+        self.assertTrue((TOOLS / "write_action_script_joypad_schedule.py").exists())
+        self.assertTrue((ROOT / "bench" / "ref" / "joypad_bg_smoke.py").exists())
+        self.assertTrue((ROOT / "bench" / "actions" / "joypad_bg_smoke.yaml").exists())
 
     def test_pokered_playback_assets_exist(self) -> None:
         self.assertTrue((TOOLS / "run_pokered_playback_verilator.sh").exists())
@@ -685,6 +706,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/unit/test_st7789_lcd.py"', text)
         self.assertIn('"test/unit/test_hw_backend.py"', text)
         self.assertIn('"test/unit/test_vram_ebr.py"', text)
+        self.assertIn('"tools/run_joypad_bg_smoke_verilator.sh"', text)
         self.assertIn('"test/lockstep/test_ei_halt_corners.py"', text)
         self.assertIn('"test/harness/test_arch_time_invariants.py"', text)
         self.assertIn('"test/harness/test_soc_lockstep_top.py"', text)
@@ -703,6 +725,7 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/rom/test_mbc3_switch.py"', text)
         self.assertIn('"tools/run_cpu_instrs_blargg_verilator.sh"', text)
         self.assertIn('"tools/run_dma_mode2_hide_verilator.sh"', text)
+        self.assertIn('"tools/run_joypad_bg_smoke_verilator.sh"', text)
         self.assertIn('"tools/run_obj_dma_metadata_corrupt_verilator.sh"', text)
         self.assertIn('"test/rom/test_ppu_wave_a.py"', text)
         self.assertIn('"test/rom/test_ppu_wave_b.py"', text)
@@ -745,10 +768,12 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn('"test/unit/test_st7789_lcd.py"', default_body)
         self.assertIn('"test/unit/test_hw_backend.py"', default_body)
         self.assertIn('"test/unit/test_vram_ebr.py"', default_body)
+        self.assertNotIn('"tools/run_joypad_bg_smoke_verilator.sh"', default_body)
         self.assertNotIn('"test/ppu/unit/test_window.py"', default_body)
         self.assertNotIn('"test/ppu/unit/test_tile.py"', default_body)
         self.assertNotIn('"test/power/test_ppu_power_quiescence.py"', default_body)
         self.assertIn('"tools/run_cpu_instrs_blargg_verilator.sh"', extended_body)
+        self.assertIn('"tools/run_joypad_bg_smoke_verilator.sh"', extended_body)
         self.assertIn('"test/rom/test_loads_basic.py"', extended_body)
         self.assertIn('"test/ppu/unit/test_ppu_core_smoke.py"', extended_body)
         self.assertIn('"test/ppu/unit/test_mixer.py"', extended_body)

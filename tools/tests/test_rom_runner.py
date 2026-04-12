@@ -1505,6 +1505,15 @@ class RomRunnerTest(unittest.TestCase):
         self.assertEqual(entry.manifest_entry["action_script"], "bench/actions/joy_diverge_persist.yaml")
         self.assertIsNone(entry.manifest_entry["action_gen"])
 
+    def test_load_manifest_entry_resolves_joypad_bg_smoke_rom(self) -> None:
+        entry = load_manifest_entry("JOYPAD_BG_SMOKE")
+        self.assertEqual(entry.rom_path.name, "joypad_bg_smoke.gb")
+        self.assertEqual(entry.sym_path.name, "joypad_bg_smoke.sym")
+        self.assertEqual(entry.timeout_commits, 600000)
+        self.assertEqual(entry.checkpoint_symbols, ("__checkpoint_poll",))
+        self.assertEqual(entry.manifest_entry["action_script"], "bench/actions/joypad_bg_smoke.yaml")
+        self.assertIsNone(entry.manifest_entry["action_gen"])
+
     def test_load_manifest_entry_resolves_mbc3_rom(self) -> None:
         entry = load_manifest_entry("MBC3_SWITCH")
         self.assertEqual(entry.rom_id, "MBC3_SWITCH")

@@ -22,6 +22,8 @@ from spec.profiles import (
 ROOT = Path(__file__).resolve().parents[2]
 ROM_INVENTORY_PATH = ROOT / "bench" / "manifests" / "rom_inventory.yaml"
 SPADE_TYPES_PATH = ROOT / "src" / "cpu" / "types.spade"
+JOYPAD_BG_SMOKE_ASM = ROOT / "bench" / "roms" / "joypad_bg_smoke.asm"
+JOYPAD_BG_SMOKE_SYM = ROOT / "bench" / "roms" / "out" / "joypad_bg_smoke.sym"
 
 
 class SimulationProfilesTest(unittest.TestCase):
@@ -103,6 +105,44 @@ class SimulationProfilesTest(unittest.TestCase):
         self.assertEqual(roms["JOY_DIVERGE_PERSIST"]["checkpoint_symbols"], ["__checkpoint_poll"])
         self.assertEqual(roms["JOY_DIVERGE_PERSIST"]["action_script"], "bench/actions/joy_diverge_persist.yaml")
         self.assertIsNone(roms["JOY_DIVERGE_PERSIST"]["action_gen"])
+
+    def test_joypad_bg_smoke_manifest_entry_uses_scripted_frame_hash_defaults(self) -> None:
+        inventory = yaml.safe_load(ROM_INVENTORY_PATH.read_text(encoding="utf-8"))
+        roms = {rom["id"]: rom for rom in inventory["roms"]}
+
+        self.assertEqual(roms["JOYPAD_BG_SMOKE"]["path"], "bench/roms/out/joypad_bg_smoke.gb")
+        self.assertEqual(roms["JOYPAD_BG_SMOKE"]["requires"], ["cpu", "ppu", "joypad"])
+        self.assertEqual(roms["JOYPAD_BG_SMOKE"]["oracle_mode"], "frame_hash")
+        self.assertEqual(roms["JOYPAD_BG_SMOKE"]["checkpoint_symbols"], ["__checkpoint_poll"])
+        self.assertEqual(roms["JOYPAD_BG_SMOKE"]["action_script"], "bench/actions/joypad_bg_smoke.yaml")
+        self.assertIsNone(roms["JOYPAD_BG_SMOKE"]["action_gen"])
+
+    def test_joypad_bg_smoke_sym_stays_within_1p5_kib_bank0_budget(self) -> None:
+        text = JOYPAD_BG_SMOKE_SYM.read_text(encoding="utf-8")
+        max_addr = 0
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith(";"):
+                continue
+            bank_addr, _label = line.split(maxsplit=1)
+            bank_text, addr_text = bank_addr.split(":")
+            if int(bank_text, 16) != 0:
+                continue
+            addr = int(addr_text, 16)
+            if 0x0150 <= addr < 0x8000:
+                max_addr = max(max_addr, addr)
+
+        self.assertLess(max_addr, 0x0600)
+
+    def test_joypad_bg_smoke_source_stays_bg_only(self) -> None:
+        text = JOYPAD_BG_SMOKE_ASM.read_text(encoding="utf-8")
+        upper_text = text.upper()
+
+        self.assertNotIn("LCDC_OBJ_ON", text)
+        self.assertNotIn("LCDC_OBJ_8X16", text)
+        self.assertNotIn("R DMA", upper_text)
+        self.assertNotIn("RDMA", upper_text)
+        self.assertNotIn("$FE00", upper_text)
 
     def test_wave_c_manifest_entries_have_matching_rom_sources(self) -> None:
         inventory = yaml.safe_load(ROM_INVENTORY_PATH.read_text(encoding="utf-8"))

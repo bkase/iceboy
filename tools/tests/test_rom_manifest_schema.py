@@ -94,6 +94,7 @@ class RomManifestSchemaTest(unittest.TestCase):
 
         for rom_id in (
             "BG_STATIC",
+            "JOYPAD_BG_SMOKE",
             "BG_SCROLL_WRAP",
             "BG_SIGNED_ADDR",
             "WINDOW_BASIC",
@@ -123,6 +124,7 @@ class RomManifestSchemaTest(unittest.TestCase):
 
         for rom_id in (
             "BG_STATIC",
+            "JOYPAD_BG_SMOKE",
             "BG_SCROLL_WRAP",
             "BG_SIGNED_ADDR",
             "WINDOW_BASIC",

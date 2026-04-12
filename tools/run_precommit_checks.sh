@@ -93,6 +93,7 @@ PRECOMMIT_SWIM_TESTS_EXTENDED=(
     "test/rom/test_ei_delay.py"
     "test/rom/test_alu16_sp.py"
     "test/rom/test_joy_diverge_persist.py"
+    "tools/run_joypad_bg_smoke_verilator.sh"
     "test/rom/test_mbc1_switch.py"
     "test/rom/test_mbc1_ram.py"
     "test/rom/test_mbc3_ram.py"

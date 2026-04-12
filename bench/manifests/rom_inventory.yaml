@@ -358,6 +358,19 @@ roms:
     compare_scope:
       domains: [frame_hash]
 
+  - id: JOYPAD_BG_SMOKE
+    <<: *dmg_entry
+    path: bench/roms/out/joypad_bg_smoke.gb
+    rom_sha256: e5eba391ff574f79f84eb0aef61d6a1b14b56992b0dcb6cb948dbbec890b77b0
+    requires: [cpu, ppu, joypad]
+    oracle_mode: frame_hash
+    raster_event_coord_space: frame_line_dot
+    timeout_commits: 600000
+    checkpoint_symbols: [__checkpoint_poll]
+    compare_scope:
+      domains: [frame_hash]
+    action_script: bench/actions/joypad_bg_smoke.yaml
+
   - id: BG_SCROLL_WRAP
     <<: *dmg_entry
     path: bench/roms/out/BG_SCROLL_WRAP.gb

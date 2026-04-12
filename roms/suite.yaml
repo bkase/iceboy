@@ -112,6 +112,13 @@ roms:
     frames_per_step: 1
     release_after_frames: 1
 
+  - id: JOYPAD_BG_SMOKE
+    path: bench/roms/out/joypad_bg_smoke.gb
+    description: "Input-visible BG cursor scene for first-light joypad and LCD bring-up."
+    frames_per_step: 1
+    release_after_frames: 1
+    action_script: bench/actions/joypad_bg_smoke.yaml
+
   - id: PPU_WINDOW
     path: bench/roms/out/PPU_WINDOW.gb
     description: "Window overlay vs BG for frame-hash compare."

@@ -10,6 +10,7 @@ from bench.actions.generators import (
     SeededEventScript,
     load_action_script,
 )
+from tools.write_action_script_joypad_schedule import compile_joypad_schedule
 
 
 class EventGeneratorTest(unittest.TestCase):
@@ -73,6 +74,51 @@ events:
                 script.events_for_checkpoint("__checkpoint_boot"),
                 (JoypadButtonsEvent(JoypadButtons()),),
             )
+
+    def test_compile_joypad_schedule_carries_state_across_frames(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            script_path = Path(tmpdir) / "events.yaml"
+            script_path.write_text(
+                """\
+seed: 0
+events:
+  - commit_index: 0
+    event:
+      kind: joypad_buttons
+      buttons: [left]
+  - commit_index: 2
+    event:
+      kind: joypad_buttons
+      buttons: []
+  - commit_index: 4
+    event:
+      kind: joypad_buttons
+      buttons: [start, select]
+""",
+                encoding="utf-8",
+            )
+
+            schedule = compile_joypad_schedule(script_path, frame_count=6)
+
+            self.assertEqual(schedule, [0x20, 0x20, 0x00, 0x00, 0x03, 0x03])
+
+    def test_compile_joypad_schedule_rejects_non_joypad_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            script_path = Path(tmpdir) / "events.yaml"
+            script_path.write_text(
+                """\
+seed: 0
+events:
+  - commit_index: 0
+    event:
+      kind: if_set_bits
+      bits: 16
+""",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "Unsupported scripted event"):
+                compile_joypad_schedule(script_path, frame_count=1)
 
 
 if __name__ == "__main__":

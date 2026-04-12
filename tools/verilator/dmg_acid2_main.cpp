@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
 #include <set>
 #include <string>
 #include <utility>
@@ -47,6 +48,7 @@ constexpr uint8_t BUS_REQ_WRITE = 2;
 
 constexpr uint8_t TIMER_IF_BIT = 0x04;
 constexpr uint8_t SERIAL_IF_BIT = 0x08;
+constexpr uint8_t JOYPAD_IF_BIT = 0x10;
 constexpr uint8_t VBLANK_IF_BIT = 0x01;
 constexpr uint8_t STAT_IF_BIT = 0x02;
 
@@ -123,6 +125,7 @@ struct Config {
     std::string rom_path;
     std::string frame_capture_path;
     std::string trace_path;
+    std::string joypad_schedule_path;
     uint64_t max_mcycles = 1800000ULL;
     uint64_t progress_interval = 0;
     uint64_t stable_frames = 2;
@@ -300,6 +303,8 @@ Config parse_args(int argc, char** argv) {
             cfg.frame_capture_path = arg.substr(sizeof("--frame-capture=") - 1);
         } else if (arg.rfind("--trace=", 0) == 0) {
             cfg.trace_path = arg.substr(sizeof("--trace=") - 1);
+        } else if (arg.rfind("--joypad-schedule=", 0) == 0) {
+            cfg.joypad_schedule_path = arg.substr(sizeof("--joypad-schedule=") - 1);
         } else if (arg.rfind("--max-mcycles=", 0) == 0) {
             cfg.max_mcycles = std::stoull(arg.substr(sizeof("--max-mcycles=") - 1));
         } else if (arg.rfind("--progress-interval=", 0) == 0) {
@@ -402,6 +407,14 @@ class BusModel {
   public:
     explicit BusModel(std::vector<uint8_t> rom_bytes)
         : rom_(std::move(rom_bytes)) {}
+
+    void apply_joypad_buttons(uint8_t next_buttons) {
+        const uint8_t fresh_press = static_cast<uint8_t>(next_buttons & ~joyp_buttons_);
+        joyp_buttons_ = static_cast<uint8_t>(next_buttons & 0xFFU);
+        if (fresh_press != 0) {
+            if_reg_ = static_cast<uint8_t>((if_reg_ | JOYPAD_IF_BIT) & 0x1FU);
+        }
+    }
 
     void sync_integrated_ppu(const Observation& observation) {
         integrated_ppu_mode_ = decode_integrated_ppu_mode(observation.ppu_mode);
@@ -620,8 +633,41 @@ class BusModel {
         return (lcdc_ & 0x80U) != 0;
     }
 
+    uint8_t joyp_low_nibble() const {
+        uint8_t low_nibble = 0x0FU;
+        if ((joyp_select_ & 0x1U) == 0) {
+            if ((joyp_buttons_ & (1U << 4)) != 0) {
+                low_nibble = static_cast<uint8_t>(low_nibble & ~0x01U);
+            }
+            if ((joyp_buttons_ & (1U << 5)) != 0) {
+                low_nibble = static_cast<uint8_t>(low_nibble & ~0x02U);
+            }
+            if ((joyp_buttons_ & (1U << 7)) != 0) {
+                low_nibble = static_cast<uint8_t>(low_nibble & ~0x04U);
+            }
+            if ((joyp_buttons_ & (1U << 6)) != 0) {
+                low_nibble = static_cast<uint8_t>(low_nibble & ~0x08U);
+            }
+        }
+        if ((joyp_select_ & 0x2U) == 0) {
+            if ((joyp_buttons_ & (1U << 3)) != 0) {
+                low_nibble = static_cast<uint8_t>(low_nibble & ~0x01U);
+            }
+            if ((joyp_buttons_ & (1U << 2)) != 0) {
+                low_nibble = static_cast<uint8_t>(low_nibble & ~0x02U);
+            }
+            if ((joyp_buttons_ & (1U << 0)) != 0) {
+                low_nibble = static_cast<uint8_t>(low_nibble & ~0x04U);
+            }
+            if ((joyp_buttons_ & (1U << 1)) != 0) {
+                low_nibble = static_cast<uint8_t>(low_nibble & ~0x08U);
+            }
+        }
+        return low_nibble;
+    }
+
     uint8_t joyp_visible() const {
-        return static_cast<uint8_t>(0xC0U | ((joyp_select_ & 0x3U) << 4) | 0x0FU);
+        return static_cast<uint8_t>(0xC0U | ((joyp_select_ & 0x3U) << 4) | joyp_low_nibble());
     }
 
     uint8_t ppu_mmio_read(uint16_t addr) const {
@@ -758,6 +804,7 @@ class BusModel {
     uint8_t ie_reg_ = 0;
     uint8_t if_reg_ = 0;
     uint8_t joyp_select_ = 0x3;
+    uint8_t joyp_buttons_ = 0;
     uint32_t sys_counter_ = 0;
     uint8_t tima_ = 0;
     uint8_t tma_ = 0;
@@ -786,6 +833,23 @@ class BusModel {
     bool integrated_ppu_vblank_window_high_ = false;
     bool integrated_ppu_stat_window_high_ = false;
 };
+
+std::vector<uint8_t> load_joypad_schedule(const std::string& path) {
+    std::ifstream schedule_stream(path);
+    if (!schedule_stream) {
+        throw std::runtime_error("failed to open joypad schedule: " + path);
+    }
+    std::vector<uint8_t> schedule;
+    std::string token;
+    while (schedule_stream >> token) {
+        const unsigned long raw = std::stoul(token, nullptr, 0);
+        if (raw > 0xFFUL) {
+            throw std::runtime_error("joypad schedule entry exceeds 8 bits: " + token);
+        }
+        schedule.push_back(static_cast<uint8_t>(raw));
+    }
+    return schedule;
+}
 
 void dump_final_line_debug(
     int target_ly,
@@ -1094,10 +1158,28 @@ int main(int argc, char** argv) {
         return 2;
     }
     std::vector<uint8_t> rom_bytes((std::istreambuf_iterator<char>(rom_stream)), std::istreambuf_iterator<char>());
+    std::vector<uint8_t> joypad_schedule;
+    try {
+        if (!cfg.joypad_schedule_path.empty()) {
+            joypad_schedule = load_joypad_schedule(cfg.joypad_schedule_path);
+        }
+    } catch (const std::exception& exc) {
+        std::cerr << exc.what() << "\n";
+        return 2;
+    }
 
     Verilated::commandArgs(argc, argv);
     Vsoc_rom_top_verilator_wrapper top;
     BusModel memory(std::move(rom_bytes));
+    const auto joypad_mask_for_frame = [&](uint64_t frame_index) -> uint8_t {
+        if (joypad_schedule.empty()) {
+            return 0;
+        }
+        if (frame_index < joypad_schedule.size()) {
+            return joypad_schedule[static_cast<size_t>(frame_index)];
+        }
+        return joypad_schedule.back();
+    };
     std::array<uint8_t, SCREEN_WIDTH * SCREEN_HEIGHT> current_frame{};
     current_frame.fill(FRAME_SHADE_WHITE);
     std::array<uint8_t, SCREEN_WIDTH * SCREEN_HEIGHT> last_completed_frame{};
@@ -1110,6 +1192,7 @@ int main(int argc, char** argv) {
     uint64_t completed_frames_after_checkpoint = 0;
     uint64_t completed_mcycles = 0;
     uint64_t completed_frames = 0;
+    uint64_t joypad_frame_index = 0;
     Observation last_post{};
     const std::set<int> debug_final_ly_targets = acid2_debug_final_ly_targets();
     std::set<int> dumped_final_ly_targets;
@@ -1120,6 +1203,9 @@ int main(int argc, char** argv) {
     }
 
     reset_dut(top);
+    if (!joypad_schedule.empty()) {
+        memory.apply_joypad_buttons(joypad_mask_for_frame(joypad_frame_index));
+    }
 
     while (completed_mcycles < cfg.max_mcycles) {
         StepResult step = step_to_commit(top, memory);
@@ -1269,6 +1355,10 @@ int main(int argc, char** argv) {
                 }
                 if (!frame_start_active) {
                     current_frame.fill(FRAME_SHADE_WHITE);
+                    if (seen_frame_start && !joypad_schedule.empty()) {
+                        ++joypad_frame_index;
+                        memory.apply_joypad_buttons(joypad_mask_for_frame(joypad_frame_index));
+                    }
                     seen_frame_start = true;
                 }
                 frame_start_active = true;
