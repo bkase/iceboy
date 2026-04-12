@@ -13,3 +13,6 @@ pub mod st7789_lcd;
 pub mod st7789_lcd_test_top;
 pub mod timer;
 pub mod timer_test_top;
+pub mod uart_rx;
+pub mod uart_rx_synth_top;
+pub mod uart_rx_test_top;

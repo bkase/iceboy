@@ -120,6 +120,7 @@ entity alu_loop_hardware_core(
 entity icebreaker_alu_loop_top(
     CLK: clock,
     BTN_N: bool,
+    RX: bool,
     BTN_D_UP: bool,
     BTN_D_DOWN: bool,
     BTN_D_LEFT: bool,
@@ -128,6 +129,7 @@ entity icebreaker_alu_loop_top(
     DIP_B: bool,
     DIP_START: bool,
     DIP_SELECT: bool,
+    TX: inv bool,
     LEDR_N: inv bool,
     LEDG_N: inv bool,
     LCD_SCK: inv bool,
@@ -147,6 +149,7 @@ entity icebreaker_alu_loop_top(
     DBG_PHASE1: inv bool,
     DBG_PHASE2: inv bool,
 ) {
+    let _ = RX;
     let rst = inst reset_bridge(CLK, BTN_N, 48000u16, 16u16).rst;
     let buttons = [
         BTN_D_RIGHT,
@@ -173,6 +176,7 @@ entity icebreaker_alu_loop_top(
         DBG_PHASE1,
         DBG_PHASE2,
     );
+    set TX = true;
     set LCD_SCK = false;
     set LCD_MOSI = false;
     set LCD_CS = true;

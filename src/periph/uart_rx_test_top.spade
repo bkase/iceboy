@@ -1,0 +1,19 @@
+use lib::periph::uart_rx::uart_rx;
+
+pub entity uart_rx_test_top(
+    clk_i: clock,
+    rst_i: bool,
+    rx_i: bool,
+    bit_ticks_i: uint<16>,
+    half_bit_ticks_i: uint<16>,
+) -> uint<32> {
+    let uart = inst uart_rx(clk_i, rst_i, rx_i, bit_ticks_i, half_bit_ticks_i);
+
+    zext(uart.rx_byte)
+        | (zext(lib::util::bit(uart.rx_byte_valid)) << 8)
+        | (zext(lib::util::bit(uart.rx_framing_error)) << 9)
+        | (zext(lib::util::bit(uart.busy)) << 10)
+        | (zext(lib::util::bit(uart.sync_rx)) << 11)
+        | (zext(uart.bit_index) << 12)
+        | (zext(uart.ticks_until_sample) << 16)
+}

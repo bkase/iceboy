@@ -83,6 +83,7 @@ fn heartbeat_led(frame_index: uint<32>) -> bool {
 entity icebreaker_lcd_test_top(
     CLK: clock,
     BTN_N: bool,
+    RX: bool,
     BTN_D_UP: bool,
     BTN_D_DOWN: bool,
     BTN_D_LEFT: bool,
@@ -91,6 +92,7 @@ entity icebreaker_lcd_test_top(
     DIP_B: bool,
     DIP_START: bool,
     DIP_SELECT: bool,
+    TX: inv bool,
     LEDR_N: inv bool,
     LEDG_N: inv bool,
     LCD_SCK: inv bool,
@@ -111,6 +113,7 @@ entity icebreaker_lcd_test_top(
     DBG_PHASE2: inv bool,
 ) {
     let _ = (
+        RX,
         BTN_D_UP,
         BTN_D_DOWN,
         BTN_D_LEFT,
@@ -153,6 +156,7 @@ entity icebreaker_lcd_test_top(
 
     set LEDR_N = heartbeat_led(frame_index_reg);
     set LEDG_N = !lcd.frame_active;
+    set TX = true;
     set LCD_SCK = lcd.lcd_sck;
     set LCD_MOSI = lcd.lcd_mosi;
     set LCD_CS = lcd.lcd_cs;

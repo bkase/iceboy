@@ -1,0 +1,149 @@
+pub struct UartRxOut {
+    rx_byte: uint<8>,
+    rx_byte_valid: bool,
+    rx_framing_error: bool,
+    busy: bool,
+    sync_rx: bool,
+    bit_index: uint<4>,
+    ticks_until_sample: uint<8>,
+}
+
+fn reload_ticks(bit_ticks: uint<16>) -> uint<8> {
+    if bit_ticks == 0u16 {
+        0u8
+    } else {
+        trunc(bit_ticks - 1u16)
+    }
+}
+
+fn decrement_ticks(ticks_until_sample: uint<8>) -> uint<8> {
+    if ticks_until_sample == 0u8 {
+        0u8
+    } else {
+        trunc(ticks_until_sample - 1u8)
+    }
+}
+
+fn sampled_byte(current: uint<8>, bit_index: uint<4>, sampled_bit: bool) -> uint<8> {
+    match bit_index {
+        0u4 => if sampled_bit { current | 0x01u8 } else { current & 0xfeu8 },
+        1u4 => if sampled_bit { current | 0x02u8 } else { current & 0xfdu8 },
+        2u4 => if sampled_bit { current | 0x04u8 } else { current & 0xfbu8 },
+        3u4 => if sampled_bit { current | 0x08u8 } else { current & 0xf7u8 },
+        4u4 => if sampled_bit { current | 0x10u8 } else { current & 0xefu8 },
+        5u4 => if sampled_bit { current | 0x20u8 } else { current & 0xdfu8 },
+        6u4 => if sampled_bit { current | 0x40u8 } else { current & 0xbfu8 },
+        7u4 => if sampled_bit { current | 0x80u8 } else { current & 0x7fu8 },
+        _ => current,
+    }
+}
+
+pub entity uart_rx(
+    clk: clock,
+    rst: bool,
+    rx_i: bool,
+    bit_ticks_i: uint<16>,
+    half_bit_ticks_i: uint<16>,
+) -> UartRxOut {
+    decl prev_sync_rx_reg;
+    decl shift_reg;
+    decl busy_reg;
+    decl validating_start_reg;
+    decl bit_index_reg;
+    decl ticks_until_sample_reg;
+
+    // 2-flop synchronizer on the asynchronous FTDI RX input.
+    reg(clk) sync_stage0: bool reset(rst: true) = rx_i;
+    reg(clk) sync_stage1: bool reset(rst: true) = sync_stage0;
+
+    let start_detect = !busy_reg && prev_sync_rx_reg && !sync_stage1;
+
+    let next_prev_sync_rx_reg = sync_stage1;
+    let next_shift_reg =
+        if start_detect {
+            0u8
+        } else if busy_reg && ticks_until_sample_reg == 0u8 && !validating_start_reg && bit_index_reg < 8u4 {
+            sampled_byte(shift_reg, bit_index_reg, sync_stage1)
+        } else {
+            shift_reg
+        };
+    let next_busy_reg =
+        if start_detect {
+            true
+        } else if !busy_reg {
+            false
+        } else if ticks_until_sample_reg != 0u8 {
+            true
+        } else if validating_start_reg {
+            !sync_stage1
+        } else if bit_index_reg < 8u4 {
+            true
+        } else {
+            false
+        };
+    let next_validating_start_reg =
+        if start_detect {
+            true
+        } else if !busy_reg {
+            false
+        } else if ticks_until_sample_reg != 0u8 {
+            validating_start_reg
+        } else if validating_start_reg {
+            false
+        } else {
+            false
+        };
+    let next_bit_index_reg =
+        if start_detect {
+            0u4
+        } else if !busy_reg {
+            0u4
+        } else if ticks_until_sample_reg != 0u8 {
+            bit_index_reg
+        } else if validating_start_reg {
+            0u4
+        } else if bit_index_reg < 7u4 {
+            trunc(bit_index_reg + 1u4)
+        } else if bit_index_reg == 7u4 {
+            8u4
+        } else {
+            0u4
+        };
+    let next_ticks_until_sample_reg =
+        if start_detect {
+            reload_ticks(half_bit_ticks_i)
+        } else if !busy_reg {
+            0u8
+        } else if ticks_until_sample_reg != 0u8 {
+            decrement_ticks(ticks_until_sample_reg)
+        } else if validating_start_reg && !sync_stage1 {
+            reload_ticks(bit_ticks_i)
+        } else if !validating_start_reg && bit_index_reg < 8u4 {
+            reload_ticks(bit_ticks_i)
+        } else {
+            0u8
+        };
+    let next_rx_byte_valid_reg =
+        busy_reg && ticks_until_sample_reg == 0u8 && !validating_start_reg && bit_index_reg == 8u4 && sync_stage1;
+    let next_rx_framing_error_reg =
+        busy_reg && ticks_until_sample_reg == 0u8 && !validating_start_reg && bit_index_reg == 8u4 && !sync_stage1;
+
+    reg(clk) prev_sync_rx_reg: bool reset(rst: true) = next_prev_sync_rx_reg;
+    reg(clk) shift_reg: uint<8> reset(rst: 0u8) = next_shift_reg;
+    reg(clk) busy_reg: bool reset(rst: false) = next_busy_reg;
+    reg(clk) validating_start_reg: bool reset(rst: false) = next_validating_start_reg;
+    reg(clk) bit_index_reg: uint<4> reset(rst: 0u4) = next_bit_index_reg;
+    reg(clk) ticks_until_sample_reg: uint<8> reset(rst: 0u8) = next_ticks_until_sample_reg;
+    reg(clk) rx_byte_valid_reg: bool reset(rst: false) = next_rx_byte_valid_reg;
+    reg(clk) rx_framing_error_reg: bool reset(rst: false) = next_rx_framing_error_reg;
+
+    UartRxOut$(
+        rx_byte: shift_reg,
+        rx_byte_valid: rx_byte_valid_reg,
+        rx_framing_error: rx_framing_error_reg,
+        busy: busy_reg,
+        sync_rx: sync_stage1,
+        bit_index: bit_index_reg,
+        ticks_until_sample: ticks_until_sample_reg,
+    )
+}
