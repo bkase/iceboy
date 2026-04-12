@@ -1,0 +1,68 @@
+use std::ports::{new_mut_wire, read_mut_wire};
+
+use lib::mem::phys::ice40_spram::{SB_SPRAM256KA, byte_is_high, select_byte, write_datain, write_mask};
+
+fn framebuffer_word_addr(addr: uint<15>) -> uint<14> {
+    trunc(addr >> 1)
+}
+
+fn framebuffer_write_data(addr: uint<15>) -> uint<8> {
+    let widened: uint<16> = zext(addr);
+    trunc(widened ^ (widened >> 7) ^ 0x5a5au16)
+}
+
+fn advance_framebuffer_addr(addr: uint<15>) -> uint<15> {
+    if addr == 23039u15 {
+        0u15
+    } else {
+        trunc(addr + 1u15)
+    }
+}
+
+#[no_mangle(all)]
+entity framebuffer_probe_top(
+    clk: clock,
+    ready_i: bool,
+    status_o: inv uint<32>,
+) {
+    let dataout = inst new_mut_wire();
+    reg(clk) phase_reg: uint<2> initial(0u2) = trunc(phase_reg + 1u2);
+    reg(clk) write_ptr_reg: uint<15> initial(0u15) =
+        if phase_reg != 3u2 { advance_framebuffer_addr(write_ptr_reg) } else { write_ptr_reg };
+    reg(clk) read_ptr_reg: uint<15> initial(0u15) =
+        if phase_reg == 3u2 && ready_i { advance_framebuffer_addr(read_ptr_reg) } else { read_ptr_reg };
+
+    let write_active = phase_reg != 3u2;
+    let read_active = !write_active && ready_i;
+    let write_data = framebuffer_write_data(write_ptr_reg);
+    let selected_addr = if write_active { write_ptr_reg } else { read_ptr_reg };
+
+    inst SB_SPRAM256KA(
+        framebuffer_word_addr(selected_addr),
+        if write_active { write_datain(write_data, byte_is_high(trunc(write_ptr_reg))) } else { 0u16 },
+        if write_active { write_mask(byte_is_high(trunc(write_ptr_reg))) } else { 0u4 },
+        write_active,
+        write_active || read_active,
+        clk,
+        false,
+        false,
+        true,
+        dataout,
+    );
+
+    let dataout_value = inst read_mut_wire(dataout);
+    reg(clk) last_read_valid: bool initial(false) = read_active;
+    reg(clk) last_read_high: bool initial(false) = byte_is_high(trunc(read_ptr_reg));
+    reg(clk) read_data_reg: uint<8> initial(0u8) =
+        if last_read_valid { select_byte(dataout_value, last_read_high) } else { read_data_reg };
+    let read_ptr_low: uint<8> = trunc(read_ptr_reg);
+
+    let status: uint<32> =
+        zext(read_data_reg)
+        | (zext(write_data) << 8)
+        | (zext(read_ptr_low) << 16)
+        | (zext(lib::util::bit(read_active)) << 30)
+        | (zext(lib::util::bit(write_active)) << 31);
+
+    set status_o = status;
+}

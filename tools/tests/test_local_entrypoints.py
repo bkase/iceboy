@@ -209,6 +209,22 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("synth_ice40 -top ebr_rom_probe_top", completed.stdout)
         self.assertIn("SB_RAM40_4K", completed.stdout)
 
+    def test_framebuffer_synth_probe_dry_run_targets_single_spram_top(self) -> None:
+        completed = self.run_script("run_framebuffer_synth_probe.sh", "--dry-run", "--skip-build")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("[tool] uv: uv 0.0-test", completed.stdout)
+        self.assertIn("[tool] swim: swim v0.17.0-test", completed.stdout)
+        self.assertIn("[tool] yosys: Yosys 0.63+188", completed.stdout)
+        self.assertIn("skip swim build", completed.stdout)
+        self.assertIn("top video::framebuffer_probe_top::framebuffer_probe_top", completed.stdout)
+        self.assertIn("module framebuffer_probe_top", completed.stdout)
+        self.assertIn("src/video/framebuffer_probe_top.spade", completed.stdout)
+        self.assertIn("build/hw_probes/framebuffer/hardware.json", completed.stdout)
+        self.assertIn("build/hw_probes/framebuffer/yosys-stat.txt", completed.stdout)
+        self.assertIn("synth_ice40 -top framebuffer_probe_top", completed.stdout)
+        self.assertIn("SB_SPRAM256KA", completed.stdout)
+        self.assertIn("SB_RAM40_4K", completed.stdout)
+
     def test_build_icebreaker_variant_dry_run_supports_alternate_top(self) -> None:
         completed = self.run_script("build_icebreaker_variant.sh", "--dry-run", "--skip-build", "--top", "dummy_top")
         self.assertEqual(completed.returncode, 0, completed.stderr)
