@@ -537,6 +537,21 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("--reset-release-cycles=", completed.stdout)
         self.assertIn("skip swim build", completed.stdout)
 
+    def test_icebreaker_alu_loop_verilator_wrapper_can_emit_vcd_when_requested(self) -> None:
+        env = dict(self.env)
+        env["ICEBOY_ALU_LOOP_VCD"] = "1"
+        env["ICEBOY_ALU_LOOP_VCD_PATH"] = "build/custom/alu_loop_debug.vcd"
+        completed = subprocess.run(
+            [str(TOOLS / "run_icebreaker_alu_loop_verilator.sh"), "--dry-run", "--skip-build"],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("--trace", completed.stdout)
+        self.assertIn("--vcd=build/custom/alu_loop_debug.vcd", completed.stdout)
+
     def test_ppu_wave_b_mealybug_verilator_wrapper_dry_run_uses_sanitized_verilog_path(self) -> None:
         completed = self.run_script("run_ppu_wave_b_mealybug_verilator.sh", "--dry-run", "--skip-build")
         self.assertEqual(completed.returncode, 0, completed.stderr)

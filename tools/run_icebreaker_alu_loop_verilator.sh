@@ -40,10 +40,12 @@ EXPORT_TOOL="${ICEBOY_ROOT}/tools/export_alu_loop_oracle.py"
 RUNNER_BIN="${BUILD_DIR}/icebreaker_alu_loop_runner"
 EXPECTED_TRACE="${BUILD_DIR}/alu_loop.expected.tsv"
 TRACE_PATH="${BUILD_DIR}/icebreaker_alu_loop.trace.jsonl"
+VCD_PATH="${ICEBOY_ALU_LOOP_VCD_PATH:-${BUILD_DIR}/icebreaker_alu_loop.vcd}"
 MAX_MCYCLES="${ICEBOY_ALU_LOOP_MAX_MCYCLES:-300000}"
 PROGRESS_INTERVAL="${ICEBOY_ALU_LOOP_PROGRESS_INTERVAL:-0}"
 RESET_RELEASE_CYCLES="${ICEBOY_ALU_LOOP_RESET_RELEASE_CYCLES:-60000}"
 EMIT_TRACE="${ICEBOY_ALU_LOOP_TRACE:-0}"
+EMIT_VCD="${ICEBOY_ALU_LOOP_VCD:-0}"
 
 if [[ "$DRY_RUN" == "1" ]]; then
     echo "prepare ${VERILOG_DST} from ${VERILOG_SRC}"
@@ -62,12 +64,15 @@ if [[ "$DRY_RUN" == "1" ]]; then
     printf ' %q' "$UV_BIN" run --with-requirements "$ICEBOY_PYTHON_LOCK" python "$EXPORT_TOOL" "--output=${EXPECTED_TRACE}"
     printf '\n'
     printf 'DRY RUN:'
-    printf ' %q' "$VERILATOR_BIN" --cc "$VERILOG_DST" "$WRAPPER_SRC" --top-module icebreaker_alu_loop_top_verilator_wrapper --exe "$MAIN_SRC" --build -j 0 --Mdir "$BUILD_DIR" -o "$(basename "$RUNNER_BIN")"
+    printf ' %q' "$VERILATOR_BIN" --cc "$VERILOG_DST" "$WRAPPER_SRC" --top-module icebreaker_alu_loop_top_verilator_wrapper --exe "$MAIN_SRC" --build -j 0 --trace --Mdir "$BUILD_DIR" -o "$(basename "$RUNNER_BIN")"
     printf '\n'
     printf 'DRY RUN:'
     printf ' %q' "$RUNNER_BIN" "--expected-trace=${EXPECTED_TRACE}" "--max-mcycles=${MAX_MCYCLES}" "--progress-interval=${PROGRESS_INTERVAL}" "--reset-release-cycles=${RESET_RELEASE_CYCLES}"
     if [[ "$EMIT_TRACE" == "1" ]]; then
         printf ' %q' "--trace=${TRACE_PATH}"
+    fi
+    if [[ "$EMIT_VCD" == "1" ]]; then
+        printf ' %q' "--vcd=${VCD_PATH}"
     fi
     printf '\n'
     exit 0
@@ -90,6 +95,7 @@ fi
     --build \
     -j 0 \
     -O3 \
+    --trace \
     --Mdir "$BUILD_DIR" \
     -o "$(basename "$RUNNER_BIN")"
 
@@ -102,6 +108,10 @@ RUNNER_ARGS=(
 if [[ "$EMIT_TRACE" == "1" ]]; then
     rm -f "$TRACE_PATH"
     RUNNER_ARGS+=("--trace=${TRACE_PATH}")
+fi
+if [[ "$EMIT_VCD" == "1" ]]; then
+    rm -f "$VCD_PATH"
+    RUNNER_ARGS+=("--vcd=${VCD_PATH}")
 fi
 
 "$RUNNER_BIN" "${RUNNER_ARGS[@]}"

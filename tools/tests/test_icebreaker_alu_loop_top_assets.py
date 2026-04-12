@@ -31,6 +31,10 @@ class IcebreakerAluLoopTopAssetsTest(unittest.TestCase):
         self.assertIn("test/harness/verilog/alu_loop_rom_1k_raw.v", swim_toml)
 
         self.assertEqual(baseline["top"], "board::icebreaker_alu_loop_top::icebreaker_alu_loop_top")
+        self.assertEqual(baseline["artifacts"]["asc"], "build/bitstreams/alu_loop_icebreaker.asc")
+        self.assertEqual(baseline["artifacts"]["nextpnr_report"], "build/bitstreams/alu_loop_icebreaker.nextpnr-report.json")
+        self.assertEqual(baseline["artifacts"]["nextpnr_log"], "build/bitstreams/alu_loop_icebreaker.nextpnr.log")
+        self.assertEqual(baseline["artifacts"]["yosys_stat"], "build/bitstreams/synth_alu_loop_icebreaker/yosys-stat.txt")
         self.assertEqual(baseline["utilization"]["spram_used"], 1)
         self.assertEqual(baseline["utilization"]["ebr_used"], 5)
         self.assertTrue(baseline["clock_constraint"]["timing_met"])

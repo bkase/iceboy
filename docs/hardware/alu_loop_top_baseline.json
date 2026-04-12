@@ -1,9 +1,9 @@
 {
   "artifacts": {
-    "asc": "build/variants/icebreaker_alu_loop_top/icebreaker_alu_loop_top.asc",
-    "nextpnr_log": "build/variants/icebreaker_alu_loop_top/nextpnr.log",
-    "nextpnr_report": "build/variants/icebreaker_alu_loop_top/nextpnr-report.json",
-    "yosys_stat": "build/variants/icebreaker_alu_loop_top/synth/yosys-stat.txt"
+    "asc": "build/bitstreams/alu_loop_icebreaker.asc",
+    "nextpnr_log": "build/bitstreams/alu_loop_icebreaker.nextpnr.log",
+    "nextpnr_report": "build/bitstreams/alu_loop_icebreaker.nextpnr-report.json",
+    "yosys_stat": "build/bitstreams/synth_alu_loop_icebreaker/yosys-stat.txt"
   },
   "board": "iCEBreaker",
   "captured_on": "2026-04-12",
@@ -15,7 +15,7 @@
     "timing_met": true
   },
   "clock_enable": {
-    "board_top_loads": 5,
+    "board_top_loads": 6,
     "method": "source_occurrence_count",
     "signal": "tb.m_ce"
   },

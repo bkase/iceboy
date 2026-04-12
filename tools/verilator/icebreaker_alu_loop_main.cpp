@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -8,6 +9,7 @@
 
 #include "Vicebreaker_alu_loop_top_verilator_wrapper.h"
 #include "verilated.h"
+#include "verilated_vcd_c.h"
 
 namespace {
 
@@ -67,6 +69,7 @@ struct Observation {
 struct Config {
     std::string expected_trace_path;
     std::string trace_path;
+    std::string vcd_path;
     uint64_t max_mcycles = 300000ULL;
     uint64_t progress_interval = 0ULL;
     uint64_t reset_release_cycles = 60000ULL;
@@ -126,6 +129,8 @@ Config parse_args(int argc, char** argv) {
             cfg.expected_trace_path = arg.substr(sizeof("--expected-trace=") - 1);
         } else if (arg.rfind("--trace=", 0) == 0) {
             cfg.trace_path = arg.substr(sizeof("--trace=") - 1);
+        } else if (arg.rfind("--vcd=", 0) == 0) {
+            cfg.vcd_path = arg.substr(sizeof("--vcd=") - 1);
         } else if (arg.rfind("--max-mcycles=", 0) == 0) {
             cfg.max_mcycles = std::stoull(arg.substr(sizeof("--max-mcycles=") - 1));
         } else if (arg.rfind("--progress-interval=", 0) == 0) {
@@ -199,8 +204,16 @@ std::vector<ExpectedCheckpoint> load_expected_trace(const std::string& path) {
     return checkpoints;
 }
 
-void eval_step(Vicebreaker_alu_loop_top_verilator_wrapper& top) {
+void eval_step(
+    Vicebreaker_alu_loop_top_verilator_wrapper& top,
+    VerilatedVcdC* vcd,
+    uint64_t* sim_time
+) {
     top.eval();
+    if (vcd != nullptr) {
+        vcd->dump(*sim_time);
+    }
+    ++(*sim_time);
 }
 
 void set_inputs(
@@ -226,28 +239,37 @@ void set_inputs(
     top.DIP_SELECT = dip_select;
 }
 
-void clock_cycle(Vicebreaker_alu_loop_top_verilator_wrapper& top) {
+void clock_cycle(
+    Vicebreaker_alu_loop_top_verilator_wrapper& top,
+    VerilatedVcdC* vcd,
+    uint64_t* sim_time
+) {
     top.CLK = 0;
-    eval_step(top);
+    eval_step(top, vcd, sim_time);
     top.CLK = 1;
-    eval_step(top);
+    eval_step(top, vcd, sim_time);
 }
 
-void reset_dut(Vicebreaker_alu_loop_top_verilator_wrapper& top, uint64_t release_cycles) {
+void reset_dut(
+    Vicebreaker_alu_loop_top_verilator_wrapper& top,
+    uint64_t release_cycles,
+    VerilatedVcdC* vcd,
+    uint64_t* sim_time
+) {
     top.CLK = 0;
     set_inputs(top, false);
-    eval_step(top);
+    eval_step(top, vcd, sim_time);
     for (int index = 0; index < 4; ++index) {
-        clock_cycle(top);
+        clock_cycle(top, vcd, sim_time);
     }
     set_inputs(top, true);
-    eval_step(top);
+    eval_step(top, vcd, sim_time);
     for (uint64_t index = 0; index < release_cycles; ++index) {
         const Observation obs = observe(top);
         if (obs.commit_seq != 0) {
             return;
         }
-        clock_cycle(top);
+        clock_cycle(top, vcd, sim_time);
     }
     throw std::runtime_error("board top did not begin committing before reset timeout");
 }
@@ -344,6 +366,14 @@ bool compare_checkpoint(
     return matched;
 }
 
+void close_vcd(VerilatedVcdC* vcd) {
+    if (vcd == nullptr) {
+        return;
+    }
+    vcd->flush();
+    vcd->close();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -354,10 +384,18 @@ int main(int argc, char** argv) {
         const std::vector<ExpectedCheckpoint> expected = load_expected_trace(cfg.expected_trace_path);
 
         Vicebreaker_alu_loop_top_verilator_wrapper top;
+        std::unique_ptr<VerilatedVcdC> vcd;
+        uint64_t sim_time = 0;
+        if (!cfg.vcd_path.empty()) {
+            Verilated::traceEverOn(true);
+            vcd = std::make_unique<VerilatedVcdC>();
+            top.trace(vcd.get(), 99);
+            vcd->open(cfg.vcd_path.c_str());
+        }
         top.CLK = 0;
         set_inputs(top, true);
-        eval_step(top);
-        reset_dut(top, cfg.reset_release_cycles);
+        eval_step(top, vcd.get(), &sim_time);
+        reset_dut(top, cfg.reset_release_cycles, vcd.get(), &sim_time);
 
         std::ofstream trace;
         if (!cfg.trace_path.empty()) {
@@ -385,6 +423,7 @@ int main(int argc, char** argv) {
                             << " commit_seq=" << obs.commit_seq
                             << " mcycles=" << mcycles << "\n"
                             << mismatch.str();
+                        close_vcd(vcd.get());
                         return 1;
                     }
                     ++expected_index;
@@ -392,6 +431,7 @@ int main(int argc, char** argv) {
                         if (trace.is_open()) {
                             emit_trace_line(trace, mcycles, obs, matched_label);
                         }
+                        close_vcd(vcd.get());
                         std::cout
                             << "matched " << expected.size()
                             << " checkpoints in " << mcycles
@@ -411,13 +451,14 @@ int main(int argc, char** argv) {
                         << std::dec << "\n";
                 }
             }
-            clock_cycle(top);
+            clock_cycle(top, vcd.get(), &sim_time);
         }
 
         std::cerr
             << "timeout after " << cfg.max_mcycles
             << " mcycles with checkpoints=" << expected_index
             << "/" << expected.size() << "\n";
+        close_vcd(vcd.get());
         return 2;
     } catch (const std::exception& error) {
         std::cerr << error.what() << "\n";

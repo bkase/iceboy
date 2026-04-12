@@ -30,6 +30,8 @@ class IcebreakerAluLoopVerilatorAssetsTest(unittest.TestCase):
 
         main_text = main_cpp.read_text(encoding="utf-8")
         self.assertIn("--expected-trace=", main_text)
+        self.assertIn("--vcd=", main_text)
+        self.assertIn("VerilatedVcdC", main_text)
         self.assertIn("board top did not begin committing before reset timeout", main_text)
         self.assertIn("matched ", main_text)
         self.assertIn("return 2;", main_text)
@@ -39,6 +41,8 @@ class IcebreakerAluLoopVerilatorAssetsTest(unittest.TestCase):
         self.assertIn("icebreaker_alu_loop_top_verilator_wrapper", runner_text)
         self.assertIn("--expected-trace=${EXPECTED_TRACE}", runner_text)
         self.assertIn("ICEBOY_ALU_LOOP_MAX_MCYCLES", runner_text)
+        self.assertIn("ICEBOY_ALU_LOOP_VCD", runner_text)
+        self.assertIn("--trace", runner_text)
 
         export_text = export_tool.read_text(encoding="utf-8")
         self.assertIn('default="ALU_LOOP"', export_text)
