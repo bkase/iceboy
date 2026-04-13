@@ -98,7 +98,7 @@ class UploadRomIcebreakerTest(unittest.TestCase):
     def test_dry_run_reports_frame_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             rom_path = self.make_rom(Path(tmpdir), "demo.gb", bytes([0x01, 0x02, 0x03, 0x04]))
-            frame, crc32 = upload_rom_icebreaker.build_upload_frame(rom_path.read_bytes())
+            frame, checksum = upload_rom_icebreaker.build_upload_frame(rom_path.read_bytes())
             rc, stdout, stderr = self.run_cli("--rom", str(rom_path), "--dry-run")
 
         self.assertEqual(rc, 0, stderr)
@@ -106,8 +106,8 @@ class UploadRomIcebreakerTest(unittest.TestCase):
         self.assertIn("port=<auto-detect /dev/tty.usbserial-*>", stdout)
         self.assertIn("payload_len=4", stdout)
         self.assertIn("magic_hex=524f4d21", stdout)
-        self.assertIn("length_le_hex=04000000", stdout)
-        self.assertIn(f"crc32=0x{crc32:08x}", stdout)
+        self.assertIn("length_le_hex=0400", stdout)
+        self.assertIn(f"checksum_hex={checksum:02x}", stdout)
         self.assertIn(f"frame_len={len(frame)}", stdout)
         self.assertIn(f"frame_prefix_hex={frame.hex()}", stdout)
 

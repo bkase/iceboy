@@ -22,9 +22,11 @@ class IcebreakerUartRomTopAssetsTest(unittest.TestCase):
         self.assertIn("entity icebreaker_uart_rom_protocol_test_top(", top_text)
         self.assertIn("inst rom_uploader(", top_text)
         self.assertIn("inst hardware_soc_core_visible(", top_text)
+        self.assertIn("inst rom_spram_rw(", top_text)
         self.assertIn("cpu_addr: core.rom_ports.cpu_addr", top_text)
         self.assertIn("loader_write_en: uploader.loader_write_en", top_text)
         self.assertIn("let core_rst = board_rst || uploader.hold_reset;", top_text)
+        self.assertIn("reg(CLK) upload_t_index_reg: uint<2>", top_text)
         self.assertIn("uart_bit_ticks()", top_text)
         self.assertIn("uart_half_bit_ticks()", top_text)
 

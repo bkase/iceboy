@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import binascii
 import errno
 import glob
 import os
@@ -42,7 +41,7 @@ class UploadError(Exception):
 class UploadPlan:
     rom_path: Path
     payload: bytes
-    crc32: int
+    checksum: int
     frame: bytes
     port: str | None
     baudrate: int
@@ -60,15 +59,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def crc32_bytes(payload: bytes) -> int:
-    return binascii.crc32(payload) & 0xFFFFFFFF
+def checksum_bytes(payload: bytes) -> int:
+    checksum = 0
+    for byte in payload:
+        checksum ^= byte
+    return checksum
 
 
 def build_upload_frame(payload: bytes) -> tuple[bytes, int]:
-    crc32 = crc32_bytes(payload)
-    length = len(payload).to_bytes(4, byteorder="little", signed=False)
-    crc_bytes = crc32.to_bytes(4, byteorder="little", signed=False)
-    return MAGIC + length + payload + crc_bytes, crc32
+    length = len(payload).to_bytes(2, byteorder="little", signed=False)
+    checksum = checksum_bytes(payload)
+    frame = MAGIC + length + payload + bytes([checksum])
+    return frame, checksum
 
 
 def load_rom(path: Path) -> bytes:
@@ -107,11 +109,11 @@ def build_plan(args: argparse.Namespace) -> UploadPlan:
     if args.timeout <= 0:
         raise UploadError("timeout must be positive")
     payload = load_rom(args.rom)
-    frame, crc32 = build_upload_frame(payload)
+    frame, checksum = build_upload_frame(payload)
     return UploadPlan(
         rom_path=args.rom,
         payload=payload,
-        crc32=crc32,
+        checksum=checksum,
         frame=frame,
         port=resolve_port(args.port, dry_run=args.dry_run),
         baudrate=args.baudrate,
@@ -221,8 +223,7 @@ def execute_upload(plan: UploadPlan) -> int:
 
 
 def print_dry_run(plan: UploadPlan) -> None:
-    length_bytes = len(plan.payload).to_bytes(4, byteorder="little", signed=False)
-    crc_bytes = plan.crc32.to_bytes(4, byteorder="little", signed=False)
+    length_bytes = len(plan.payload).to_bytes(2, byteorder="little", signed=False)
     preview_len = min(len(plan.frame), 32)
     preview = plan.frame[:preview_len].hex()
     if len(plan.frame) > preview_len:
@@ -235,8 +236,7 @@ def print_dry_run(plan: UploadPlan) -> None:
     print(f"payload_len={len(plan.payload)}")
     print(f"magic_hex={MAGIC.hex()}")
     print(f"length_le_hex={length_bytes.hex()}")
-    print(f"crc32=0x{plan.crc32:08x}")
-    print(f"crc32_le_hex={crc_bytes.hex()}")
+    print(f"checksum_hex={plan.checksum:02x}")
     print(f"frame_len={len(plan.frame)}")
     print(f"frame_prefix_hex={preview}")
 

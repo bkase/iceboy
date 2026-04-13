@@ -27,77 +27,30 @@ fn magic_word() -> uint<32> {
     0x214d4f52u32
 }
 
-fn crc32_init() -> uint<32> {
-    0xffffffffu32
-}
-
-fn crc32_poly() -> uint<32> {
-    0xedb88320u32
-}
-
-fn crc32_shift(crc: uint<32>) -> uint<32> {
-    if (crc & 0x1u32) != 0u32 {
-        trunc((crc >> 1) ^ crc32_poly())
-    } else {
-        trunc(crc >> 1)
-    }
-}
-
-fn crc32_step(crc: uint<32>, byte: uint<8>) -> uint<32> {
-    let mixed = crc ^ zext(byte);
-    let s0 = crc32_shift(mixed);
-    let s1 = crc32_shift(s0);
-    let s2 = crc32_shift(s1);
-    let s3 = crc32_shift(s2);
-    let s4 = crc32_shift(s3);
-    let s5 = crc32_shift(s4);
-    let s6 = crc32_shift(s5);
-    crc32_shift(s6)
-}
-
-fn crc32_final(crc: uint<32>) -> uint<32> {
-    crc ^ 0xffffffffu32
-}
-
 fn next_magic_window(window: uint<32>, byte: uint<8>) -> uint<32> {
     trunc((window >> 8) | (zext(byte) << 24))
 }
 
-fn le32_with_byte(current: uint<32>, index: uint<2>, byte: uint<8>) -> uint<32> {
-    match index {
-        0u2 => (current & 0xffffff00u32) | zext(byte),
-        1u2 => (current & 0xffff00ffu32) | (zext(byte) << 8),
-        2u2 => (current & 0xff00ffffu32) | (zext(byte) << 16),
-        _ => (current & 0x00ffffffu32) | (zext(byte) << 24),
-    }
+fn upper_length_byte(byte: uint<8>, current: uint<16>) -> uint<16> {
+    (zext(byte) << 8) | (current & 0x00ffu16)
+}
+
+fn checksum_step(current: uint<8>, byte: uint<8>) -> uint<8> {
+    current ^ byte
 }
 
 fn state_wait_magic() -> uint<4> { 0u4 }
 fn state_length0() -> uint<4> { 1u4 }
 fn state_length1() -> uint<4> { 2u4 }
-fn state_length2() -> uint<4> { 3u4 }
-fn state_length3() -> uint<4> { 4u4 }
-fn state_payload() -> uint<4> { 5u4 }
-fn state_crc0() -> uint<4> { 6u4 }
-fn state_crc1() -> uint<4> { 7u4 }
-fn state_crc2() -> uint<4> { 8u4 }
-fn state_crc3() -> uint<4> { 9u4 }
-fn state_running() -> uint<4> { 10u4 }
-
-fn is_magic_scan_state(state: uint<4>) -> bool {
-    state == state_wait_magic() || state == state_running()
-}
+fn state_payload() -> uint<4> { 3u4 }
+fn state_checksum() -> uint<4> { 4u4 }
+fn state_running() -> uint<4> { 5u4 }
 
 fn is_protocol_state(state: uint<4>) -> bool {
     state == state_length0()
         || state == state_length1()
-        || state == state_length2()
-        || state == state_length3()
         || state == state_payload()
-        || state == state_crc0()
-        || state == state_crc1()
-        || state == state_crc2()
-        || state == state_crc3()
+        || state == state_checksum()
 }
 
 pub entity rom_uploader_core(
@@ -110,33 +63,29 @@ pub entity rom_uploader_core(
 ) -> RomUploaderCoreOut {
     decl state_reg;
     decl magic_window_reg;
-    decl length_reg;
-    decl crc_reg;
-    decl received_crc_reg;
+    decl checksum_reg;
     decl bytes_remaining_reg;
     decl write_addr_reg;
     decl payload_staged_reg;
     decl staged_payload_reg;
 
-    let scan_magic_state = is_magic_scan_state(state_reg);
     let candidate_magic_window = next_magic_window(magic_window_reg, rx_byte_i);
-    let magic_match = rx_byte_valid_i && scan_magic_state && candidate_magic_window == magic_word();
+    let magic_match = rx_byte_valid_i && state_reg == state_wait_magic() && candidate_magic_window == magic_word();
+    let candidate_length = upper_length_byte(rx_byte_i, bytes_remaining_reg);
 
-    let length3_candidate = le32_with_byte(length_reg, 3u2, rx_byte_i);
-    let oversize_length = length3_candidate > 32768u32;
+    let oversize_length = state_reg == state_length1() && rx_byte_valid_i && candidate_length > 32768u16;
     let payload_write_slot = state_reg == state_payload() && payload_staged_reg && t_index == 2u2;
     let payload_stage_now = state_reg == state_payload() && !payload_staged_reg && rx_byte_valid_i;
     let payload_overrun = state_reg == state_payload() && payload_staged_reg && rx_byte_valid_i;
-    let payload_last_byte = bytes_remaining_reg == 1u16;
-    let crc3_candidate = le32_with_byte(received_crc_reg, 3u2, rx_byte_i);
-    let crc_match = crc3_candidate == crc32_final(crc_reg);
+    let checksum_match = state_reg == state_checksum() && rx_byte_valid_i && rx_byte_i == checksum_reg;
     let protocol_framing_error = rx_framing_error_i && is_protocol_state(state_reg);
     let start_fail_ack =
         protocol_framing_error
         || payload_overrun
-        || (state_reg == state_length3() && rx_byte_valid_i && oversize_length)
-        || (state_reg == state_crc3() && rx_byte_valid_i && !crc_match);
-    let start_success_ack = state_reg == state_crc3() && rx_byte_valid_i && crc_match;
+        || (state_reg == state_length1() && rx_byte_valid_i && oversize_length)
+        || (state_reg == state_checksum() && rx_byte_valid_i && !checksum_match);
+    let start_success_ack = state_reg == state_checksum() && checksum_match;
+    let upload_complete = state_reg == state_payload() && bytes_remaining_reg == 0u16 && !payload_staged_reg;
 
     let next_state_reg =
         if start_success_ack {
@@ -148,74 +97,38 @@ pub entity rom_uploader_core(
         } else if state_reg == state_length0() && rx_byte_valid_i {
             state_length1()
         } else if state_reg == state_length1() && rx_byte_valid_i {
-            state_length2()
-        } else if state_reg == state_length2() && rx_byte_valid_i {
-            state_length3()
-        } else if state_reg == state_length3() && rx_byte_valid_i {
-            if length3_candidate == 0u32 {
-                state_crc0()
+            if candidate_length == 0u16 {
+                state_checksum()
             } else {
                 state_payload()
             }
-        } else if state_reg == state_payload() && payload_write_slot && payload_last_byte {
-            state_crc0()
-        } else if state_reg == state_crc0() && rx_byte_valid_i {
-            state_crc1()
-        } else if state_reg == state_crc1() && rx_byte_valid_i {
-            state_crc2()
-        } else if state_reg == state_crc2() && rx_byte_valid_i {
-            state_crc3()
+        } else if upload_complete {
+            state_checksum()
         } else {
             state_reg
         };
 
     let next_magic_window_reg =
-        if rx_byte_valid_i && scan_magic_state {
+        if rx_byte_valid_i && state_reg == state_wait_magic() {
             candidate_magic_window
         } else {
             magic_window_reg
         };
-    let next_length_reg =
+    let next_checksum_reg =
         if magic_match {
-            0u32
-        } else if state_reg == state_length0() && rx_byte_valid_i {
-            le32_with_byte(length_reg, 0u2, rx_byte_i)
-        } else if state_reg == state_length1() && rx_byte_valid_i {
-            le32_with_byte(length_reg, 1u2, rx_byte_i)
-        } else if state_reg == state_length2() && rx_byte_valid_i {
-            le32_with_byte(length_reg, 2u2, rx_byte_i)
-        } else if state_reg == state_length3() && rx_byte_valid_i && !oversize_length {
-            length3_candidate
-        } else {
-            length_reg
-        };
-    let next_crc_reg =
-        if magic_match {
-            crc32_init()
+            0u8
         } else if payload_write_slot {
-            crc32_step(crc_reg, staged_payload_reg)
+            checksum_step(checksum_reg, staged_payload_reg)
         } else {
-            crc_reg
-        };
-    let next_received_crc_reg =
-        if magic_match {
-            0u32
-        } else if state_reg == state_crc0() && rx_byte_valid_i {
-            le32_with_byte(received_crc_reg, 0u2, rx_byte_i)
-        } else if state_reg == state_crc1() && rx_byte_valid_i {
-            le32_with_byte(received_crc_reg, 1u2, rx_byte_i)
-        } else if state_reg == state_crc2() && rx_byte_valid_i {
-            le32_with_byte(received_crc_reg, 2u2, rx_byte_i)
-        } else if state_reg == state_crc3() && rx_byte_valid_i {
-            crc3_candidate
-        } else {
-            received_crc_reg
+            checksum_reg
         };
     let next_bytes_remaining_reg =
         if magic_match {
             0u16
-        } else if state_reg == state_length3() && rx_byte_valid_i && !oversize_length {
-            trunc(length3_candidate)
+        } else if state_reg == state_length0() && rx_byte_valid_i {
+            zext(rx_byte_i)
+        } else if state_reg == state_length1() && rx_byte_valid_i {
+            candidate_length
         } else if payload_write_slot {
             trunc(bytes_remaining_reg - 1u16)
         } else {
@@ -247,14 +160,12 @@ pub entity rom_uploader_core(
         };
 
     reg(clk) state_reg: uint<4> reset(rst: state_wait_magic()) = next_state_reg;
-    reg(clk) magic_window_reg: uint<32> reset(rst: 0u32) = next_magic_window_reg;
-    reg(clk) length_reg: uint<32> reset(rst: 0u32) = next_length_reg;
-    reg(clk) crc_reg: uint<32> reset(rst: crc32_init()) = next_crc_reg;
-    reg(clk) received_crc_reg: uint<32> reset(rst: 0u32) = next_received_crc_reg;
-    reg(clk) bytes_remaining_reg: uint<16> reset(rst: 0u16) = next_bytes_remaining_reg;
-    reg(clk) write_addr_reg: uint<15> reset(rst: 0u15) = next_write_addr_reg;
-    reg(clk) payload_staged_reg: bool reset(rst: false) = next_payload_staged_reg;
-    reg(clk) staged_payload_reg: uint<8> reset(rst: 0u8) = next_staged_payload_reg;
+    reg(clk) magic_window_reg: uint<32> initial(0u32) = next_magic_window_reg;
+    reg(clk) checksum_reg: uint<8> initial(0u8) = next_checksum_reg;
+    reg(clk) bytes_remaining_reg: uint<16> initial(0u16) = next_bytes_remaining_reg;
+    reg(clk) write_addr_reg: uint<15> initial(0u15) = next_write_addr_reg;
+    reg(clk) payload_staged_reg: bool initial(false) = next_payload_staged_reg;
+    reg(clk) staged_payload_reg: uint<8> initial(0u8) = next_staged_payload_reg;
 
     RomUploaderCoreOut$(
         hold_reset: state_reg != state_running(),

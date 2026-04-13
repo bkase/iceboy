@@ -374,6 +374,46 @@ module \iceboy::periph::button_bank::button_bank_raw[3216] #(
     );
 endmodule
 
+module \iceboy::periph::button_bank::button_bank_raw[3269] #(
+    parameter integer N = 8,
+    parameter integer DEBOUNCE_BITS = 8,
+    parameter integer O = N * 4
+) (
+    input  wire              CLK_i,
+    input  wire [N-1:0]      BUTTONS_I_i,
+    output wire [O-1:0]      output__
+);
+    button_bank_raw_impl #(
+        .N(N),
+        .DEBOUNCE_BITS(DEBOUNCE_BITS),
+        .O(O)
+    ) impl (
+        .CLK_i(CLK_i),
+        .BUTTONS_I_i(BUTTONS_I_i),
+        .output__(output__)
+    );
+endmodule
+
+module \iceboy::periph::button_bank::button_bank_raw[3253] #(
+    parameter integer N = 8,
+    parameter integer DEBOUNCE_BITS = 8,
+    parameter integer O = N * 4
+) (
+    input  wire              CLK_i,
+    input  wire [N-1:0]      BUTTONS_I_i,
+    output wire [O-1:0]      output__
+);
+    button_bank_raw_impl #(
+        .N(N),
+        .DEBOUNCE_BITS(DEBOUNCE_BITS),
+        .O(O)
+    ) impl (
+        .CLK_i(CLK_i),
+        .BUTTONS_I_i(BUTTONS_I_i),
+        .output__(output__)
+    );
+endmodule
+
 module \iceboy::periph::button_bank::button_bank_raw[3215] #(
     parameter integer N = 8,
     parameter integer DEBOUNCE_BITS = 8,

@@ -475,15 +475,20 @@ void send_uart_byte(Vicebreaker_uart_rom_top_verilator_wrapper& top, uint8_t byt
     drive_level(top, true, kUartBitTicks);
 }
 
+uint8_t checksum_bytes(const std::vector<uint8_t>& payload) {
+    uint8_t checksum = 0U;
+    for (uint8_t byte : payload) {
+        checksum = static_cast<uint8_t>(checksum ^ byte);
+    }
+    return checksum;
+}
+
 void send_upload_frame(Vicebreaker_uart_rom_top_verilator_wrapper& top, const std::vector<uint8_t>& payload) {
-    const uint32_t crc = crc32_bytes(payload);
-    const uint32_t length = static_cast<uint32_t>(payload.size());
-    const std::array<uint8_t, 8> header = {
+    const uint16_t length = static_cast<uint16_t>(payload.size());
+    const std::array<uint8_t, 6> header = {
         0x52U, 0x4FU, 0x4DU, 0x21U,
         static_cast<uint8_t>(length & 0xFFU),
         static_cast<uint8_t>((length >> 8) & 0xFFU),
-        static_cast<uint8_t>((length >> 16) & 0xFFU),
-        static_cast<uint8_t>((length >> 24) & 0xFFU),
     };
     for (uint8_t byte : header) {
         send_uart_byte(top, byte);
@@ -491,15 +496,7 @@ void send_upload_frame(Vicebreaker_uart_rom_top_verilator_wrapper& top, const st
     for (uint8_t byte : payload) {
         send_uart_byte(top, byte);
     }
-    const std::array<uint8_t, 4> crc_bytes = {
-        static_cast<uint8_t>(crc & 0xFFU),
-        static_cast<uint8_t>((crc >> 8) & 0xFFU),
-        static_cast<uint8_t>((crc >> 16) & 0xFFU),
-        static_cast<uint8_t>((crc >> 24) & 0xFFU),
-    };
-    for (uint8_t byte : crc_bytes) {
-        send_uart_byte(top, byte);
-    }
+    send_uart_byte(top, checksum_bytes(payload));
 }
 
 uint8_t receive_uart_ack(Vicebreaker_uart_rom_top_verilator_wrapper& top, uint64_t timeout_cycles) {
@@ -507,9 +504,6 @@ uint8_t receive_uart_ack(Vicebreaker_uart_rom_top_verilator_wrapper& top, uint64
     uint16_t initial_wait = kUartBitTicks + (kUartBitTicks / 2U);
 
     if (!snap.tx) {
-        // The uploader can start the ACK while we are still driving the final
-        // RX stop bit high, so by the time send_upload_frame returns the ACK
-        // start bit may already be half-consumed.
         initial_wait = kUartBitTicks;
     } else {
         for (uint64_t cycle = 0; cycle < timeout_cycles; ++cycle) {
@@ -563,7 +557,7 @@ int main(int argc, char** argv) {
         if (ack != 0x41U) {
             throw std::runtime_error(
                 "upload ACK mismatch: expected 0x41, got 0x" +
-                [] (uint8_t value) {
+                [](uint8_t value) {
                     const char hex[] = "0123456789abcdef";
                     std::string out;
                     out.push_back(hex[(value >> 4) & 0xFU]);

@@ -30,12 +30,21 @@ pub entity rom_uploader_test_top(
             loader_write_data: uploader.loader_write_data,
         ),
     );
+    let safe_read_data = if rst_i || uploader.hold_reset { 0u8 } else { backend.cpu_data };
+    let safe_hold_reset = if rst_i { true } else { uploader.hold_reset };
+    let safe_tx_o = if rst_i { true } else { uploader.tx_o };
+    let safe_rom_ready = if rst_i { false } else { backend.rom_ready };
+    let safe_tx_busy = if rst_i { false } else { uploader.tx_busy };
+    let safe_state = if rst_i { 0u4 } else { uploader.state };
+    let safe_bytes_remaining = if rst_i { 0u16 } else { uploader.bytes_remaining };
+    let safe_output =
+        zext(safe_read_data)
+            | (zext(lib::util::bit(safe_hold_reset)) << 8)
+            | (zext(lib::util::bit(safe_tx_o)) << 9)
+            | (zext(lib::util::bit(safe_rom_ready)) << 10)
+            | (zext(lib::util::bit(safe_tx_busy)) << 11)
+            | (zext(safe_state) << 12)
+            | (zext(safe_bytes_remaining) << 16);
 
-    zext(backend.cpu_data)
-        | (zext(lib::util::bit(uploader.hold_reset)) << 8)
-        | (zext(lib::util::bit(uploader.tx_o)) << 9)
-        | (zext(lib::util::bit(backend.rom_ready)) << 10)
-        | (zext(lib::util::bit(uploader.tx_busy)) << 11)
-        | (zext(uploader.state) << 12)
-        | (zext(uploader.bytes_remaining) << 16)
+    safe_output
 }

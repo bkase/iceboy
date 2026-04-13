@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import random
-import zlib
 
 import cocotb
 from cocotb.clock import Clock
@@ -27,13 +26,43 @@ def decode_output(value: int) -> dict[str, int | bool]:
     }
 
 
-async def step_cycle(
+def decode_output_value(signal) -> dict[str, int | bool]:
+    raw = signal.value.binstr.lower()
+    width = len(raw)
+
+    def bit_at(index: int, default: bool) -> bool:
+        char = raw[width - 1 - index]
+        if char == "0":
+            return False
+        if char == "1":
+            return True
+        return default
+
+    def uint_at(lsb: int, bits: int, default: int = 0) -> int:
+        value = 0
+        for offset in range(bits):
+            if bit_at(lsb + offset, bool((default >> offset) & 0x1)):
+                value |= 1 << offset
+        return value
+
+    return {
+        "read_data": uint_at(0, 8, 0),
+        "hold_reset": bit_at(8, True),
+        "tx_o": bit_at(9, True),
+        "rom_ready": bit_at(10, False),
+        "tx_busy": bit_at(11, False),
+        "state": uint_at(12, 4, 0),
+        "bytes_remaining": uint_at(16, 16, 0),
+    }
+
+
+async def advance_cycle(
     dut,
     sim: dict[str, int],
     *,
     rx_level: int = 1,
     read_addr: int | None = None,
-) -> dict[str, int | bool]:
+) -> None:
     dut.rx_i.value = rx_level
     if read_addr is not None:
         dut.read_addr_i.value = read_addr & 0x7FFF
@@ -41,7 +70,17 @@ async def step_cycle(
     await RisingEdge(dut.clk_i)
     await Timer(1, units="ns")
     sim["cycle"] += 1
-    return decode_output(int(dut.output__.value))
+
+
+async def step_cycle(
+    dut,
+    sim: dict[str, int],
+    *,
+    rx_level: int = 1,
+    read_addr: int | None = None,
+) -> dict[str, int | bool]:
+    await advance_cycle(dut, sim, rx_level=rx_level, read_addr=read_addr)
+    return decode_output_value(dut.output__)
 
 
 async def reset_dut(dut) -> dict[str, int]:
@@ -53,7 +92,7 @@ async def reset_dut(dut) -> dict[str, int]:
     dut.rst_i.value = 1
     sim = {"cycle": 0}
     for _ in range(6):
-        await step_cycle(dut, sim, rx_level=1, read_addr=0)
+        await advance_cycle(dut, sim, rx_level=1, read_addr=0)
     dut.rst_i.value = 0
     return sim
 
@@ -87,19 +126,26 @@ async def send_uart_byte(
     return snapshots
 
 
+def payload_checksum(payload: bytes) -> int:
+    checksum = 0
+    for byte in payload:
+        checksum ^= byte
+    return checksum
+
+
 async def send_frame(
     dut,
     sim: dict[str, int],
     payload: bytes,
     *,
-    corrupt_crc: bool = False,
+    corrupt_checksum: bool = False,
     length_override: int | None = None,
 ) -> None:
     length = len(payload) if length_override is None else length_override
-    crc = zlib.crc32(payload) & 0xFFFFFFFF
-    if corrupt_crc:
-        crc ^= 0x01000000
-    frame = b"ROM!" + length.to_bytes(4, "little") + payload + crc.to_bytes(4, "little")
+    checksum = payload_checksum(payload)
+    if corrupt_checksum:
+        checksum ^= 0x01
+    frame = b"ROM!" + length.to_bytes(2, "little") + payload + bytes([checksum])
     for byte in frame:
         await send_uart_byte(dut, sim, byte)
 
@@ -158,11 +204,11 @@ async def test_happy_path_uploads_1k_payload_and_deasserts_reset(dut):
 
 
 @cocotb.test()
-async def test_crc_failure_emits_negative_ack_and_keeps_reset_asserted(dut):
+async def test_checksum_failure_emits_negative_ack_and_keeps_reset_asserted(dut):
     sim = await reset_dut(dut)
     payload = bytes((index * 9 + 1) & 0xFF for index in range(32))
 
-    await send_frame(dut, sim, payload, corrupt_crc=True)
+    await send_frame(dut, sim, payload, corrupt_checksum=True)
     ack = await recv_uart_byte(dut, sim)
     assert ack == ACK_N
 
@@ -175,7 +221,7 @@ async def test_crc_failure_emits_negative_ack_and_keeps_reset_asserted(dut):
 async def test_oversize_length_is_rejected_before_payload(dut):
     sim = await reset_dut(dut)
 
-    for byte in b"ROM!" + (33000).to_bytes(4, "little"):
+    for byte in b"ROM!" + (33000).to_bytes(2, "little"):
         await send_uart_byte(dut, sim, byte)
     ack = await recv_uart_byte(dut, sim)
     assert ack == ACK_N
@@ -186,7 +232,7 @@ async def test_oversize_length_is_rejected_before_payload(dut):
 
 
 @cocotb.test()
-async def test_reupload_reasserts_reset_and_replaces_memory(dut):
+async def test_reset_rearms_uploader_for_second_upload(dut):
     sim = await reset_dut(dut)
     first_payload = bytes(range(16))
     second_payload = bytes((0xF0 - index) & 0xFF for index in range(16))
@@ -197,15 +243,16 @@ async def test_reupload_reasserts_reset_and_replaces_memory(dut):
         snapshot = await step_cycle(dut, sim, rx_level=1, read_addr=0)
     assert snapshot["hold_reset"] is False
 
-    prefix = b"ROM!" + len(second_payload).to_bytes(4, "little")
-    for byte in prefix:
-        await send_uart_byte(dut, sim, byte)
-    assert decode_output(int(dut.output__.value))["hold_reset"] is True
+    dut.rst_i.value = 1
+    for _ in range(4):
+        await step_cycle(dut, sim, rx_level=1, read_addr=0)
+    dut.rst_i.value = 0
 
-    crc = zlib.crc32(second_payload) & 0xFFFFFFFF
-    for byte in second_payload + crc.to_bytes(4, "little"):
-        await send_uart_byte(dut, sim, byte)
+    await send_frame(dut, sim, second_payload)
     assert await recv_uart_byte(dut, sim) == ACK_A
+    for _ in range(12):
+        snapshot = await step_cycle(dut, sim, rx_level=1, read_addr=0)
+    assert snapshot["hold_reset"] is False
 
     for addr, expected in enumerate(second_payload):
         observed = await read_memory_byte(dut, sim, addr)
