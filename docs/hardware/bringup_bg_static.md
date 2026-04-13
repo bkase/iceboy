@@ -57,6 +57,10 @@ PMOD 1B is repurposed from CPU PC bits to visible-pipeline health signals for th
 | `P1B9` | `DBG_PHASE1` | CPU halted flag |
 | `P1B10` | `DBG_PHASE2` | source-side PPU frame-start pulse |
 
+Variant-specific extras stay on PMOD 2:
+- `DEBUG_GPIO0`: framebuffer frame-start pulse
+- `DEBUG_GPIO1`: scanout-valid indicator
+
 Expected capture story:
 - After reset, `DBG_MCE` goes high once the ST7789 init sequence finishes.
 - `DBG_PC2` and `DBG_PC3` become active during LCD frame streaming.
@@ -82,4 +86,3 @@ PulseView / LA expectation:
   The LCD controller never completed init; focus on reset and LCD wiring.
 - Debug bus shows `DBG_MCE = 1` but no `DBG_PC2` / `DBG_PC3` activity:
   The framebuffer-to-LCD handoff is stalled.
-

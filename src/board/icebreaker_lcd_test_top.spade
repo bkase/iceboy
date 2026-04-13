@@ -163,14 +163,14 @@ entity icebreaker_lcd_test_top(
     set LCD_DC = lcd.lcd_dc;
     set LCD_RES = lcd.lcd_res;
     set LCD_BL = lcd.lcd_bl;
-    set DEBUG_GPIO0 = false;
-    set DEBUG_GPIO1 = false;
-    set DBG_PC0 = false;
-    set DBG_PC1 = false;
-    set DBG_PC2 = false;
-    set DBG_PC3 = false;
-    set DBG_MCE = false;
-    set DBG_PHASE0 = false;
-    set DBG_PHASE1 = false;
-    set DBG_PHASE2 = false;
+    set DEBUG_GPIO0 = frame_start_pulse;
+    set DEBUG_GPIO1 = lcd.frame_active;
+    set DBG_PC0 = (frame_index_reg & 0x1u32) != 0u32;
+    set DBG_PC1 = (frame_index_reg & 0x2u32) != 0u32;
+    set DBG_PC2 = (frame_index_reg & 0x4u32) != 0u32;
+    set DBG_PC3 = (frame_index_reg & 0x8u32) != 0u32;
+    set DBG_MCE = lcd.init_done;
+    set DBG_PHASE0 = (frame_phase(frame_index_reg) & 0x1u3) != 0u3;
+    set DBG_PHASE1 = (frame_phase(frame_index_reg) & 0x2u3) != 0u3;
+    set DBG_PHASE2 = (frame_phase(frame_index_reg) & 0x4u3) != 0u3;
 }

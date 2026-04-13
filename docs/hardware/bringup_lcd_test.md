@@ -97,6 +97,9 @@ The first pixel payload bytes should be `FF FF` for the initial white fill.
 - Optional board-status probes:
   - `LEDR_N`
   - `LEDG_N`
+  - `DBG_PC0` .. `DBG_PC3`
+  - `DBG_MCE`
+  - `DBG_PHASE0` .. `DBG_PHASE2`
 
 Expected analyzer story:
 - `LCD_RES` low for the reset window, then high
@@ -104,6 +107,25 @@ Expected analyzer story:
 - `LCD_DC` switching low/high around command vs data bytes
 - `LCD_SCK` and `LCD_MOSI` active during the exact init transcript above
 - repeated frame bursts once initialization completes
+
+## Debug-Bus Exception
+
+`icebreaker_lcd_test_top` has no CPU, so PMOD 1B carries pattern-generator observability instead of the standard CPU bus:
+
+| PMOD | Signal | Meaning |
+| --- | --- | --- |
+| `P1B1` | `DBG_PC0` | pattern frame index bit 0 |
+| `P1B2` | `DBG_PC1` | pattern frame index bit 1 |
+| `P1B3` | `DBG_PC2` | pattern frame index bit 2 |
+| `P1B4` | `DBG_PC3` | pattern frame index bit 3 |
+| `P1B7` | `DBG_MCE` | LCD init complete |
+| `P1B8` | `DBG_PHASE0` | pattern phase bit 0 |
+| `P1B9` | `DBG_PHASE1` | pattern phase bit 1 |
+| `P1B10` | `DBG_PHASE2` | pattern phase bit 2 |
+
+PMOD 2 extras for this top:
+- `DEBUG_GPIO0`: frame-start pulse
+- `DEBUG_GPIO1`: LCD frame-active indicator
 
 ## Decision
 

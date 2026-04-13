@@ -63,6 +63,10 @@ PMOD 1B uses the same visible-pipeline debug mapping as `bg_static_icebreaker.bi
 | `P1B9` | `DBG_PHASE1` | CPU halted flag |
 | `P1B10` | `DBG_PHASE2` | source-side PPU frame-start pulse |
 
+Variant-specific extras:
+- `DEBUG_GPIO0`: framebuffer frame-start pulse
+- `DEBUG_GPIO1`: scanout-valid indicator
+
 If a button appears dead:
 - probe the corresponding PMOD 1A input pin from [pinout_firstlight.md](/Users/bkase/Documents/iceboy/docs/hardware/pinout_firstlight.md)
 - confirm the button edge reaches the debounced joypad path
@@ -84,4 +88,3 @@ If a button appears dead:
   Recheck the `A`, `B`, `Select`, and `Start` wiring specifically; the reference model uses edge-triggered actions, not held-repeat behavior.
 - LCD updates intermittently:
   Check `DBG_PC2`, `DBG_PC3`, and the SPI pins for stalled frame transmission.
-

@@ -84,9 +84,15 @@ Known working ROMs:
 
 ## Debug Cues
 
+Shared PMOD 1B debug bus:
+- `DBG_PC0..DBG_PC3`: held low
+- `DBG_MCE`: held low
+- `DBG_PHASE0`: held low
+- `DBG_PHASE1`: CPU halted flag
+- `DBG_PHASE2`: visible scanout-valid pulse
+
+Variant-specific PMOD 2 extras:
 - `DEBUG_GPIO0`: upload hold indicator
 - `DEBUG_GPIO1`: UART TX busy indicator
-- `DBG_PHASE1`: CPU halted flag once the core is released
-- `DBG_PHASE2`: scanout-valid activity from the visible pipeline
 
 If `DEBUG_GPIO0` never drops after `Upload OK`, the core was not released. If `DEBUG_GPIO0` drops but `DBG_PHASE2` stays quiet, the upload path worked and the failure is downstream in ROM execution or scanout.
