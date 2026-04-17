@@ -7,27 +7,6 @@ DRY_RUN=0
 CHECK_DEVICE=0
 BIN_FILE=""
 
-resolve_latest_bitstream() {
-    local newest=""
-    local candidate=""
-    shopt -s nullglob
-    local candidates=("${ICEBOY_ROOT}"/build/bitstreams/*.bin)
-    shopt -u nullglob
-
-    if [[ "${#candidates[@]}" -eq 0 ]]; then
-        iceboy_die "no bitstreams found under ${ICEBOY_ROOT}/build/bitstreams; pass --bin <path> or build one first"
-    fi
-
-    for candidate in "${candidates[@]}"; do
-        if [[ -z "${newest}" || "${candidate}" -nt "${newest}" ]]; then
-            newest="${candidate}"
-        fi
-    done
-
-    [[ -n "${newest}" ]] || iceboy_die "failed to resolve the newest bitstream under ${ICEBOY_ROOT}/build/bitstreams"
-    printf '%s\n' "${newest}"
-}
-
 run_iceprog_or_die() {
     local action="$1"
     shift
@@ -70,7 +49,7 @@ while [[ $# -gt 0 ]]; do
 usage: tools/program_icebreaker.sh [options]
 
 options:
-  --bin <path>      Packed bitstream to flash; defaults to the newest build/bitstreams/*.bin
+  --bin <path>      Packed bitstream to flash; required
   --check-device    Probe the board first via iceprog -t
   --dry-run         Print commands without executing them
 EOF
@@ -84,7 +63,7 @@ EOF
 done
 
 if [[ -z "${BIN_FILE}" ]]; then
-    BIN_FILE="$(resolve_latest_bitstream)"
+    iceboy_die "--bin is required; refusing to auto-select the newest bitstream under ${ICEBOY_ROOT}/build/bitstreams"
 fi
 
 iceboy_require_file "${BIN_FILE}" "packed bitstream"

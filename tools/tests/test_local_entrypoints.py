@@ -471,21 +471,11 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn(" -t", completed.stdout)
         self.assertIn("build/bitstreams/icebreaker_top_baseline.bin", completed.stdout)
 
-    def test_program_icebreaker_dry_run_defaults_to_most_recent_bitstream(self) -> None:
-        older = ROOT / "build" / "bitstreams" / "zzz_program_test_older.bin"
-        newer = ROOT / "build" / "bitstreams" / "zzz_program_test_newer.bin"
-        older.parent.mkdir(parents=True, exist_ok=True)
-        older.write_bytes(b"older")
-        newer.write_bytes(b"newer")
-        os.utime(older, (1_700_000_000, 1_700_000_000))
-        os.utime(newer, (1_900_000_000, 1_900_000_000))
-        try:
-            completed = self.run_script("program_icebreaker.sh", "--dry-run")
-        finally:
-            newer.unlink(missing_ok=True)
-            older.unlink(missing_ok=True)
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn(str(newer), completed.stdout)
+    def test_program_icebreaker_requires_explicit_bin_path(self) -> None:
+        completed = self.run_script("program_icebreaker.sh", "--dry-run")
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--bin is required", completed.stderr)
+        self.assertIn("refusing to auto-select the newest bitstream", completed.stderr)
 
     def test_program_icebreaker_reports_missing_bitstream_path(self) -> None:
         completed = self.run_script(
