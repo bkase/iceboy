@@ -65,6 +65,47 @@ async def test_soc_rom_top_exposes_preview_bus_request_before_commit(dut):
 
 
 @cocotb.test()
+async def test_soc_rom_top_preview_request_ignores_noisy_noncommit_inputs(dut):
+    driver = soc_rom_dut(dut)
+    await driver.reset(CPU_BRING_UP_PROFILES)
+
+    start = driver.observe()
+    assert start.m_ce is False
+    assert (start.preview_bus_req_kind, start.preview_bus_req_addr, start.preview_bus_req_data) == (1, 0x0100, 0x00)
+
+    noisy_first = await driver.step_mcycle(bus_read_data=0x00, irq_pending=0x1F)
+    assert noisy_first.m_ce is False
+    assert (noisy_first.preview_bus_req_kind, noisy_first.preview_bus_req_addr, noisy_first.preview_bus_req_data) == (
+        1,
+        0x0100,
+        0x00,
+    )
+
+    noisy_second = await driver.step_mcycle(bus_read_data=0xFF, irq_pending=0x04)
+    assert noisy_second.m_ce is False
+    assert (noisy_second.preview_bus_req_kind, noisy_second.preview_bus_req_addr, noisy_second.preview_bus_req_data) == (
+        1,
+        0x0100,
+        0x00,
+    )
+
+    commit = await driver.step_mcycle(bus_read_data=0x31, irq_pending=0x00)
+    assert commit.m_ce is True
+    assert commit.bus_req_kind == 1
+    assert commit.bus_req_addr == 0x0100
+    assert commit.bus_req_data == 0x00
+    assert commit.pc == 0x0101
+
+    after_commit = await driver.step_mcycle(bus_read_data=0x00, irq_pending=0x1F)
+    assert after_commit.m_ce is False
+    assert (after_commit.preview_bus_req_kind, after_commit.preview_bus_req_addr, after_commit.preview_bus_req_data) == (
+        1,
+        0x0101,
+        0x00,
+    )
+
+
+@cocotb.test()
 async def test_soc_rom_top_ppu_advances_and_packed_regs_match_arch_state(dut):
     driver = soc_rom_dut(dut)
     await driver.reset(CPU_BRING_UP_PROFILES)

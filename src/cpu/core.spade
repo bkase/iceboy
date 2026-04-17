@@ -3,7 +3,7 @@ use lib::bus::types::{BusReq, BusResp};
 use lib::cpu::decode_types::{DecodedOp, MiscKind};
 use lib::cpu::regs::{Registers, mask_f};
 use lib::cpu::semantics::{apply_delta, step_mcycle};
-use lib::cpu::types::{CpuArchState, CpuDelta, CpuMicroState, CpuState, HaltState, ImeState, Imm8Cont, IrqPending, MicroInput, MicroWriteSet, Phase, ReadCont, RegWriteSet, initial_cpu_micro_state, no_irq_ack};
+use lib::cpu::types::{CpuArchState, CpuDelta, CpuMicroState, CpuState, HaltState, ImeState, Imm8Cont, IrqPending, MicroInput, MicroWriteSet, Phase, ReadCont, RegWriteSet, idle_micro_input, initial_cpu_micro_state, no_irq_ack};
 
 pub struct CpuCoreOut {
     commit_seq: uint<64>,
@@ -228,7 +228,10 @@ pub entity cpu_core(
     decl micro_state;
     decl next_commit_seq;
     let state = CpuState$(arch: arch_state, micro: micro_state);
-    let step = step_mcycle(state, MicroInput$(bus_resp: bus_resp, irq_pending: irq_pending));
+    // Preserve the preview bus request on non-commit cycles, but isolate the
+    // full next-state cone from transient read-data and IRQ activity.
+    let stepped_input = if m_ce { MicroInput$(bus_resp: bus_resp, irq_pending: irq_pending) } else { idle_micro_input() };
+    let step = step_mcycle(state, stepped_input);
     let next_state = apply_delta(state, step.delta);
     let preview_bus_req = step.bus_req;
     reg(clk) arch_state: CpuArchState reset(rst: skipboot_arch_state()) =

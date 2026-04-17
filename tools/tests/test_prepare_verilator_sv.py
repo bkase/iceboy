@@ -11,7 +11,12 @@ import sys
 
 sys.path.insert(0, str(ROOT / "tools"))
 
-from prepare_verilator_sv import build_verilator_source, sanitize_verilator_source, write_sanitized_verilog
+from prepare_verilator_sv import (
+    append_missing_button_bank_aliases,
+    build_verilator_source,
+    sanitize_verilator_source,
+    write_sanitized_verilog,
+)
 
 
 class PrepareVerilatorSvTest(unittest.TestCase):
@@ -73,6 +78,19 @@ class PrepareVerilatorSvTest(unittest.TestCase):
         self.assertEqual(rewritten, 1)
         self.assertIn("{8192{foo}}", output)
         self.assertIn("module extra;", output)
+
+    def test_appends_missing_button_bank_aliases_for_generated_module_ids(self) -> None:
+        base = (
+            "module button_bank_raw_impl;\nendmodule\n\n"
+            "module \\iceboy::periph::button_bank::button_bank_raw[3253];\nendmodule\n\n"
+            "\\iceboy::periph::button_bank::button_bank_raw[3254] alias_inst();\n"
+        )
+
+        rewritten, added = append_missing_button_bank_aliases(base)
+
+        self.assertEqual(added, 1)
+        self.assertIn("module \\iceboy::periph::button_bank::button_bank_raw[3254]", rewritten)
+        self.assertEqual(rewritten.count("button_bank_raw[3254]"), 2)
 
 
 if __name__ == "__main__":
