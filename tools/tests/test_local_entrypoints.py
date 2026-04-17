@@ -355,9 +355,9 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("top dummy_top", completed.stdout)
         self.assertIn("module dummy_top", completed.stdout)
         self.assertIn("src/board/dummy_top.spade", completed.stdout)
-        self.assertIn("build/variants/dummy_top/synth/dummy_top.json", completed.stdout)
-        self.assertIn("build/variants/dummy_top/synth/yosys-stat.txt", completed.stdout)
-        self.assertIn("build/variants/dummy_top/dummy_top.asc", completed.stdout)
+        self.assertIn("build/bitstreams/synth/dummy_top.json", completed.stdout)
+        self.assertIn("build/bitstreams/synth/yosys-stat.txt", completed.stdout)
+        self.assertIn("build/bitstreams/dummy_top.asc", completed.stdout)
         self.assertIn("synth_ice40 -top dummy_top", completed.stdout)
         self.assertIn("test/harness/verilog/rom_baked_ebr_raw.v", completed.stdout)
 
@@ -374,8 +374,8 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("top board::icebreaker_visible_top::icebreaker_visible_bg_static_top", completed.stdout)
         self.assertIn("module icebreaker_visible_bg_static_top", completed.stdout)
         self.assertIn("src/board/icebreaker_visible_top.spade", completed.stdout)
-        self.assertIn("build/variants/icebreaker_visible_bg_static_top/synth/icebreaker_visible_bg_static_top.json", completed.stdout)
-        self.assertIn("build/variants/icebreaker_visible_bg_static_top/icebreaker_visible_bg_static_top.asc", completed.stdout)
+        self.assertIn("build/bitstreams/synth/icebreaker_visible_bg_static_top.json", completed.stdout)
+        self.assertIn("build/bitstreams/icebreaker_visible_bg_static_top.asc", completed.stdout)
         self.assertIn("synth_ice40 -top icebreaker_visible_bg_static_top", completed.stdout)
 
     def test_build_icebreaker_variant_dry_run_accepts_explicit_module_and_baseline_outputs(self) -> None:

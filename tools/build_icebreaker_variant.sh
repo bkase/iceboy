@@ -136,7 +136,7 @@ options:
   --module <verilog-module>   Verilog top module name; defaults to the tail of --top
   --board-top <path>          Board-top source path; defaults to src/board/<module>.spade
   --pcf <path>                Pin constraints; defaults to icebreaker.pcf
-  --out-dir <dir>             Output directory; defaults to build/variants/<module>
+  --out-dir <dir>             Output directory; defaults to build/bitstreams
   --record-json <path>        Optional baseline JSON output
   --freq-mhz <mhz>            nextpnr frequency target; defaults to 12
   --skip-build                Reuse existing build/spade.sv
@@ -175,7 +175,7 @@ if [[ -z "${BOARD_TOP}" ]]; then
     BOARD_TOP="${ICEBOY_ROOT}/src/board/${TOP_MODULE}.spade"
 fi
 if [[ -z "${OUT_DIR}" ]]; then
-    OUT_DIR="${ICEBOY_ROOT}/build/variants/${TOP_MODULE}"
+    OUT_DIR="${ICEBOY_ROOT}/build/bitstreams"
 fi
 if [[ -z "${SYNTH_DIR}" ]]; then
     SYNTH_DIR="${OUT_DIR}/synth"
