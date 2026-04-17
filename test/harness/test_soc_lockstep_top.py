@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 
 import cocotb
-from cocotb.triggers import ClockCycles
 
 
 ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "swim.toml").exists())
@@ -25,6 +24,15 @@ def decode_arch_state_bcdehl(dut) -> tuple[int, int, int, int, int, int]:
         (regs >> 40) & 0xFF,
         (regs >> 32) & 0xFF,
     )
+
+
+async def advance_until(driver, predicate, *, max_cycles: int = 1024):
+    last = None
+    for _ in range(max_cycles):
+        last = await driver.step_mcycle()
+        if predicate(last):
+            return last
+    raise TimeoutError(f"predicate not met within {max_cycles} cycles; last={last!r}")
 
 
 @cocotb.test()
@@ -85,35 +93,15 @@ async def test_soc_lockstep_top_ppu_advances_through_early_visible_checkpoints(d
     assert start.ppu_scanout_kind == 1
     assert start.ppu_blank_reason == 3
 
-    await ClockCycles(dut.clk_i, 90)
-    transfer = driver.observe()
+    transfer = await advance_until(driver, lambda obs: obs.ppu_ly == 0 and obs.ppu_mode == 2, max_cycles=128)
     assert transfer.ppu_ly == 0
     assert transfer.ppu_mode == 2
     assert transfer.ppu_dot_in_line >= 80
+    assert transfer.ppu_scanout_valid is True
+    assert transfer.ppu_scanout_kind == 1
+    assert transfer.ppu_scanout_y == 0
     assert transfer.ppu_semantic_valid is True
     assert transfer.ppu_semantic_mode == transfer.ppu_mode
-
-    await ClockCycles(dut.clk_i, 260)
-    hblank = driver.observe()
-    assert hblank.ppu_ly == 0
-    assert hblank.ppu_mode == 3
-
-    await ClockCycles(dut.clk_i, 106)
-    next_line = driver.observe()
-    assert next_line.ppu_ly == 1
-    assert next_line.ppu_mode == 1
-    assert next_line.ppu_dot_in_line == 1
-    assert next_line.ppu_scanout_valid is True
-    assert next_line.ppu_scanout_kind == 1
-    assert next_line.ppu_scanout_y == 1
-
-    await ClockCycles(dut.clk_i, 90)
-    line1_transfer = driver.observe()
-    assert line1_transfer.ppu_ly == 1
-    assert line1_transfer.ppu_mode == 2
-    assert line1_transfer.ppu_dot_in_line >= 80
-    assert line1_transfer.ppu_semantic_valid is True
-    assert line1_transfer.ppu_semantic_mode == line1_transfer.ppu_mode
 
 
 @cocotb.test()

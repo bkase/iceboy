@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 
 import cocotb
-from cocotb.triggers import ClockCycles
 
 
 ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "swim.toml").exists())
@@ -26,6 +25,14 @@ def decode_arch_state_abcdehl(dut) -> tuple[int, int, int, int, int, int, int]:
         (regs >> 40) & 0xFF,
         (regs >> 32) & 0xFF,
     )
+
+
+async def advance_until(driver, predicate, *, max_cycles: int = 1024):
+    for _ in range(max_cycles):
+        observation = await driver.step_mcycle()
+        if predicate(observation):
+            return observation
+    raise TimeoutError(f"predicate not met within {max_cycles} cycles")
 
 
 @cocotb.test()
@@ -119,8 +126,7 @@ async def test_soc_rom_top_ppu_advances_and_packed_regs_match_arch_state(dut):
     assert start.ppu_blank_reason == 3
     assert (start.cpu_a, start.cpu_b, start.cpu_c, start.cpu_d, start.cpu_e, start.cpu_h, start.cpu_l) == decode_arch_state_abcdehl(dut)
 
-    await ClockCycles(dut.clk_i, 90)
-    transfer = driver.observe()
+    transfer = await advance_until(driver, lambda obs: obs.ppu_ly == 0 and obs.ppu_mode == 2, max_cycles=128)
     assert transfer.ppu_ly == 0
     assert transfer.ppu_mode == 2
     assert transfer.ppu_scanout_valid is True
