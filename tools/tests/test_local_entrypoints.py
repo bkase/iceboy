@@ -524,6 +524,28 @@ class LocalEntrypointsTest(unittest.TestCase):
         self.assertIn("could not find or talk to an attached iCEBreaker", completed.stderr)
         self.assertIn("No FTDI devices found", completed.stderr)
 
+    def test_prepare_hardware_day_dry_run_builds_all_runbook_bitstreams(self) -> None:
+        completed = self.run_script("prepare_hardware_day.sh", "--dry-run")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("==> lcd_test_pattern", completed.stdout)
+        self.assertIn("==> alu_loop_icebreaker", completed.stdout)
+        self.assertIn("==> bg_static_icebreaker", completed.stdout)
+        self.assertIn("==> joypad_smoke_icebreaker", completed.stdout)
+        self.assertIn("==> uart_rom_icebreaker", completed.stdout)
+        self.assertIn("build/bitstreams/lcd_test_pattern.bin", completed.stdout)
+        self.assertIn("build/bitstreams/alu_loop_icebreaker.bin", completed.stdout)
+        self.assertIn("build/bitstreams/bg_static_icebreaker.bin", completed.stdout)
+        self.assertIn("build/bitstreams/joypad_smoke_icebreaker.bin", completed.stdout)
+        self.assertIn("build/bitstreams/uart_rom_icebreaker.bin", completed.stdout)
+        self.assertIn("build/bitstreams/synth_lcd_test_pattern", completed.stdout)
+        self.assertIn("build/bitstreams/synth_alu_loop_icebreaker", completed.stdout)
+        self.assertIn("build/bitstreams/synth_bg_static_icebreaker", completed.stdout)
+        self.assertIn("build/bitstreams/synth_joypad_smoke_icebreaker", completed.stdout)
+        self.assertIn("build/bitstreams/synth_uart_rom_icebreaker", completed.stdout)
+        self.assertIn("rom-image bg_static", completed.stdout)
+        self.assertIn("rom-image joypad_bg_smoke", completed.stdout)
+        self.assertGreaterEqual(completed.stdout.count("skip swim build"), 4)
+
     def test_multi_top_gate_probe_and_doc_are_checked_in(self) -> None:
         board_main = (ROOT / "src" / "board" / "main.spade").read_text(encoding="utf-8")
         dummy_top = (ROOT / "src" / "board" / "dummy_top.spade").read_text(encoding="utf-8")

@@ -25,6 +25,8 @@ class LcdTestPatternArtifactsTest(unittest.TestCase):
 
         self.assertEqual(baseline["top"], "board::icebreaker_lcd_test_top::icebreaker_lcd_test_top")
         self.assertEqual(baseline["artifacts"]["asc"], "build/bitstreams/lcd_test_pattern.asc")
+        self.assertEqual(baseline["artifacts"]["nextpnr_report"], "build/bitstreams/lcd_test_pattern.nextpnr-report.json")
+        self.assertEqual(baseline["artifacts"]["nextpnr_log"], "build/bitstreams/lcd_test_pattern.nextpnr.log")
         self.assertEqual(baseline["artifacts"]["yosys_stat"], "build/bitstreams/synth_lcd_test_pattern/yosys-stat.txt")
         self.assertEqual(baseline["utilization"]["lut4_used"], 283)
         self.assertEqual(baseline["utilization"]["dff_used"], 114)

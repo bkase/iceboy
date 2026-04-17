@@ -1,8 +1,8 @@
 {
   "artifacts": {
     "asc": "build/bitstreams/lcd_test_pattern.asc",
-    "nextpnr_log": "build/bitstreams/nextpnr.log",
-    "nextpnr_report": "build/bitstreams/nextpnr-report.json",
+    "nextpnr_log": "build/bitstreams/lcd_test_pattern.nextpnr.log",
+    "nextpnr_report": "build/bitstreams/lcd_test_pattern.nextpnr-report.json",
     "yosys_stat": "build/bitstreams/synth_lcd_test_pattern/yosys-stat.txt"
   },
   "board": "iCEBreaker",

@@ -29,7 +29,7 @@ class UartRomBringupArtifactsTest(unittest.TestCase):
         self.assertEqual(baseline["artifacts"]["asc"], "build/bitstreams/uart_rom_icebreaker.asc")
         self.assertEqual(baseline["artifacts"]["nextpnr_report"], "build/bitstreams/uart_rom_icebreaker.nextpnr-report.json")
         self.assertEqual(baseline["artifacts"]["nextpnr_log"], "build/bitstreams/uart_rom_icebreaker.nextpnr.log")
-        self.assertEqual(baseline["artifacts"]["yosys_stat"], "build/bitstreams/synth/yosys-stat.txt")
+        self.assertEqual(baseline["artifacts"]["yosys_stat"], "build/bitstreams/synth_uart_rom_icebreaker/yosys-stat.txt")
         self.assertEqual(baseline["pnr"]["status"], "passed")
         self.assertIsNone(baseline["pnr"]["error"])
         self.assertEqual(baseline["utilization"]["lut4_used"], 4957)

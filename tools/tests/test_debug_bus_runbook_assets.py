@@ -78,6 +78,7 @@ class DebugBusRunbookAssetsTest(unittest.TestCase):
         self.assertIn("bg_static_icebreaker.bin", runbook_doc)
         self.assertIn("joypad_smoke_icebreaker.bin", runbook_doc)
         self.assertIn("uart_rom_icebreaker.bin", runbook_doc)
+        self.assertIn("tools/prepare_hardware_day.sh", runbook_doc)
         self.assertIn("python tools/upload_rom_icebreaker.py --rom bench/roms/out/bg_static.gb", runbook_doc)
 
         self.assertIn("set DBG_PC0 = framebuffer.reader_active;", visible_top)

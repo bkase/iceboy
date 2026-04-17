@@ -13,6 +13,10 @@ This is the arrival-day script for bringing up the breadboarded iCEBreaker stack
 
 ## Flash Order
 
+Prepare all five images in one pass before heading to the bench:
+
+`tools/prepare_hardware_day.sh`
+
 1. `build/bitstreams/lcd_test_pattern.bin`
 2. `build/bitstreams/alu_loop_icebreaker.bin`
 3. `build/bitstreams/bg_static_icebreaker.bin`
