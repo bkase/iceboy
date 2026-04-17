@@ -23,8 +23,8 @@ NETLIST_NAME=""
 STAT_NAME="yosys-stat.txt"
 YOSYS_LOG_NAME="yosys.log"
 ASC_NAME=""
-NEXTPNR_REPORT_NAME="nextpnr-report.json"
-NEXTPNR_LOG_NAME="nextpnr.log"
+NEXTPNR_REPORT_NAME=""
+NEXTPNR_LOG_NAME=""
 RECORD_VERIFIED_BY="tools/build_icebreaker_variant.sh"
 DEBUG_PATTERNS=("CommitTrace" "DebugTrace" "PpuDebugTrace" "SimStimulus" "BusObs" "SocLockstepTopOut")
 SWIM_VERILOG_SOURCES=()
@@ -185,6 +185,12 @@ if [[ -z "${NETLIST_NAME}" ]]; then
 fi
 if [[ -z "${ASC_NAME}" ]]; then
     ASC_NAME="${TOP_MODULE}.asc"
+fi
+if [[ -z "${NEXTPNR_REPORT_NAME}" ]]; then
+    NEXTPNR_REPORT_NAME="${TOP_MODULE}.nextpnr-report.json"
+fi
+if [[ -z "${NEXTPNR_LOG_NAME}" ]]; then
+    NEXTPNR_LOG_NAME="${TOP_MODULE}.nextpnr.log"
 fi
 
 SYNTH_JSON="${SYNTH_DIR}/${NETLIST_NAME}"
